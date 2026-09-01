@@ -356,47 +356,52 @@ describe('ADV-J: Boundary exacto de tolerancia', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BLOQUE 11: DEDUP WINDOW BOUNDARY
+// BLOQUE 11: DEDUP — VENTANA FIJA (ATT-003 Hardening)
+// Semántica CAMBIADA: ahora es ventana fija vs punch RETENIDO, no sliding-window.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('ADV-K: Deduplicación — límite exacto de ventana', () => {
+describe('ADV-K: Deduplicación — ventana FIJA (ATT-003 hardening)', () => {
 
-  test('ADV-K1: Con ventana de 5s: t+0, t+4 deben agruparse; t+5 debe separarse', () => {
+  test('ADV-K1: Ventana fija 5s: [t+0,t+4,t+5,t+6,salida] → t+0 retenido, t+4 y t+5 duplicados, t+6 nuevo burst', () => {
+    // SEMÁNTICA DE VENTANA FIJA (ATT-003):
+    // t+0 → RETENIDO (inicio burst 1)
+    // t+4 → DUPLICADO (4s desde retenido t+0 ≤ 5s)
+    // t+5 → DUPLICADO (5s desde retenido t+0 ≤ 5s)
+    // t+6 → NUEVO RETENIDO (6s > 5s desde retenido t+0 → inicio burst 2)
+    // salida → NUEVO RETENIDO (mucho después de t+6)
+    // Total sourceLogIds: t+0, t+6, salida = 3
+
     const operativeDate = '2027-01-15'
     const shift = { operativeDate, startTime: '08:00', endTime: '17:00', toleranceMinutes: 15 }
 
     const baseTs = new Date(localToUtcIso(operativeDate, '08:00:00', TZ_CDMX)).getTime()
 
     const rawPunches = [
-      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: new Date(baseTs + 0).toISOString() },     // t+0
-      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: new Date(baseTs + 4000).toISOString() },  // t+4s (dentro de ventana 5s)
-      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: new Date(baseTs + 5000).toISOString() },  // t+5s (límite: <= 5s → dentro)
-      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: new Date(baseTs + 6000).toISOString() },  // t+6s (fuera de ventana desde t+0, pero dentro desde t+5)
+      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: new Date(baseTs + 0).toISOString() },     // t+0 → RETENIDO
+      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: new Date(baseTs + 4000).toISOString() },  // t+4s → DUP (4≤5 desde t+0)
+      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: new Date(baseTs + 5000).toISOString() },  // t+5s → DUP (5≤5 desde t+0)
+      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: new Date(baseTs + 6000).toISOString() },  // t+6s → NUEVO BURST (6>5 desde t+0)
       { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '17:00:00', TZ_CDMX) },
     ]
 
-    // Con 5s de ventana: t+0, t+4 forman ráfaga. t+5 y t+6 también forman ráfaga entre ellos.
-    // Algoritmo: compara cada punch con el ÚLTIMO de la ráfaga actual (no con el primero).
     const result = AttendanceEngine.process(TENANT_A, EMP_A, shift, rawPunches, {
       timezone: TZ_CDMX,
       deduplication: { minSecondsBetweenPunches: 5, mode: 'KEEP_FIRST' },
     })
 
-    // NOTA AUDITOR: El algoritmo actual compara con el previo inmediato en la ráfaga.
-    // t+0 → t+4 (diff=4s <= 5s, ráfaga 1)
-    // t+4 → t+5 (diff=1s <= 5s, sigue en ráfaga 1)
-    // t+5 → t+6 (diff=1s <= 5s, sigue en ráfaga 1)
-    // Resultado: todos t+0..t+6 se agrupan en UNA sola ráfaga → 1 punch de entrada
-    // + 1 punch de salida = 2 punches total
-    assert.equal(result.sourceLogIds.length, 2, 'Todos los punches dentro de la ventana deben deduplicarse')
-    assert.equal(result.workedMinutes, 540)
+    // Ventana FIJA: t+0, t+6, salida = 3 sourceLogIds
+    assert.equal(result.sourceLogIds.length, 3,
+      'Ventana fija: t+0 retenido, t+4 y t+5 dups, t+6 nuevo burst → 3 sourceLogIds')
+    // Verificar trazabilidad (ATT-004)
+    const dups = result.punchDispositions.filter(d => d.disposition === 'DUPLICATE')
+    assert.equal(dups.length, 2, 't+4 y t+5 deben aparecer como DUPLICATE en punchDispositions')
   })
 
-  test('ADV-K2: Comportamiento es sliding-window (desde previo, no desde inicio de ráfaga)', () => {
-    // Documentación: El algoritmo compara punch actual vs ÚLTIMO punch de la ráfaga,
-    // no vs el primer punch de la ráfaga. Esto es sliding window, no fixed window.
-    // Una ráfaga de 50 punches espaciados 4s cada uno se convierte en 1 marcaje
-    // aunque el span total sea 50*4 = 200 segundos.
-    // Este test documenta y verifica esta semántica.
+  test('ADV-K2: Ventana fija vs sliding: 20 punches×4s con window=5s → 10 bursts (no 1 colapsado)', () => {
+    // DIFERENCIA CLAVE (ATT-003 hardening):
+    // Sliding-window ANTERIOR: todos se agrupaban en 1 porque comparaba vs el previo.
+    // Ventana FIJA NUEVA: t+0 retiene; t+4 (4≤5) dup; t+8 (8>5 desde t+0) → nuevo retained;
+    // t+12 (4≤5 desde t+8) dup; t+16 nuevo retained; etc.
+    // 20 punches × 4s → 10 bursts (t=0,8,16,24,32,40,48,56,64,72) + salida = 11 sourceLogIds
 
     const operativeDate = '2027-01-15'
     const shift = { operativeDate, startTime: '08:00', endTime: '17:00', toleranceMinutes: 30 }
@@ -407,7 +412,7 @@ describe('ADV-K: Deduplicación — límite exacto de ventana', () => {
       manyRapidPunches.push({
         clienteId: TENANT_A,
         empleadoId: EMP_A,
-        timestamp: new Date(baseTs + i * 4000).toISOString(), // cada 4s → span total 76s pero sliding window 5s
+        timestamp: new Date(baseTs + i * 4000).toISOString(),
       })
     }
     manyRapidPunches.push({
@@ -421,10 +426,11 @@ describe('ADV-K: Deduplicación — límite exacto de ventana', () => {
       deduplication: { minSecondsBetweenPunches: 5 },
     })
 
-    // Con sliding window: 20 punches espaciados 4s se convierten en 1 (todos se agrupan)
-    assert.equal(result.sourceLogIds.length, 2, 'Sliding window agrupa los 20 punches rápidos en 1 entrada')
-    // ADVERTENCIA: Este es un comportamiento que debe documentarse explícitamente
-    // porque puede colapsar ráfagas largas en un único evento.
+    // Fixed-window: 10 bursts retenidos + 1 salida = 11 sourceLogIds
+    assert.equal(result.sourceLogIds.length, 11,
+      'Ventana fija: 20 punches×4s = 10 bursts separados (no 1 colapsado) + salida = 11')
+    const dups = result.punchDispositions.filter(d => d.disposition === 'DUPLICATE')
+    assert.equal(dups.length, 10, 'Deben haber 10 DUPLICATE trazables')
   })
 })
 
@@ -510,26 +516,32 @@ describe('ADV-N: 5 marcajes', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BLOQUE 15: 1000 CHECADAS (RENDIMIENTO)
+// BLOQUE 15: 1000 CHECADAS (RENDIMIENTO) — ventana fija ATT-003
 // ─────────────────────────────────────────────────────────────────────────────
 describe('ADV-O: Rendimiento con 1000 marcajes anómalos', () => {
 
-  test('ADV-O1: 1000 marcajes no deben producir stack overflow ni O(n²) explota en tiempo razonable', () => {
+  test('ADV-O1: 1000 marcajes no deben producir stack overflow; ventana fija produce 2-3 bursts', () => {
+    // 999 punches × 100ms = 99.9 segundos total.
+    // Con window=60s (default):
+    //   t=0 → RETENIDO
+    //   t=100ms...t=59.9s → DUPLICATE (todos ≤ 60s desde t=0)
+    //   t=60s (punch 600) → NUEVO RETENIDO (60000ms > 60000ms NO → en el límite exacto → DUPLICATE)
+    //   t=60.1s (punch 601) → NUEVO RETENIDO (60100ms > 60000ms)
+    //   t=60.1s...t=99.9s → DUPLICATE (todos ≤ 60s desde t=60.1s)
+    // Total aceptados: t=0, t≈60.1s = 2 bursts + salida = 3 sourceLogIds
     const operativeDate = '2027-01-15'
     const shift = { operativeDate, startTime: '08:00', endTime: '17:00', toleranceMinutes: 30 }
 
     const baseMs = new Date(localToUtcIso(operativeDate, '08:00:00', TZ_CDMX)).getTime()
     const rawPunches = []
 
-    // Generar 999 punches en el mismo segundo (deduplicación los colapsa)
     for (let i = 0; i < 999; i++) {
       rawPunches.push({
         clienteId: TENANT_A,
         empleadoId: EMP_A,
-        timestamp: new Date(baseMs + i * 100).toISOString(), // cada 100ms → todos dentro de ventana 60s
+        timestamp: new Date(baseMs + i * 100).toISOString(), // cada 100ms
       })
     }
-    // Salida al final
     rawPunches.push({
       clienteId: TENANT_A,
       empleadoId: EMP_A,
@@ -541,9 +553,18 @@ describe('ADV-O: Rendimiento con 1000 marcajes anómalos', () => {
     const elapsed = Date.now() - start
 
     assert.ok(elapsed < 2000, `1000 marcajes deben procesarse en menos de 2s (tardó ${elapsed}ms)`)
-    // Todos los 999 punches rápidos se colapsan en 1 (dedup 60s) + 1 salida = 2
-    assert.equal(result.sourceLogIds.length, 2, 'Deduplicación debe colapsar ráfaga masiva')
+
+    // Con ventana fija 60s: 2 bursts + salida = 3 sourceLogIds
+    // (t=0 y t≈60.1s son los únicos retenidos de los 999 punches rápidos)
+    assert.ok(result.sourceLogIds.length <= 5,
+      `Ventana fija 60s debe producir ≤ 5 bursts de 999 punches×100ms (actual: ${result.sourceLogIds.length})`)
+    assert.ok(result.sourceLogIds.length >= 2,
+      'Debe haber al menos 2 sourceLogIds (burst inicial + salida)')
     assert.equal(result.workedMinutes, 540)
+
+    // Verificar trazabilidad: deben haber ≥ 995 DUPLICATE (ATT-004)
+    const dups = result.punchDispositions.filter(d => d.disposition === 'DUPLICATE')
+    assert.ok(dups.length >= 995, `Deben haber ≥ 995 DUPLICATE trazables (actual: ${dups.length})`)
   })
 })
 

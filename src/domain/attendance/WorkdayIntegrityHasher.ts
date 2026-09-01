@@ -8,6 +8,10 @@
  * NOTA DE DISEÑO:
  * Este hash es un control técnico de integridad de datos. NO constituye una firma electrónica
  * avanzada ni sustituye la validez jurídica de políticas o contratos patronales.
+ *
+ * HARDENING Phase 1 — ATT-007:
+ * El fallback SHA-256 puro en JS ahora codifica el input a bytes UTF-8 antes de procesar,
+ * lo que permite manejar correctamente caracteres Unicode (José, Muñoz, Mérida, México, etc.).
  */
 
 // Implementación portable SHA-256 que funciona tanto en Node.js como en navegadores y Workers
@@ -20,28 +24,64 @@ function sha256Sync(str: string): string {
       return nodeCrypto.createHash('sha256').update(str, 'utf8').digest('hex')
     }
   } catch {
-    // Fallback a implementación pura en JS
+    // Fallback a implementación pura en JS con soporte UTF-8
   }
 
-  return pureJsSha256(str)
+  return pureJsSha256Utf8(str)
 }
 
 /**
- * Implementación pura en JavaScript de SHA-256 (FIPS 180-4) para compatibilidad universal sin dependencias externas.
+ * Implementación pura en JavaScript de SHA-256 (FIPS 180-4) con soporte UTF-8 completo.
+ *
+ * ATT-007: El string de entrada se codifica a bytes UTF-8 antes de procesar.
+ * Esto garantiza que caracteres como é, ñ, ü, emojis, etc., produzcan el mismo hash
+ * que cualquier implementación estándar de SHA-256.
+ *
+ * Compatible con cualquier string Unicode, sin dependencias externas.
  */
-function pureJsSha256(ascii: string): string {
+function pureJsSha256Utf8(str: string): string {
+  const bytes = encodeUtf8ToBytes(str)
+  return pureJsSha256Bytes(bytes)
+}
+
+/** Convierte un string Unicode a un array de bytes UTF-8 */
+function encodeUtf8ToBytes(str: string): number[] {
+  const bytes: number[] = []
+  for (let i = 0; i < str.length; i++) {
+    let code = str.charCodeAt(i)
+    // Manejar pares sustitutos (emojis y otros caracteres > U+FFFF)
+    if (code >= 0xD800 && code <= 0xDBFF && i + 1 < str.length) {
+      const hi = code
+      const lo = str.charCodeAt(i + 1)
+      if (lo >= 0xDC00 && lo <= 0xDFFF) {
+        code = 0x10000 + ((hi - 0xD800) << 10) + (lo - 0xDC00)
+        i++
+      }
+    }
+    if (code < 0x80) {
+      bytes.push(code)
+    } else if (code < 0x800) {
+      bytes.push(0xC0 | (code >> 6))
+      bytes.push(0x80 | (code & 0x3F))
+    } else if (code < 0x10000) {
+      bytes.push(0xE0 | (code >> 12))
+      bytes.push(0x80 | ((code >> 6) & 0x3F))
+      bytes.push(0x80 | (code & 0x3F))
+    } else {
+      bytes.push(0xF0 | (code >> 18))
+      bytes.push(0x80 | ((code >> 12) & 0x3F))
+      bytes.push(0x80 | ((code >> 6) & 0x3F))
+      bytes.push(0x80 | (code & 0x3F))
+    }
+  }
+  return bytes
+}
+
+/** SHA-256 sobre un array de bytes (FIPS 180-4) */
+function pureJsSha256Bytes(bytes: number[]): string {
   function rightRotate(value: number, amount: number): number {
     return (value >>> amount) | (value << (32 - amount))
   }
-
-  const mathPow = Math.pow
-  const maxWord = mathPow(2, 32)
-  let lengthProperty = 'length'
-  let i = 0, j = 0
-  let result = ''
-
-  const words: number[] = []
-  const asciiBitLength = ascii[lengthProperty as any] * 8
 
   let hash = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
@@ -59,83 +99,70 @@ function pureJsSha256(ascii: string): string {
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
   ]
 
-  let isCandidate: number
-  const isPrime: Record<number, boolean> = {}
+  // Longitud del mensaje en bits
+  const bitLen = bytes.length * 8
 
-  let primeCounter = 0
-  for (let candidate = 2; primeCounter < 64; candidate++) {
-    isCandidate = 1
-    for (let factor = 2; factor * factor <= candidate; factor++) {
-      if (candidate % factor === 0) {
-        isCandidate = 0
-        break
-      }
+  // Pre-procesamiento: padding
+  bytes.push(0x80)
+  while ((bytes.length % 64) !== 56) bytes.push(0x00)
+  // Añadir longitud en big-endian (64 bits)
+  bytes.push(0, 0, 0, 0) // bits [63:32] de la longitud (0 para inputs < 512MB)
+  bytes.push((bitLen >>> 24) & 0xFF)
+  bytes.push((bitLen >>> 16) & 0xFF)
+  bytes.push((bitLen >>> 8) & 0xFF)
+  bytes.push(bitLen & 0xFF)
+
+  // Procesar bloques de 512 bits (64 bytes)
+  for (let blockStart = 0; blockStart < bytes.length; blockStart += 64) {
+    const w: number[] = new Array(64)
+
+    // Preparar el bloque de mensajes W[0..15]
+    for (let i = 0; i < 16; i++) {
+      w[i] = (
+        (bytes[blockStart + i * 4] << 24) |
+        (bytes[blockStart + i * 4 + 1] << 16) |
+        (bytes[blockStart + i * 4 + 2] << 8) |
+        bytes[blockStart + i * 4 + 3]
+      ) >>> 0
     }
-    if (isCandidate) {
-      if (primeCounter < 8) {
-        hash[primeCounter] = (mathPow(candidate, 1 / 2) * maxWord) | 0
-      }
-      k[primeCounter] = (mathPow(candidate, 1 / 3) * maxWord) | 0
-      primeCounter++
+
+    // Extender W[16..63]
+    for (let i = 16; i < 64; i++) {
+      const s0 = rightRotate(w[i - 15], 7) ^ rightRotate(w[i - 15], 18) ^ (w[i - 15] >>> 3)
+      const s1 = rightRotate(w[i - 2], 17) ^ rightRotate(w[i - 2], 19) ^ (w[i - 2] >>> 10)
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0
     }
+
+    // Inicializar variables de trabajo
+    let [a, b, c, d, e, f, g, h] = hash
+
+    // Compresión principal
+    for (let i = 0; i < 64; i++) {
+      const S1 = rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)
+      const ch = (e & f) ^ (~e & g)
+      const temp1 = (h + S1 + ch + k[i] + w[i]) >>> 0
+      const S0 = rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)
+      const maj = (a & b) ^ (a & c) ^ (b & c)
+      const temp2 = (S0 + maj) >>> 0
+
+      h = g; g = f; f = e
+      e = (d + temp1) >>> 0
+      d = c; c = b; b = a
+      a = (temp1 + temp2) >>> 0
+    }
+
+    hash[0] = (hash[0] + a) >>> 0
+    hash[1] = (hash[1] + b) >>> 0
+    hash[2] = (hash[2] + c) >>> 0
+    hash[3] = (hash[3] + d) >>> 0
+    hash[4] = (hash[4] + e) >>> 0
+    hash[5] = (hash[5] + f) >>> 0
+    hash[6] = (hash[6] + g) >>> 0
+    hash[7] = (hash[7] + h) >>> 0
   }
 
-  ascii += '\x80'
-  while ((ascii[lengthProperty as any] % 64) - 56) ascii += '\x00'
-  for (i = 0; i < ascii[lengthProperty as any]; i++) {
-    j = ascii.charCodeAt(i)
-    if (j >> 8) return '' // Carácter no válido
-    words[i >> 2] |= j << (((3 - i) % 4) * 8)
-  }
-  words[words[lengthProperty as any]] = (asciiBitLength / maxWord) | 0
-  words[words[lengthProperty as any]] = asciiBitLength
-
-  const w = new Array(64)
-  for (j = 0; j < words[lengthProperty as any]; ) {
-    const wOld = words.slice(j, (j += 16))
-    const hd = hash.slice(0)
-
-    for (i = 0; i < 64; i++) {
-      const i2 = i + j
-      const w15 = w[i - 15],
-        w2 = w[i - 2]
-
-      const a = hash[0],
-        e = hash[4]
-      const temp1 =
-        hash[7] +
-        (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) +
-        ((e & hash[5]) ^ (~e & hash[6])) +
-        k[i] +
-        (w[i] =
-          i < 16
-            ? wOld[i]
-            : (w[i - 16] +
-                (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) +
-                w[i - 7] +
-                (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) |
-              0)
-
-      const temp2 =
-        (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) +
-        ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]))
-
-      hash = [(temp1 + temp2) | 0, a, hash[1], hash[2], (hash[3] + temp1) | 0, hash[4], hash[5], hash[6]]
-    }
-
-    for (i = 0; i < 8; i++) {
-      hash[i] = (hash[i] + hd[i]) | 0
-    }
-  }
-
-  for (i = 0; i < 8; i++) {
-    for (j = 3; j >= 0; j--) {
-      const b = (hash[i] >> (j * 8)) & 255
-      result += (b < 16 ? '0' : '') + b.toString(16)
-    }
-  }
-
-  return result
+  // Producir el digest hexadecimal
+  return hash.map(v => v.toString(16).padStart(8, '0')).join('')
 }
 
 export interface CanonicalWorkdayPayload {
@@ -164,6 +191,11 @@ export interface CanonicalWorkdayPayload {
 export class WorkdayIntegrityHasher {
   /**
    * Genera el hash de integridad SHA-256 a partir de los datos canónicos de la jornada.
+   *
+   * Propiedades del hash:
+   * - Determinista: Mismo input → mismo hash, siempre.
+   * - Canónico: sourceLogIds e incidentCodes se ordenan antes de hashear.
+   * - Unicode-safe (ATT-007): Soporta caracteres de nombres de festivos en cualquier idioma.
    */
   public static computeHash(payload: CanonicalWorkdayPayload): string {
     const canonicalObject = {
