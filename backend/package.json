@@ -1,0 +1,22 @@
+{
+  "name": "signum-clock-receptor",
+  "version": "1.0.0",
+  "description": "Receptor ISUP 5.0 Hikvision para Signum-Clock",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "sync": "node sync-server.js",
+    "sync:dev": "node --watch sync-server.js",
+    "test": "node sync.test.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><title>Find Coords</title></head>
+<body>
+  <div style="position:relative; display:inline-block;">
+    <img id="img" src="fingerprint_bg.png" style="width: 800px; height: 414px;" />
+  </div>
+  <div id="output" style="margin-top: 20px; font-family: monospace;"></div>
+  <script>
+    const img = document.getElementById('img');
+    const output = document.getElementById('output');
+    let coords = [];
+    img.addEventListener('click', (e) => {
+      const rect = img.getBoundingClientRect();
+      const x = Math.round(e.clientX - rect.left);
+      const y = Math.round(e.clientY - rect.top);
+      coords.push(`{ cx: ${x}, cy: ${y} }`);
+      output.innerHTML = coords.join('<br>');
+    });
+  </script>
+</body>
+</html>

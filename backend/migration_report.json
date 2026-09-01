@@ -1,0 +1,19 @@
+[
+  {
+    "email": "edgardomay@outlook.com",
+    "status": "EXISTS",
+    "reason": "User already in auth.users"
+  },
+  {
+    "email": "it.support2@outlook.com",
+    "password": "vaBRdSYrwH",
+    "status": "CREATED",
+    "name": "Ricardo Romero Barrientos"
+  },
+  {
+    "email": "econtreras@empresa.com",
+    "password": "mquXu3CWvT",
+    "status": "CREATED",
+    "name": "Esmeralda Contreras Ramirez"
+  }
+]
