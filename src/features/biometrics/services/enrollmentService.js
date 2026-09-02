@@ -1,296 +1,816 @@
 // src/features/biometrics/services/enrollmentService.js
-// Servicio dedicado al enrolamiento de huellas dactilares
-// Separa la lógica de enrolamiento de biometricsService.js sin duplicarla.
+//
+// Servicio dedicado al enrolamiento de huellas dactilares ZKTeco.
 //
 // Arquitectura:
-//   React UI → enrollmentService → Supabase (device_commands + biometric_templates)
-//            ↓                                      ↓
-//       ZKTeco ADMS                    Realtime subscription (states update live)
+//
+// React UI
+//    ↓
+// enrollmentService
+//    ↓
+// Supabase
+//    ├── devices
+//    ├── device_commands
+//    └── biometric_templates
+//             ↓
+//        ZKTeco / ADMS
+//
+// IMPORTANTE:
+// - NO utiliza `dispositivos` para localizar el checador.
+// - NO utiliza `hikvision_device_userid`.
+// - El checador pertenece a `devices`.
+// - El identificador biométrico del empleado se obtiene de:
+//      biometric_user_id
+//   si existe.
+// - Como fallback se utiliza `clave_empleado`.
+//
 
 import { supabase } from '../../../lib/supabase'
 
-// Mapa de claves de dedo a índice numérico ZKTeco (FID)
-// ZKTeco: 0=Pulgar Izq, 1=Índice Izq, ... 5=Pulgar Der, ... 9=Meñique Der
+// ═══════════════════════════════════════════════════════════════════════════
+// FINGER MAP
+// ═══════════════════════════════════════════════════════════════════════════
+
 export const FINGER_KEY_TO_FID = {
-  left_thumb:  0,
-  left_index:  1,
+  left_thumb: 0,
+  left_index: 1,
   left_middle: 2,
-  left_ring:   3,
-  left_pinky:  4,
+  left_ring: 3,
+  left_pinky: 4,
+
   right_thumb: 5,
   right_index: 6,
-  right_middle:7,
-  right_ring:  8,
+  right_middle: 7,
+  right_ring: 8,
   right_pinky: 9,
 }
 
 export const FID_TO_FINGER_KEY = Object.fromEntries(
-  Object.entries(FINGER_KEY_TO_FID).map(([k, v]) => [v, k])
+  Object.entries(FINGER_KEY_TO_FID).map(([key, fid]) => [
+    fid,
+    key,
+  ])
 )
 
 export const FINGER_DISPLAY_NAMES = {
-  left_thumb:   'Pulgar Izquierdo',
-  left_index:   'Índice Izquierdo',
-  left_middle:  'Medio Izquierdo',
-  left_ring:    'Anular Izquierdo',
-  left_pinky:   'Meñique Izquierdo',
-  right_thumb:  'Pulgar Derecho',
-  right_index:  'Índice Derecho',
+  left_thumb: 'Pulgar Izquierdo',
+  left_index: 'Índice Izquierdo',
+  left_middle: 'Medio Izquierdo',
+  left_ring: 'Anular Izquierdo',
+  left_pinky: 'Meñique Izquierdo',
+
+  right_thumb: 'Pulgar Derecho',
+  right_index: 'Índice Derecho',
   right_middle: 'Medio Derecho',
-  right_ring:   'Anular Derecho',
-  right_pinky:  'Meñique Derecho',
+  right_ring: 'Anular Derecho',
+  right_pinky: 'Meñique Derecho',
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+const normalizeSerial = serial => {
+  if (!serial) return ''
+
+  return String(serial)
+    .trim()
+    .toUpperCase()
+}
+
+const normalizeBiometricUserId = value => {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return ''
+  }
+
+  return String(value).trim()
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SERVICE
+// ═══════════════════════════════════════════════════════════════════════════
 
 export const enrollmentService = {
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // 1. HUELLAS YA ENROLADAS
+  // ═════════════════════════════════════════════════════════════════════════
+
   /**
-   * Obtiene los dedos ya enrolados de un empleado.
-   * Devuelve un objeto { fingerKey: 'enrolled' } para los dedos con template.
+   * Obtiene las huellas que ya tiene enroladas el empleado.
+   *
+   * Resultado:
+   *
+   * {
+   *   left_thumb: 'enrolled',
+   *   left_index: 'enrolled'
+   * }
    */
   async getEnrolledFingers(empleadoId) {
-    if (!empleadoId) return {}
+    if (!empleadoId) {
+      return {}
+    }
 
     const { data, error } = await supabase
       .from('biometric_templates')
-      .select('indice, finger_key')
+      .select(`
+        indice,
+        finger_key,
+        template_data,
+        tipo
+      `)
       .eq('empleado_id', empleadoId)
       .eq('tipo', 'huella')
 
-    if (error) throw error
+    if (error) {
+      console.error(
+        '[enrollmentService.getEnrolledFingers]',
+        error
+      )
+
+      throw error
+    }
 
     const result = {}
+
     ;(data || []).forEach(row => {
-      // Soporte para ambos: finger_key (nuevo) e indice (legacy)
-      const key = row.finger_key || FID_TO_FINGER_KEY[row.indice]
-      if (key) result[key] = 'enrolled'
-    })
-    return result
-  },
+      const fingerKey =
+        row.finger_key ||
+        FID_TO_FINGER_KEY[row.indice]
 
-  /**
-   * Envía la solicitud de enrolamiento al biométrico ZKTeco vía device_commands.
-   * Crea/actualiza el registro en biometric_templates con status PENDING.
-   * 
-   * @param {object} params
-   * @param {string} params.empleadoId   - UUID del empleado en Supabase
-   * @param {string} params.clienteId    - UUID del cliente/tenant
-   * @param {string} params.deviceSerial - Número de serie del biométrico ZKTeco
-   * @param {string} params.fingerKey    - Clave del dedo (ej. 'left_index')
-   * @param {string} params.biometricPin - PIN del empleado en el biométrico (hikvision_device_userid)
-   */
-  async requestEnrollment({ empleadoId, clienteId, deviceSerial, fingerKey, biometricPin }) {
-    const fid = FINGER_KEY_TO_FID[fingerKey]
-    if (fid === undefined) throw new Error(`Dedo no reconocido: ${fingerKey}`)
-    if (!deviceSerial) throw new Error('Se requiere seleccionar un dispositivo')
-    if (!biometricPin) throw new Error('El empleado no tiene un PIN biométrico asignado')
+      if (!fingerKey) {
+        return
+      }
 
-    // Comando ZKTeco ADMS para enrolamiento remoto
-    // El checador físico pedirá al empleado que coloque el dedo 3 veces
-    const commandString = `ENROLL_BIO PIN=${biometricPin} Type=0 FID=${fid} Duress=0 Valid=1 Retry=3 OverWrite=1 ServerVer=1`
-
-    // 1. Encolar el comando al biométrico
-    const { error: cmdError } = await supabase
-      .from('device_commands')
-      .insert({
-        device_serial: deviceSerial,
-        command_string: commandString,
-        is_executed: false,
-      })
-
-    if (cmdError) throw cmdError
-
-    // 2. Crear/actualizar el registro de template como PENDING
-    const { error: tmplError } = await supabase
-      .from('biometric_templates')
-      .upsert({
-        cliente_id: clienteId,
-        empleado_id: empleadoId,
-        tipo: 'huella',
-        indice: fid,
-        finger_key: fingerKey,
-        template_data: 'PENDING',  // Se actualizará cuando el biométrico confirme
-        actualizado_at: new Date().toISOString(),
-      }, { onConflict: 'empleado_id,tipo,indice' })
-
-    if (tmplError) throw tmplError
-
-    return { ok: true, fid, fingerKey, command: commandString }
-  },
-
-  /**
-   * Suscribe a actualizaciones en tiempo real del estado de templates de un empleado.
-   * Llama a `callback(fingerKey, status)` cuando cambia un template.
-   * 
-   * @returns {function} Función para cancelar la suscripción
-   */
-  subscribeToEnrollmentUpdates(empleadoId, callback) {
-    if (!empleadoId) return () => {}
-
-    const channelName = `enrollment:${empleadoId}`
-
-    // 1. Limpieza preventiva (Evita reutilizar un canal en estado 'joined' por culpa de React StrictMode)
-    const existingChannels = supabase.getChannels()
-    existingChannels.forEach((c) => {
-      if (c.topic === `realtime:${channelName}` || c.topic === channelName) {
-        supabase.removeChannel(c)
+      // PENDING no significa que ya esté enrolado.
+      if (
+        row.template_data &&
+        row.template_data !== 'PENDING' &&
+        row.template_data !== 'ERROR'
+      ) {
+        result[fingerKey] = 'enrolled'
       }
     })
 
-    // 2. Construcción estricta: channel() -> on() -> subscribe()
-    const channel = supabase.channel(channelName)
-    
+    return result
+  },
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 2. DISPOSITIVOS ZKTECO ACTIVOS
+  // ═════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Obtiene los checadores ZKTeco activos del cliente.
+   *
+   * IMPORTANTE:
+   *
+   * La fuente es `devices`.
+   *
+   * NO consultar:
+   *   - dispositivos
+   *   - device_id_hikvision
+   *   - numero_serie
+   *   - marca
+   *
+   * El dispositivo tiene esta estructura:
+   *
+   * {
+   *   id,
+   *   serial_number,
+   *   name,
+   *   location,
+   *   is_active,
+   *   ip_address,
+   *   port,
+   *   timezone,
+   *   device_type,
+   *   last_activity,
+   *   cliente_id
+   * }
+   */
+  async getActiveDevices(clienteId) {
+    if (!clienteId) {
+      return []
+    }
+
+    const { data, error } = await supabase
+      .from('devices')
+      .select(`
+        id,
+        serial_number,
+        name,
+        location,
+        is_active,
+        ip_address,
+        port,
+        timezone,
+        device_type,
+        last_activity,
+        cliente_id
+      `)
+      .eq('cliente_id', clienteId)
+      .eq('is_active', true)
+      .order('name', {
+        ascending: true,
+      })
+
+    if (error) {
+      console.error(
+        '[enrollmentService.getActiveDevices]',
+        error
+      )
+
+      throw error
+    }
+
+    return (data || []).map(device => {
+      const serial = normalizeSerial(
+        device.serial_number
+      )
+
+      return {
+        ...device,
+
+        // IDs
+        id: device.id,
+        device_id: device.id,
+        deviceId: device.id,
+
+        // Serial oficial
+        serial_number: serial,
+        device_serial: serial,
+        deviceSerial: serial,
+
+        // Datos para UI
+        nombre:
+          device.name ||
+          device.location ||
+          serial,
+
+        nombre_ubicacion:
+          device.name ||
+          device.location ||
+          serial,
+
+        ubicacion:
+          device.location || '',
+
+        estatus:
+          device.is_active
+            ? 'activo'
+            : 'inactivo',
+
+        // Identificación
+        tipo:
+          device.device_type || 'general',
+
+        device_type:
+          device.device_type || 'general',
+      }
+    })
+  },
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 3. DATOS BIOMÉTRICOS DEL EMPLEADO
+  // ═════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Obtiene el identificador que ZKTeco utilizará para el empleado.
+   *
+   * IMPORTANTE:
+   *
+   * Ya NO utilizamos:
+   *
+   *   hikvision_device_userid
+   *
+   * Primero buscamos un campo genérico:
+   *
+   *   biometric_user_id
+   *
+   * y si no existe usamos:
+   *
+   *   clave_empleado
+   *
+   * La UI recibirá siempre:
+   *
+   *   biometric_user_id
+   *   biometricUserId
+   */
+  async getEmpleadoBiometricPin(empleadoId) {
+    if (!empleadoId) {
+      return null
+    }
+
+    const { data, error } = await supabase
+      .from('empleados')
+      .select(`
+        id,
+        biometric_user_id,
+        clave_empleado,
+        nombre,
+        apellido,
+        cliente_id
+      `)
+      .eq('id', empleadoId)
+      .maybeSingle()
+
+    if (error) {
+      console.error(
+        '[enrollmentService.getEmpleadoBiometricPin]',
+        error
+      )
+
+      throw error
+    }
+
+    if (!data) {
+      return null
+    }
+
+    const biometricUserId =
+      normalizeBiometricUserId(
+        data.biometric_user_id
+      ) ||
+      normalizeBiometricUserId(
+        data.clave_empleado
+      )
+
+    return {
+      ...data,
+
+      nombreCompleto:
+        `${data.nombre || ''} ${data.apellido || ''}`
+          .trim(),
+
+      biometric_user_id:
+        biometricUserId || null,
+
+      biometricUserId:
+        biometricUserId || null,
+
+      biometricPin:
+        biometricUserId || null,
+    }
+  },
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 4. SOLICITAR ENROLAMIENTO
+  // ═════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Envía una solicitud de enrolamiento de huella al ZKTeco.
+   *
+   * Flujo:
+   *
+   * 1. Validar empleado.
+   * 2. Validar dispositivo.
+   * 3. Validar PIN/ID biométrico.
+   * 4. Verificar que el dispositivo pertenece al cliente.
+   * 5. Crear comando en device_commands.
+   * 6. Crear template PENDING.
+   * 7. El worker/ADMS procesa el comando.
+   * 8. ZKTeco solicita colocar el dedo.
+   * 9. Se actualiza biometric_templates.
+   */
+  async requestEnrollment({
+    empleadoId,
+    clienteId,
+    deviceSerial,
+    fingerKey,
+    biometricPin,
+  }) {
+    if (!empleadoId) {
+      throw new Error(
+        'Se requiere el empleado.'
+      )
+    }
+
+    if (!clienteId) {
+      throw new Error(
+        'Se requiere el cliente.'
+      )
+    }
+
+    if (!deviceSerial) {
+      throw new Error(
+        'Se requiere seleccionar un biométrico.'
+      )
+    }
+
+    if (!fingerKey) {
+      throw new Error(
+        'Se requiere seleccionar un dedo.'
+      )
+    }
+
+    const fid =
+      FINGER_KEY_TO_FID[fingerKey]
+
+    if (fid === undefined) {
+      throw new Error(
+        `Dedo no reconocido: ${fingerKey}`
+      )
+    }
+
+    const normalizedSerial =
+      normalizeSerial(deviceSerial)
+
+    const normalizedPin =
+      normalizeBiometricUserId(
+        biometricPin
+      )
+
+    if (!normalizedPin) {
+      throw new Error(
+        'El empleado no tiene un ID biométrico asignado.'
+      )
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // VERIFICAR DISPOSITIVO
+    // ═══════════════════════════════════════════════════════════════════════
+
+    const { data: device, error: deviceError } =
+      await supabase
+        .from('devices')
+        .select(`
+          id,
+          serial_number,
+          name,
+          is_active,
+          cliente_id
+        `)
+        .eq(
+          'serial_number',
+          normalizedSerial
+        )
+        .eq(
+          'cliente_id',
+          clienteId
+        )
+        .maybeSingle()
+
+    if (deviceError) {
+      console.error(
+        '[enrollmentService.requestEnrollment] Error verificando device:',
+        deviceError
+      )
+
+      throw deviceError
+    }
+
+    if (!device) {
+      throw new Error(
+        'El biométrico seleccionado no pertenece al cliente.'
+      )
+    }
+
+    if (!device.is_active) {
+      throw new Error(
+        'El biométrico seleccionado está inactivo.'
+      )
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // COMANDO ZKTECO
+    // ═══════════════════════════════════════════════════════════════════════
+
+    const commandString =
+      `ENROLL_BIO PIN=${normalizedPin} Type=0 FID=${fid} Duress=0 Valid=1 Retry=3 OverWrite=1 ServerVer=1`
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // CREAR TEMPLATE PENDING
+    // ═══════════════════════════════════════════════════════════════════════
+
+    const { error: templateError } =
+      await supabase
+        .from('biometric_templates')
+        .upsert(
+          {
+            cliente_id: clienteId,
+            empleado_id: empleadoId,
+            tipo: 'huella',
+            indice: fid,
+            finger_key: fingerKey,
+
+            // Mientras el checador no confirme:
+            template_data: 'PENDING',
+
+            actualizado_at:
+              new Date().toISOString(),
+          },
+          {
+            onConflict:
+              'empleado_id,tipo,indice',
+          }
+        )
+
+    if (templateError) {
+      console.error(
+        '[enrollmentService.requestEnrollment] Error creando template:',
+        templateError
+      )
+
+      throw templateError
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ENCOLAR COMANDO
+    // ═══════════════════════════════════════════════════════════════════════
+
+    const {
+      data: command,
+      error: commandError,
+    } = await supabase
+      .from('device_commands')
+      .insert({
+        device_serial: normalizedSerial,
+        command_string: commandString,
+        is_executed: false,
+      })
+      .select()
+      .single()
+
+    if (commandError) {
+      console.error(
+        '[enrollmentService.requestEnrollment] Error creando comando:',
+        commandError
+      )
+
+      // Si el comando falló, marcar template como ERROR.
+      await supabase
+        .from('biometric_templates')
+        .update({
+          template_data: 'ERROR',
+          actualizado_at:
+            new Date().toISOString(),
+        })
+        .eq(
+          'empleado_id',
+          empleadoId
+        )
+        .eq(
+          'tipo',
+          'huella'
+        )
+        .eq(
+          'indice',
+          fid
+        )
+
+      throw commandError
+    }
+
+    return {
+      ok: true,
+
+      commandId:
+        command?.id || null,
+
+      empleadoId,
+      clienteId,
+
+      deviceId:
+        device.id,
+
+      deviceSerial:
+        normalizedSerial,
+
+      biometricUserId:
+        normalizedPin,
+
+      fid,
+      fingerKey,
+
+      command:
+        commandString,
+    }
+  },
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 5. REALTIME
+  // ═════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Escucha cambios de enrolamiento del empleado.
+   *
+   * Estados:
+   *
+   * PENDING  → enrolling
+   * ERROR    → error
+   * template → enrolled
+   */
+  subscribeToEnrollmentUpdates(
+    empleadoId,
+    callback
+  ) {
+    if (!empleadoId) {
+      return () => {}
+    }
+
+    const channelName =
+      `enrollment:${empleadoId}`
+
+    // Eliminar canales anteriores del mismo empleado.
+    const existingChannels =
+      supabase.getChannels()
+
+    existingChannels.forEach(channel => {
+      if (
+        channel.topic ===
+          `realtime:${channelName}` ||
+        channel.topic === channelName
+      ) {
+        supabase.removeChannel(
+          channel
+        )
+      }
+    })
+
+    const channel =
+      supabase.channel(channelName)
+
     channel.on(
       'postgres_changes',
       {
         event: '*',
         schema: 'public',
         table: 'biometric_templates',
-        filter: `empleado_id=eq.${empleadoId}`,
+        filter:
+          `empleado_id=eq.${empleadoId}`,
       },
-      (payload) => {
-        const row = payload.new || payload.old
-        if (!row || row.tipo !== 'huella') return
+      payload => {
+        const row =
+          payload.new ||
+          payload.old
 
-        const fingerKey = row.finger_key || FID_TO_FINGER_KEY[row.indice]
-        if (!fingerKey) return
+        if (!row) {
+          return
+        }
 
-        const status = row.template_data === 'PENDING' ? 'enrolling'
-                     : row.template_data === 'ERROR'   ? 'error'
-                     : row.template_data              ? 'enrolled'
-                     : 'not_enrolled'
+        if (
+          row.tipo !== 'huella'
+        ) {
+          return
+        }
 
-        callback(fingerKey, status)
+        const fingerKey =
+          row.finger_key ||
+          FID_TO_FINGER_KEY[
+            row.indice
+          ]
+
+        if (!fingerKey) {
+          return
+        }
+
+        let status =
+          'not_enrolled'
+
+        if (
+          row.template_data ===
+          'PENDING'
+        ) {
+          status = 'enrolling'
+        } else if (
+          row.template_data ===
+          'ERROR'
+        ) {
+          status = 'error'
+        } else if (
+          row.template_data
+        ) {
+          status = 'enrolled'
+        }
+
+        callback(
+          fingerKey,
+          status
+        )
       }
     )
 
     channel.subscribe()
 
-    // 3. Cleanup que elimina correctamente el canal oficial de Supabase
     return () => {
-      supabase.removeChannel(channel)
+      supabase.removeChannel(
+        channel
+      )
     }
   },
 
-  /**
-   * Obtiene los dispositivos ZKTeco activos para el cliente.
-   */
- /**
- * Obtiene los dispositivos biométricos activos del cliente.
- *
- * La tabla principal de dispositivos es `devices`.
- * NO utilizar `dispositivos` para obtener los datos del checador.
- */
-async getActiveDevices(clienteId) {
-  if (!clienteId) return []
+  // ═════════════════════════════════════════════════════════════════════════
+  // 6. OBTENER TEMPLATE DE UNA HUELLA
+  // ═════════════════════════════════════════════════════════════════════════
 
-  const { data, error } = await supabase
-    .from('devices')
-    .select(`
-      id,
-      serial_number,
-      name,
-      location,
-      is_active,
-      ip_address,
-      port,
-      timezone,
-      device_type,
-      last_activity,
-      cliente_id
-    `)
-    .eq('cliente_id', clienteId)
-    .eq('is_active', true)
-    .order('name', { ascending: true })
+  async getFingerTemplate(
+    empleadoId,
+    fingerKey
+  ) {
+    if (
+      !empleadoId ||
+      !fingerKey
+    ) {
+      return null
+    }
 
-  if (error) {
-    console.error(
-      '[biometricsService.getActiveDevices] Error obteniendo dispositivos:',
-      error
-    )
+    const fid =
+      FINGER_KEY_TO_FID[
+        fingerKey
+      ]
 
-    throw error
-  }
+    if (fid === undefined) {
+      return null
+    }
 
-  return (data || []).map(device => ({
-    ...device,
+    const {
+      data,
+      error,
+    } = await supabase
+      .from(
+        'biometric_templates'
+      )
+      .select('*')
+      .eq(
+        'empleado_id',
+        empleadoId
+      )
+      .eq(
+        'tipo',
+        'huella'
+      )
+      .eq(
+        'indice',
+        fid
+      )
+      .maybeSingle()
 
-    // Alias que puede utilizar la pantalla de enrolamiento
-    id: device.id,
-    device_id: device.id,
-    deviceId: device.id,
+    if (error) {
+      throw error
+    }
 
-    serial_number: device.serial_number
-      ?.trim()
-      .toUpperCase(),
+    return data || null
+  },
 
-    device_serial: device.serial_number
-      ?.trim()
-      .toUpperCase(),
+  // ═════════════════════════════════════════════════════════════════════════
+  // 7. CANCELAR / LIMPIAR ENROLAMIENTO PENDIENTE
+  // ═════════════════════════════════════════════════════════════════════════
 
-    nombre_ubicacion:
-      device.name ||
-      device.location ||
-      device.serial_number,
+  async cancelEnrollment(
+    empleadoId,
+    fingerKey
+  ) {
+    if (
+      !empleadoId ||
+      !fingerKey
+    ) {
+      throw new Error(
+        'Empleado y dedo son requeridos.'
+      )
+    }
 
-    nombre:
-      device.name ||
-      device.serial_number,
+    const fid =
+      FINGER_KEY_TO_FID[
+        fingerKey
+      ]
 
-    ubicacion:
-      device.location || '',
+    if (fid === undefined) {
+      throw new Error(
+        'Dedo no reconocido.'
+      )
+    }
 
-    estatus:
-      device.is_active ? 'activo' : 'inactivo'
-  }))
-},
+    const {
+      error,
+    } = await supabase
+      .from(
+        'biometric_templates'
+      )
+      .delete()
+      .eq(
+        'empleado_id',
+        empleadoId
+      )
+      .eq(
+        'tipo',
+        'huella'
+      )
+      .eq(
+        'indice',
+        fid
+      )
+      .eq(
+        'template_data',
+        'PENDING'
+      )
 
+    if (error) {
+      throw error
+    }
 
-/**
- * Obtiene los datos biométricos del empleado.
- *
- * `hikvision_device_userid` es el identificador que utilizará
- * el checador para el empleado.
- */
-async getEmpleadoBiometricPin(empleadoId) {
-  if (!empleadoId) return null
-
-  const { data, error } = await supabase
-    .from('empleados')
-    .select(`
-      id,
-      hikvision_device_userid,
-      clave_empleado,
-      nombre,
-      apellido,
-      cliente_id
-    `)
-    .eq('id', empleadoId)
-    .maybeSingle()
-
-  if (error) {
-    console.error(
-      '[biometricsService.getEmpleadoBiometricPin] Error obteniendo empleado:',
-      error
-    )
-
-    throw error
-  }
-
-  if (!data) return null
-
-  return {
-    ...data,
-
-    // Nombre completo para la pantalla de enrolamiento
-    nombreCompleto:
-      `${data.nombre || ''} ${data.apellido || ''}`.trim(),
-
-    // PIN/ID que ya tiene el empleado en Hikvision
-    biometric_user_id:
-      data.hikvision_device_userid || null,
-
-    biometricUserId:
-      data.hikvision_device_userid || null
-  }
-},
+    return true
+  },
 }
