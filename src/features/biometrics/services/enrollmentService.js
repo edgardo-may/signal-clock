@@ -174,33 +174,123 @@ export const enrollmentService = {
   /**
    * Obtiene los dispositivos ZKTeco activos para el cliente.
    */
-  async getActiveDevices(clienteId) {
-    if (!clienteId) return []
+ /**
+ * Obtiene los dispositivos biométricos activos del cliente.
+ *
+ * La tabla principal de dispositivos es `devices`.
+ * NO utilizar `dispositivos` para obtener los datos del checador.
+ */
+async getActiveDevices(clienteId) {
+  if (!clienteId) return []
 
-    // Dispositivos en la tabla `dispositivos` (tenant-specific) 
-    // cruzados con `devices` (tabla unificada con serial_number)
-    const { data: dispositivos, error } = await supabase
-      .from('dispositivos')
-      .select('id, nombre_ubicacion, numero_serie, estatus, marca')
-      .eq('cliente_id', clienteId)
-      .eq('estatus', 'activo')
+  const { data, error } = await supabase
+    .from('devices')
+    .select(`
+      id,
+      serial_number,
+      name,
+      location,
+      is_active,
+      ip_address,
+      port,
+      timezone,
+      device_type,
+      last_activity,
+      cliente_id
+    `)
+    .eq('cliente_id', clienteId)
+    .eq('is_active', true)
+    .order('name', { ascending: true })
 
-    if (error) throw error
-    return dispositivos || []
-  },
+  if (error) {
+    console.error(
+      '[biometricsService.getActiveDevices] Error obteniendo dispositivos:',
+      error
+    )
 
-  /**
-   * Obtiene el PIN biométrico del empleado (hikvision_device_userid).
-   */
-  async getEmpleadoBiometricPin(empleadoId) {
-    if (!empleadoId) return null
-    const { data, error } = await supabase
-      .from('empleados')
-      .select('hikvision_device_userid, clave_empleado, nombre, apellido')
-      .eq('id', empleadoId)
-      .maybeSingle()
+    throw error
+  }
 
-    if (error) throw error
-    return data
-  },
+  return (data || []).map(device => ({
+    ...device,
+
+    // Alias que puede utilizar la pantalla de enrolamiento
+    id: device.id,
+    device_id: device.id,
+    deviceId: device.id,
+
+    serial_number: device.serial_number
+      ?.trim()
+      .toUpperCase(),
+
+    device_serial: device.serial_number
+      ?.trim()
+      .toUpperCase(),
+
+    nombre_ubicacion:
+      device.name ||
+      device.location ||
+      device.serial_number,
+
+    nombre:
+      device.name ||
+      device.serial_number,
+
+    ubicacion:
+      device.location || '',
+
+    estatus:
+      device.is_active ? 'activo' : 'inactivo'
+  }))
+},
+
+
+/**
+ * Obtiene los datos biométricos del empleado.
+ *
+ * `hikvision_device_userid` es el identificador que utilizará
+ * el checador para el empleado.
+ */
+async getEmpleadoBiometricPin(empleadoId) {
+  if (!empleadoId) return null
+
+  const { data, error } = await supabase
+    .from('empleados')
+    .select(`
+      id,
+      hikvision_device_userid,
+      clave_empleado,
+      nombre,
+      apellido,
+      cliente_id
+    `)
+    .eq('id', empleadoId)
+    .maybeSingle()
+
+  if (error) {
+    console.error(
+      '[biometricsService.getEmpleadoBiometricPin] Error obteniendo empleado:',
+      error
+    )
+
+    throw error
+  }
+
+  if (!data) return null
+
+  return {
+    ...data,
+
+    // Nombre completo para la pantalla de enrolamiento
+    nombreCompleto:
+      `${data.nombre || ''} ${data.apellido || ''}`.trim(),
+
+    // PIN/ID que ya tiene el empleado en Hikvision
+    biometric_user_id:
+      data.hikvision_device_userid || null,
+
+    biometricUserId:
+      data.hikvision_device_userid || null
+  }
+},
 }
