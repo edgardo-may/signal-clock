@@ -17,49 +17,40 @@ export const biometricsService = {
    * La tabla `devices` es global, mientras que `dispositivos`
    * contiene la relación dispositivo <-> cliente.
    */
-  async getTenantDeviceSerials(clienteId) {
-    if (!clienteId) return []
+ async getTenantDeviceSerials(clienteId) {
+  if (!clienteId) return []
 
-    const { data, error } = await supabase
-      .from('dispositivos')
-      .select('device_id_hikvision')
-      .eq('cliente_id', clienteId)
+  const { data, error } = await supabase
+    .from('devices')
+    .select('serial_number')
+    .eq('cliente_id', clienteId)
 
-    if (error) throw error
+  if (error) throw error
 
-    return (data || [])
-      .map(row => row.device_id_hikvision)
-      .filter(Boolean)
-      .map(serial => serial.trim().toUpperCase())
-  },
+  return (data || [])
+    .map(row => row.serial_number)
+    .filter(Boolean)
+    .map(serial => serial.trim().toUpperCase())
+},
+
 
   /**
    * Obtiene los IDs globales de devices pertenecientes al tenant.
    */
-  async getTenantDeviceIds(clienteId) {
-    if (!clienteId) return []
-
-    const serials = await this.getTenantDeviceSerials(clienteId)
-
-    if (!serials.length) return []
-
-    const { data, error } = await supabase
-      .from('devices')
-      .select('id, serial_number')
-      .in('serial_number', serials)
-
-      if (error) {
-    console.error(
-      '[biometricsService.getTenantDeviceIds]',
-      error
-    )
-
-    throw error
-  }
-
-    return (data || []).map(device => device.id).filter(Boolean)
-  },
-
+    async getTenantDeviceIds(clienteId) {
+      if (!clienteId) return []
+    
+      const { data, error } = await supabase
+        .from('devices')
+        .select('id')
+        .eq('cliente_id', clienteId)
+    
+      if (error) throw error
+    
+      return (data || [])
+        .map(device => device.id)
+        .filter(Boolean)
+    },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 2. DEVICES
@@ -77,15 +68,15 @@ export const biometricsService = {
  * La tabla `dispositivos` solamente se utiliza para determinar qué
  * seriales pertenecen al cliente.
  */
-async getDevices({
-  clienteId,
-  search = '',
-  status = 'todos',
-  type = 'todos'
-} = {}) {
-  if (!clienteId) {
-    return []
-  }
+    async getDevices({
+      clienteId,
+      search = '',
+      status = 'todos',
+      type = 'todos'
+    } = {}) {
+      if (!clienteId) {
+        return []
+      }
 
   // ────────────────────────────────────────────────────────────────────────
   // 1. Obtener dispositivos asociados al cliente
