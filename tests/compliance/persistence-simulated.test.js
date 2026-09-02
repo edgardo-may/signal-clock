@@ -28,8 +28,15 @@ describe('FASE 2: Datos Simulados (TEST-001 a TEST-003)', () => {
           return builder
         },
         lte: () => builder,
+        gte: () => builder,
         limit: () => builder,
         single: async () => {
+          if (table === 'tenant_features') {
+            return { data: { state: 'ACTIVE' }, error: null }
+          }
+          if (table === 'clientes') {
+            return { data: { timezone: 'America/Mexico_City' }, error: null }
+          }
           if (table === 'empleados') {
             if (builder._empId) {
               return { data: { hikvision_device_userid: builder._empId === EMP_PUNTUAL || builder._empId === EMP_RETARDO || builder._empId === EMP_INCOMPLETO ? builder._empId : 'biom-id' }, error: null }
@@ -37,10 +44,13 @@ describe('FASE 2: Datos Simulados (TEST-001 a TEST-003)', () => {
             return { error: 'Not found' }
           }
         },
-        maybeSingle: async () => {
+        maybeSingle: async () => ({ data: null, error: null }),
+        then: async (resolve) => {
           if (table === 'empleados_horarios') {
-            return {
-              data: {
+            resolve({
+              data: [{
+                id: 'assignment-test',
+                fecha_fin: null,
                 horarios: {
                   id: 'sch-test',
                   nombre: 'Turno Prueba',
@@ -49,12 +59,11 @@ describe('FASE 2: Datos Simulados (TEST-001 a TEST-003)', () => {
                     mar: { activo: true, entrada: '08:00', salida: '17:00' } // 2027-02-23 es martes
                   }
                 }
-              },
+              }],
               error: null
-            }
+            })
+            return
           }
-        },
-        then: async (resolve) => {
           if (table === 'attendance_logs') {
             let punches = []
             if (builder._biomId === EMP_PUNTUAL) {
@@ -73,7 +82,9 @@ describe('FASE 2: Datos Simulados (TEST-001 a TEST-003)', () => {
               ]
             }
             resolve({ data: punches.map(p => ({ ...p, cliente_id: SIGNUM_TEST_COMPANY, numero_serie: 'DEV-1', verify_type: 1 })), error: null })
+            return
           }
+          resolve({ data: [], error: null })
         }
       }
       return builder

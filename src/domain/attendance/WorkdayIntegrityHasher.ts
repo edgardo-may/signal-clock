@@ -19,6 +19,7 @@ function sha256Sync(str: string): string {
   // Intentar usar node:crypto si está disponible en entorno Node
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // @ts-ignore
     const nodeCrypto = typeof require !== 'undefined' ? require('crypto') : null
     if (nodeCrypto && typeof nodeCrypto.createHash === 'function') {
       return nodeCrypto.createHash('sha256').update(str, 'utf8').digest('hex')

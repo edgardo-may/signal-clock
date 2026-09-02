@@ -32,7 +32,7 @@ export class AttendanceNormalizer {
   /**
    * Mapea el estado numérico o textual de entrada/salida a InOutType estándar.
    */
-  public static mapInOutType(inOutState?: number | string, verifyType?: number): InOutType {
+  public static mapInOutType(inOutState?: number | string, _verifyType?: number): InOutType {
     if (inOutState === undefined || inOutState === null) {
       return 'UNSPECIFIED'
     }
@@ -155,7 +155,7 @@ export class AttendanceNormalizer {
       const local = getLocalComponents(date, targetTimezone)
       const epochMs = date.getTime()
       const utcTimestamp = date.toISOString()
-
+      const { verifyType: _verifyType } = raw
       const inOutType = this.mapInOutType(raw.inOutState, raw.verifyType)
       const direction = this.mapToDirection(inOutType)
       const id = raw.id || `punch_${raw.clienteId}_${raw.empleadoId}_${epochMs}_${i}`

@@ -59,7 +59,7 @@ class MockSupabaseDB {
       return { error: { message: 'new row for relation "workday_records" violates check constraint' } }
     }
     
-    const logicalKey = `${payload.cliente_id}-${payload.empleado_id}-${payload.workday_date}-${payload.schedule_id || 'UNSCHEDULED'}`
+    const logicalKey = `${payload.cliente_id}-${payload.empleado_id}-${payload.workday_date}-${payload.schedule_assignment_id || 'UNSCHEDULED'}`
     
     // Simular concurrencia: si hay una race condition configurada
     if (this.simulateConcurrency) {
@@ -73,7 +73,7 @@ class MockSupabaseDB {
       r.cliente_id === payload.cliente_id &&
       r.empleado_id === payload.empleado_id &&
       r.workday_date === payload.workday_date &&
-      (r.schedule_id || 'UNSCHEDULED') === (payload.schedule_id || 'UNSCHEDULED')
+      (r.schedule_assignment_id || 'UNSCHEDULED') === (payload.schedule_assignment_id || 'UNSCHEDULED')
     )
 
     if (existing) {
@@ -131,7 +131,7 @@ describe('FASE 2: Persistencia Workday Records (PERSIST-001 a PERSIST-018)', () 
     empleadoId: EMP_1,
     operativeDate: '2027-02-23',
     timezone: 'America/Mexico_City',
-    scheduleId: SCHEDULE_A,
+    scheduleAssignmentId: SCHEDULE_A,
     shiftType: 'DIURNA',
     isRestDay: false,
     isHoliday: false,
@@ -212,7 +212,7 @@ describe('FASE 2: Persistencia Workday Records (PERSIST-001 a PERSIST-018)', () 
     assert.equal(res.status, 'UNCHANGED') // Hash ya era def-456
     
     // Mismo empleado, misma fecha, schedule nulo (turno extra en mismo dia) -> se crea NUEVO registro
-    const extraShift = { ...baseResult, scheduleId: undefined, integrityHash: 'hash-extra' }
+    const extraShift = { ...baseResult, scheduleAssignmentId: undefined, integrityHash: 'hash-extra' }
     const res2 = await WorkdayPersistenceService.persistWorkday(supabase, extraShift)
     assert.equal(res2.status, 'CREATED')
     
@@ -221,7 +221,7 @@ describe('FASE 2: Persistencia Workday Records (PERSIST-001 a PERSIST-018)', () 
   })
 
   test('PERSIST-008: Punch dispositions quedan almacenados', async () => {
-    const record = db.workday_records.find(r => r.schedule_id === undefined)
+    const record = db.workday_records.find(r => r.schedule_assignment_id === undefined)
     assert.deepEqual(record.punch_dispositions, [{ logId: 'log-1', disposition: 'USED' }])
   })
 

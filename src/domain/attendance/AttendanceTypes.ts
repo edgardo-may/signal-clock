@@ -250,7 +250,7 @@ export interface WorkdayCalculationResult {
   operativeDate: string // YYYY-MM-DD (fecha operativa del turno)
   timezone: string
 
-  scheduleId?: string
+  scheduleAssignmentId?: string
   shiftType: ShiftType
   isRestDay: boolean
   isHoliday: boolean
@@ -297,6 +297,9 @@ export interface WorkdayCalculationResult {
 
   segments: WorkdaySegment[]
   sourceLogIds: string[] // IDs de los punches USADOS en el cálculo (disposition=USED)
+  /** Trusted retrieval window forwarded to persistence for source-log provenance checks. */
+  sourceWindowStartUtc?: string
+  sourceWindowEndUtc?: string
 
   /**
    * punchDispositions: Trazabilidad completa de TODOS los punches recibidos (ATT-004).
@@ -318,6 +321,8 @@ export interface WorkdayCalculationResult {
 
 export interface AttendanceEngineOptions {
   timezone?: string // Default: 'America/Mexico_City'
+  /** Explicit requested operative date; required for an unscheduled local workday. */
+  operativeDate?: string
   deduplication?: DeduplicationConfig
   laborRuleProvider?: LaborRuleProvider
   calculationVersion?: number

@@ -27,7 +27,7 @@ export class WorkdayPersistenceService {
       const payload = {
         cliente_id: result.clienteId,
         empleado_id: result.empleadoId,
-        schedule_id: result.scheduleId,
+        schedule_assignment_id: result.scheduleAssignmentId,
         workday_date: result.operativeDate,
         timezone: result.timezone,
         
@@ -51,6 +51,8 @@ export class WorkdayPersistenceService {
         integrity_hash: result.integrityHash,
         
         source_log_ids: Array.from(result.sourceLogIds || []),
+        source_window_start_utc: result.sourceWindowStartUtc,
+        source_window_end_utc: result.sourceWindowEndUtc,
         punch_dispositions: result.punchDispositions || [],
         incidents: result.incidents || [],
         warnings: result.warnings || [],

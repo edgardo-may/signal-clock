@@ -16,8 +16,10 @@ import type {
   WorkdaySegment,
   AttendanceEngineOptions,
   LaborRuleProvider,
-  NormalizedPunch,
   WorkdayIncident,
+  ShiftType,
+  LaborRuleThresholds,
+  NormalizedPunch,
 } from './AttendanceTypes.ts'
 import type { ShiftMatchResult } from './ShiftMatcher.ts'
 import { getLocalComponents } from './timezoneUtils.ts'
@@ -61,7 +63,7 @@ export interface CalculationMetrics {
  * Desacoplado: No hardcodea números mágicos en el calculador principal.
  */
 export class DefaultLaborRuleProvider implements LaborRuleProvider {
-  public getRulesForDate(date: string, countryCode = 'MEX', shiftType = 'DIURNA') {
+  public getRulesForDate(date: string, _countryCode?: string, _shiftType?: ShiftType): LaborRuleThresholds {
     const year = parseInt(date.substring(0, 4), 10)
 
     // Reducción progresiva 48h → 40h México
@@ -73,8 +75,8 @@ export class DefaultLaborRuleProvider implements LaborRuleProvider {
 
     // Jornada diaria máxima LFT (Diurna 8h, Mixta 7.5h, Nocturna 7h)
     let dailyMaxHours = 8
-    if (shiftType === 'NOCTURNA') dailyMaxHours = 7
-    else if (shiftType === 'MIXTA') dailyMaxHours = 7.5
+    if (_shiftType === 'NOCTURNA') dailyMaxHours = 7
+    else if (_shiftType === 'MIXTA') dailyMaxHours = 7.5
 
     return {
       maxDailyOrdinaryMinutes: Math.round(dailyMaxHours * 60),
@@ -145,7 +147,6 @@ export class WorkdayCalculator {
     const pairs: Array<{ entry: NormalizedPunch; exit: NormalizedPunch }> = []
     const pairingIncidents: WorkdayIncident[] = []
     let orphanEntry: NormalizedPunch | undefined
-    let orphanExit: NormalizedPunch | undefined
 
     for (let i = 0; i + 1 < punches.length; i += 2) {
       pairs.push({ entry: punches[i], exit: punches[i + 1] })
@@ -241,7 +242,7 @@ export class WorkdayCalculator {
    */
   public static calculate(
     matchResult: ShiftMatchResult,
-    timezone: string,
+    _timezone: string,
     options?: AttendanceEngineOptions
   ): CalculationMetrics {
     const punches = matchResult.matchedPunches
@@ -384,7 +385,6 @@ export class WorkdayCalculator {
     devicesInvolved: string[],
     isRestOrHoliday: boolean
   ): CalculationMetrics {
-    const timezone = options?.timezone || matchResult.shiftType // pasado externamente al invoke
     // La timezone viene de las opciones del motor; el parámetro es inyectado por el caller (AttendanceEngine)
 
     // ATT-001: Apareamiento híbrido

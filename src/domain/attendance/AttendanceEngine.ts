@@ -46,6 +46,7 @@ export class AttendanceEngine {
   constructor(options?: AttendanceEngineOptions) {
     this.defaultOptions = {
       timezone: options?.timezone || 'America/Mexico_City',
+      operativeDate: options?.operativeDate || '',
       deduplication: options?.deduplication || { minSecondsBetweenPunches: 60, mode: 'KEEP_FIRST' },
       laborRuleProvider: options?.laborRuleProvider || new DefaultLaborRuleProvider(),
       calculationVersion: options?.calculationVersion || 1,
@@ -61,7 +62,7 @@ export class AttendanceEngine {
   public processWorkday(
     clienteId: string,
     empleadoId: string,
-    shiftConfig: ShiftWindowConfig,
+    shiftConfig: ShiftWindowConfig | undefined,
     rawPunches: RawAttendancePunch[],
     overrideOptions?: AttendanceEngineOptions
   ): WorkdayCalculationResult {
@@ -85,8 +86,25 @@ export class AttendanceEngine {
       mergedOptions.deduplication
     )
 
+    const isUnscheduled = !shiftConfig
+
+    // Si no hay configuración (UNSCHEDULED), creamos un dummy config basado en un día de descanso
+    // para que ShiftMatcher recolecte los punches del día completo.
+    const effectiveShiftConfig: ShiftWindowConfig = shiftConfig || {
+      id: 'UNSCHEDULED',
+      name: 'UNSCHEDULED',
+      // The caller's operative date is authoritative. A UTC punch date is not
+      // a safe substitute close to local midnight.
+      operativeDate: overrideOptions?.operativeDate || (rawPunches.length > 0 ? String(rawPunches[0].timestamp).split('T')[0] : new Date().toISOString().split('T')[0]),
+      startTime: '',
+      endTime: '',
+      isRestDay: true,
+      toleranceMinutes: 0,
+      hasBreak: false
+    }
+
     // 2. Emparejamiento con la ventana operativa del turno
-    const matchResult = ShiftMatcher.match(shiftConfig, normalizationResult.accepted, timezone)
+    const matchResult = ShiftMatcher.match(effectiveShiftConfig, normalizationResult.accepted, timezone)
 
     // 3. Cálculo matemático de segmentos, tiempos trabajados y descansos
     //    (con apareamiento híbrido ATT-001)
@@ -110,6 +128,10 @@ export class AttendanceEngine {
     // 4. Detección automática e idempotente de incidencias y workdayState (ATT-002)
     const evalResult = IncidentDetector.evaluate(matchResult, metrics)
 
+    if (isUnscheduled) {
+      evalResult.workdayState = 'UNSCHEDULED'
+    }
+
     // 5. Construcción de punchDispositions completas (ATT-004)
     //    USED/DUPLICATE vienen del normalizador.
     //    OUT_OF_WINDOW se marca aquí para los punches aceptados por normalizer
@@ -132,7 +154,7 @@ export class AttendanceEngine {
       empleadoId,
       operativeDate: matchResult.operativeDate,
       timezone,
-      scheduleId: shiftConfig.id,
+      scheduleId: shiftConfig?.id,
       scheduledStart: matchResult.scheduledStartUtc,
       scheduledEnd: matchResult.scheduledEndUtc,
       actualStart: metrics.actualStart,
@@ -156,11 +178,10 @@ export class AttendanceEngine {
       empleadoId,
       operativeDate: matchResult.operativeDate,
       timezone,
-      scheduleId: shiftConfig.id,
       shiftType: matchResult.shiftType,
       isRestDay: matchResult.isRestDay,
       isHoliday: matchResult.isHoliday,
-      holidayName: shiftConfig.holidayName,
+      holidayName: shiftConfig?.holidayName,
       scheduledStart: matchResult.scheduledStartUtc,
       scheduledEnd: matchResult.scheduledEndUtc,
       scheduledMinutes: matchResult.scheduledMinutes,
@@ -195,7 +216,7 @@ export class AttendanceEngine {
   public static process(
     clienteId: string,
     empleadoId: string,
-    shiftConfig: ShiftWindowConfig,
+    shiftConfig: ShiftWindowConfig | undefined,
     rawPunches: RawAttendancePunch[],
     options?: AttendanceEngineOptions
   ): WorkdayCalculationResult {
