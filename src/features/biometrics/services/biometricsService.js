@@ -61,59 +61,67 @@ export const biometricsService = {
   /**
    * Obtiene dispositivos pertenecientes exclusivamente al tenant.
    */
-  async getDevices({
-    clienteId = null,
-    search = '',
-    status = 'todos',
-    type = 'todos'
-  } = {}) {
-    if (!clienteId) return []
+/**
+ * Obtiene los dispositivos del tenant actual.
+ *
+ * IMPORTANTE:
+ * La fuente principal es `devices`.
+ * NO depende de la tabla `dispositivos`.
+ */
+async getDevices({
+  clienteId,
+  search = '',
+  status = 'todos',
+  type = 'todos'
+} = {}) {
+  if (!clienteId) {
+    return []
+  }
 
-    const serials = await this.getTenantDeviceSerials(clienteId)
+  let query = supabase
+    .from('devices')
+    .select('*')
+    .eq('cliente_id', clienteId)
+    .order('created_at', { ascending: false })
 
-    if (!serials.length) return []
+  // Filtro por estado
+  if (status === 'active') {
+    query = query.eq('is_active', true)
+  } else if (status === 'inactive') {
+    query = query.eq('is_active', false)
+  }
 
-    let query = supabase
-      .from('devices')
-      .select('*')
-      .in('serial_number', serials)
-      .order('created_at', { ascending: false })
+  // Filtro por tipo
+  if (type && type !== 'todos') {
+    query = query.eq('device_type', type)
+  }
 
-     if (clienteId) {
-    query = query.eq('cliente_id', clienteId)
-    }
+  const { data, error } = await query
 
-    if (status === 'active') {
-      query = query.eq('is_active', true)
-    } else if (status === 'inactive') {
-      query = query.eq('is_active', false)
-    }
+  if (error) {
+    console.error('[biometricsService.getDevices]', error)
+    throw error
+  }
 
-    if (type && type !== 'todos') {
-      query = query.eq('device_type', type)
-    }
+  let list = data || []
 
-    const { data, error } = await query
+  // Búsqueda client-side
+  if (search.trim()) {
+    const q = search.trim().toLowerCase()
 
-    if (error) throw error
+    list = list.filter(device =>
+      device.name?.toLowerCase().includes(q) ||
+      device.serial_number?.toLowerCase().includes(q) ||
+      device.location?.toLowerCase().includes(q) ||
+      device.ip_address?.toLowerCase().includes(q) ||
+      device.device_type?.toLowerCase().includes(q) ||
+      device.timezone?.toLowerCase().includes(q)
+    )
+  }
 
-    let list = data || []
+  return list
+},
 
-    if (search.trim()) {
-      const q = search.toLowerCase()
-
-      list = list.filter(d =>
-        d.name?.toLowerCase().includes(q) ||
-        d.serial_number?.toLowerCase().includes(q) ||
-        d.location?.toLowerCase().includes(q) ||
-        d.ip_address?.toLowerCase().includes(q) ||
-        d.device_type?.toLowerCase().includes(q) ||
-        d.timezone?.toLowerCase().includes(q)
-      )
-    }
-
-    return list
-  },
 
 
   /**
