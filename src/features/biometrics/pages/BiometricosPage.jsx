@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useBiometrics } from '../hooks/useBiometrics'
 import { useAuth } from '../../auth/hooks/useAuth'
 import { useCurrentTenant } from '../../../shared/hooks/useCurrentTenant'
+import { syncService } from '../services/syncService'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
 import TenantSelector from '../../../shared/components/Layout/TenantSelector'
@@ -18,7 +19,7 @@ import BiometricsSyncMonitor from '../components/BiometricsSyncMonitor'
 import SendCommandModal from '../components/SendCommandModal'
 import BiometricsEmployeesList from '../components/BiometricsEmployeesList'
 import BiometricsAssignmentsManager from '../components/BiometricsAssignmentsManager'
-import { Cpu, Plus, Send, AlertTriangle } from 'lucide-react'
+import { Cpu, Plus, Send, AlertTriangle, RefreshCw } from 'lucide-react'
 
 export default function BiometricosPage({ forcedSubview }) {
   const [sidebarOpen, setSidebarOpen] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : true))
@@ -157,6 +158,50 @@ export default function BiometricosPage({ forcedSubview }) {
       title: 'Sincronización & Estado ADMS',
       subtitle: 'Monitoreo de políticas, reintentos y cola de aprovisionamiento',
     },
+  }
+
+  const [syncingAll, setSyncingAll] = useState(false)
+
+  const handleSyncAllEmployees = async () => {
+    if (!currentTenantId) {
+      toast.error('Selecciona una empresa/cliente primero.')
+      return
+    }
+
+    if (!devices || devices.length === 0) {
+      toast.error('No hay checadores activos registrados para sincronizar.')
+      return
+    }
+
+    setSyncingAll(true)
+    const toastId = toast.loading('Encolando colaboradores a los checadores...')
+
+    try {
+      let totalEnqueued = 0
+
+      // Encolar a todos los dispositivos activos del tenant
+      for (const dev of devices) {
+        if (!dev.is_active && dev.is_active !== undefined) continue
+        
+        const res = await syncService.syncAllEmployeesToDevice({
+          clienteId: currentTenantId,
+          deviceSerial: dev.serial_number,
+          deviceId: dev.id
+        })
+        totalEnqueued += res.total || 0
+      }
+
+      toast.success(
+        `¡Listo! Se encolaron ${totalEnqueued} comandos. Los checadores los descargarán progresivamente.`,
+        { id: toastId }
+      )
+      refreshCurrentTab()
+    } catch (err) {
+      console.error(err)
+      toast.error(`Error al sincronizar: ${err.message}`, { id: toastId })
+    } finally {
+      setSyncingAll(false)
+    }
   }
 
   const currentInfo = SUBVIEW_TITLES[subview] || SUBVIEW_TITLES.devices
