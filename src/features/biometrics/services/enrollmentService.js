@@ -474,7 +474,7 @@ async getEmpleadoBiometricPin(empleadoId) {
     // ═══════════════════════════════════════════════════════════════════════
 
     const commandString =
-      `ENROLL_BIO PIN=${normalizedPin} Type=0 FID=${fid} Duress=0 Valid=1 Retry=3 OverWrite=1 ServerVer=1`
+      `ENROLL_BIO PIN=${normalizedPin} Type=1 FID=${fid} Duress=0 Valid=1 Retry=3 OverWrite=1 ServerVer=1`
 
     // ═══════════════════════════════════════════════════════════════════════
     // CREAR TEMPLATE PENDING
