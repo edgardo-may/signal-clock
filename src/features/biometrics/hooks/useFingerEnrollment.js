@@ -253,7 +253,7 @@ export function useFingerEnrollment(empleadoId, clienteId) {
                   )
 
                   toast.success(
-                    `✅ ${FINGER_DISPLAY_NAMES[fingerKey]} enrolado exitosamente`
+                    `${FINGER_DISPLAY_NAMES[fingerKey]} enrolado exitosamente`
                   )
 
                   setSelectedFinger(null)
@@ -499,8 +499,8 @@ export function useFingerEnrollment(empleadoId, clienteId) {
 
       const biometricPin =
         empleadoData.biometric_user_id ||
-        empleadoData.zkteco_user_id ||
-        empleadoData.zk_user_id ||
+        empleadoData.biometricUserId ||
+        empleadoData.biometricPin ||
         empleadoData.clave_empleado
 
       if (!biometricPin) {
