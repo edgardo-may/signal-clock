@@ -63,7 +63,7 @@ export function useBiometrics(currentTenantId) {
   const loadDashboardData = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await biometricsService.getBiometricsStats()
+      const data = await biometricsService.getBiometricsStats(currentTenantId)
       setStats(data)
     } catch (err) {
       console.error('[useBiometrics] Error al cargar stats:', err)
@@ -71,12 +71,13 @@ export function useBiometrics(currentTenantId) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [currentTenantId])
 
   const loadDevices = useCallback(async () => {
     setLoading(true)
     try {
       const list = await biometricsService.getDevices({
+        clienteId: currentTenantId,
         search: deviceSearch,
         status: deviceFilterStatus,
         type: deviceFilterType,
@@ -94,6 +95,7 @@ export function useBiometrics(currentTenantId) {
     setLoading(true)
     try {
       const { logs: logList, devices: devs, employees: emps } = await biometricsService.getAttendanceLogs({
+        clienteId: currentTenantId,
         search: logsSearch,
         deviceSerial: logsDeviceFilter,
         userId: logsUserFilter,
@@ -116,6 +118,7 @@ export function useBiometrics(currentTenantId) {
     setLoading(true)
     try {
       const { commands: cmdList, devices: devs } = await biometricsService.getDeviceCommands({
+        clienteId: currentTenantId,
         deviceSerial: commandDeviceFilter,
         status: commandStatusFilter,
       })
@@ -260,7 +263,7 @@ export function useBiometrics(currentTenantId) {
 
   const handleSendCommand = async ({ device_serial, command_string }) => {
     try {
-      await biometricsService.sendCommand({ device_serial, command_string })
+      await biometricsService.sendCommand({ clienteId: currentTenantId, device_serial, command_string })
       toast.success(`Comando enviado al dispositivo ${device_serial}`)
       setSendCommandModal(null)
       if (activeTab === 'commands') loadCommands()
