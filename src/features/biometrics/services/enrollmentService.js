@@ -308,7 +308,6 @@ export const enrollmentService = {
       .from('empleados')
       .select(`
         id,
-        biometric_user_id,
         clave_empleado,
         nombre,
         apellido,
@@ -317,43 +316,25 @@ export const enrollmentService = {
       .eq('id', empleadoId)
       .maybeSingle()
 
-    if (error) {
-      console.error(
-        '[enrollmentService.getEmpleadoBiometricPin]',
-        error
-      )
+      if (error) throw error
 
-      throw error
-    }
+    if (!data) return null
 
-    if (!data) {
-      return null
-    }
+  const biometricUserId =
+    data.clave_empleado
+      ? String(data.clave_empleado).trim()
+      : null
 
-    const biometricUserId =
-      normalizeBiometricUserId(
-        data.biometric_user_id
-      ) ||
-      normalizeBiometricUserId(
-        data.clave_empleado
-      )
+  return {
+    ...data,
 
-    return {
-      ...data,
+    nombreCompleto:
+      `${data.nombre || ''} ${data.apellido || ''}`.trim(),
 
-      nombreCompleto:
-        `${data.nombre || ''} ${data.apellido || ''}`
-          .trim(),
-
-      biometric_user_id:
-        biometricUserId || null,
-
-      biometricUserId:
-        biometricUserId || null,
-
-      biometricPin:
-        biometricUserId || null,
-    }
+    biometric_user_id: biometricUserId,
+    biometricUserId: biometricUserId,
+    biometricPin: biometricUserId,
+  }
   },
 
   // ═════════════════════════════════════════════════════════════════════════
