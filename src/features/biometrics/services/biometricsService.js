@@ -59,14 +59,16 @@ export const biometricsService = {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Obtiene dispositivos pertenecientes exclusivamente al tenant.
-   */
-/**
  * Obtiene los dispositivos del tenant actual.
  *
- * IMPORTANTE:
- * La fuente principal es `devices`.
- * NO depende de la tabla `dispositivos`.
+ * ARQUITECTURA:
+ *
+ * - `dispositivos` = relación cliente <-> dispositivo
+ * - `devices` = información completa del hardware
+ *
+ * La información visual del dispositivo SIEMPRE sale de `devices`.
+ * La tabla `dispositivos` solamente se utiliza para determinar qué
+ * seriales pertenecen al cliente.
  */
 async getDevices({
   clienteId,
@@ -78,20 +80,59 @@ async getDevices({
     return []
   }
 
+  // ────────────────────────────────────────────────────────────────────────
+  // 1. Obtener dispositivos asociados al cliente
+  // ────────────────────────────────────────────────────────────────────────
+
+  const { data: tenantDevices, error: tenantErr } = await supabase
+    .from('dispositivos')
+    .select('device_id_hikvision')
+    .eq('cliente_id', clienteId)
+
+  if (tenantErr) {
+    console.error(
+      '[biometricsService.getDevices] Error obteniendo relaciones tenant:',
+      tenantErr
+    )
+
+    throw tenantErr
+  }
+
+  const allowedSerials = (tenantDevices || [])
+    .map(row => row.device_id_hikvision)
+    .filter(Boolean)
+    .map(serial => serial.trim().toUpperCase())
+
+  // Si el cliente no tiene dispositivos asociados,
+  // no devolver dispositivos de otro tenant.
+  if (!allowedSerials.length) {
+    return []
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // 2. Obtener información completa desde `devices`
+  // ────────────────────────────────────────────────────────────────────────
+
   let query = supabase
     .from('devices')
     .select('*')
-    .eq('cliente_id', clienteId)
+    .in('serial_number', allowedSerials)
     .order('created_at', { ascending: false })
 
-  // Filtro por estado
+  // ────────────────────────────────────────────────────────────────────────
+  // 3. Filtro por estado
+  // ────────────────────────────────────────────────────────────────────────
+
   if (status === 'active') {
     query = query.eq('is_active', true)
   } else if (status === 'inactive') {
     query = query.eq('is_active', false)
   }
 
-  // Filtro por tipo
+  // ────────────────────────────────────────────────────────────────────────
+  // 4. Filtro por tipo
+  // ────────────────────────────────────────────────────────────────────────
+
   if (type && type !== 'todos') {
     query = query.eq('device_type', type)
   }
@@ -99,13 +140,27 @@ async getDevices({
   const { data, error } = await query
 
   if (error) {
-    console.error('[biometricsService.getDevices]', error)
+    console.error(
+      '[biometricsService.getDevices] Error obteniendo devices:',
+      error
+    )
+
     throw error
   }
 
-  let list = data || []
+  let list = (data || []).map(device => ({
+    ...device,
 
-  // Búsqueda client-side
+    // Normalizamos serial para evitar problemas de comparación
+    serial_number: device.serial_number
+      ?.trim()
+      .toUpperCase()
+  }))
+
+  // ────────────────────────────────────────────────────────────────────────
+  // 5. Búsqueda client-side
+  // ────────────────────────────────────────────────────────────────────────
+
   if (search.trim()) {
     const q = search.trim().toLowerCase()
 
