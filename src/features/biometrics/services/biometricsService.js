@@ -48,9 +48,16 @@ export const biometricsService = {
       .select('id, serial_number')
       .in('serial_number', serials)
 
-    if (error) throw error
+      if (error) {
+    console.error(
+      '[biometricsService.getTenantDeviceIds]',
+      error
+    )
 
-    return (data || []).map(device => device.id)
+    throw error
+  }
+
+    return (data || []).map(device => device.id).filter(Boolean)
   },
 
 
