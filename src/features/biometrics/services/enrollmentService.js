@@ -299,31 +299,41 @@ export const enrollmentService = {
    *   biometric_user_id
    *   biometricUserId
    */
-  async getEmpleadoBiometricPin(empleadoId) {
-    if (!empleadoId) {
-      return null
-    }
+async getEmpleadoBiometricPin(empleadoId) {
+  if (!empleadoId) return null
 
-    const { data, error } = await supabase
-      .from('empleados')
-      .select(`
-        id,
-        clave_empleado,
-        nombre,
-        apellido,
-        cliente_id
-      `)
-      .eq('id', empleadoId)
-      .maybeSingle()
+  const { data, error } = await supabase
+    .from('empleados')
+    .select(`
+      id,
+      device_userid,
+      clave_empleado,
+      nombre,
+      apellido,
+      cliente_id
+    `)
+    .eq('id', empleadoId)
+    .maybeSingle()
 
-      if (error) throw error
+  if (error) {
+    console.error(
+      '[enrollmentService.getEmpleadoBiometricPin]',
+      error
+    )
 
-    if (!data) return null
+    throw error
+  }
+
+  if (!data) {
+    return null
+  }
 
   const biometricUserId =
-    data.clave_empleado
-      ? String(data.clave_empleado).trim()
-      : null
+    data.device_userid
+      ? String(data.device_userid).trim()
+      : data.clave_empleado
+        ? String(data.clave_empleado).trim()
+        : null
 
   return {
     ...data,
@@ -331,11 +341,15 @@ export const enrollmentService = {
     nombreCompleto:
       `${data.nombre || ''} ${data.apellido || ''}`.trim(),
 
+    // ID que utiliza ZKTeco para identificar al empleado
+    device_userid: biometricUserId,
+
     biometric_user_id: biometricUserId,
     biometricUserId: biometricUserId,
     biometricPin: biometricUserId,
   }
-  },
+},
+
 
   // ═════════════════════════════════════════════════════════════════════════
   // 4. SOLICITAR ENROLAMIENTO
