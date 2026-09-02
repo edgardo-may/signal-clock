@@ -73,23 +73,37 @@ export function useBiometrics(currentTenantId) {
     }
   }, [currentTenantId])
 
-  const loadDevices = useCallback(async () => {
-    setLoading(true)
-    try {
-      const list = await biometricsService.getDevices({
-        clienteId: currentTenantId,
-        search: deviceSearch,
-        status: deviceFilterStatus,
-        type: deviceFilterType,
-      })
-      setDevices(list)
-    } catch (err) {
-      console.error('[useBiometrics] Error al cargar dispositivos:', err)
-      toast.error('Error al cargar lista de dispositivos')
-    } finally {
-      setLoading(false)
-    }
-  }, [deviceSearch, deviceFilterStatus, deviceFilterType])
+const loadDevices = useCallback(async () => {
+  if (!currentTenantId) {
+    setDevices([])
+    setLoading(false)
+    return
+  }
+
+  setLoading(true)
+
+  try {
+    const list = await biometricsService.getDevices({
+      clienteId: currentTenantId,
+      search: deviceSearch,
+      status: deviceFilterStatus,
+      type: deviceFilterType,
+    })
+
+    setDevices(list)
+  } catch (err) {
+    console.error('[useBiometrics] Error al cargar dispositivos:', err)
+    toast.error('Error al cargar lista de dispositivos')
+  } finally {
+    setLoading(false)
+  }
+}, [
+  currentTenantId,
+  deviceSearch,
+  deviceFilterStatus,
+  deviceFilterType
+])
+
 
   const loadAttendanceLogs = useCallback(async () => {
     setLoading(true)
