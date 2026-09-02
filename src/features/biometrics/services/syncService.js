@@ -25,14 +25,22 @@ export const syncService = {
     const commandsToInsert = []
     const assignmentUpserts = []
 
-    for (const emp of empleados) {
-      const pin = String(emp.device_userid || emp.clave_empleado || '').trim()
-      if (!pin) continue
+for (const emp of empleados) {
+      // 1. Validar que el PIN sea puramente numérico
+      const rawPin = String(emp.device_userid || emp.clave_empleado || '').trim()
+      const pin = rawPin.replace(/\D/g, '')
 
-      const fullName = `${emp.nombre || ''} ${emp.apellido || ''}`.trim() || `User_${pin}`
+      if (!pin) {
+        console.warn(`[syncService] Omitiendo empleado ${emp.nombre}: PIN "${rawPin}" no es numérico.`)
+        continue
+      }
 
-      // Formato estricto ZKTeco: DATA UPDATE USERINFO Pin=... separado por \t
-      const commandString = `DATA UPDATE USERINFO Pin=${pin}\tName=${fullName}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=0000000100000000`
+      // 2. Acotar nombre a máximo 20 caracteres
+      const rawName = `${emp.nombre || ''} ${emp.apellido || ''}`.trim() || `User_${pin}`
+      const fullName = rawName.substring(0, 20).trim()
+
+      // 3. Sintaxis nativa IClock para usuarios: DATA USER PIN=...
+      const commandString = `DATA USER PIN=${pin}\tName=${fullName}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=0000000100000000`
 
       commandsToInsert.push({
         device_serial: deviceSerial,
@@ -45,8 +53,7 @@ export const syncService = {
           device_id: deviceId,
           biometric_user_id: pin,
           sync_status: 'PENDING',
-          activo: true,
-          last_attempt_at: new Date().toISOString()
+          activo: true
         })
       }
     }
