@@ -62,7 +62,7 @@ export const biometricsService = {
    * Obtiene dispositivos pertenecientes exclusivamente al tenant.
    */
   async getDevices({
-    clienteId,
+    clienteId = null,
     search = '',
     status = 'todos',
     type = 'todos'
@@ -78,6 +78,10 @@ export const biometricsService = {
       .select('*')
       .in('serial_number', serials)
       .order('created_at', { ascending: false })
+
+     if (clienteId) {
+    query = query.eq('cliente_id', clienteId)
+    }
 
     if (status === 'active') {
       query = query.eq('is_active', true)
