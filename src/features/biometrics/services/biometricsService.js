@@ -1,31 +1,104 @@
 // src/features/biometrics/services/biometricsService.js
 //
-// Servicio centralizado de biométricos.
+// Servicio centralizado para biometría.
 //
-// ARQUITECTURA:
+// ARQUITECTURA ACTUAL:
 //
-// `devices` es la tabla principal de dispositivos.
+// clientes
+//   └── devices
+//         ├── id
+//         ├── cliente_id
+//         ├── serial_number
+//         ├── name
+//         ├── location
+//         ├── ip_address
+//         ├── port
+//         ├── timezone
+//         ├── device_type
+//         ├── is_active
+//         └── last_activity
 //
-// Cada dispositivo tiene directamente:
-//   - id
-//   - cliente_id
-//   - serial_number
-//   - name
-//   - location
-//   - ip_address
-//   - port
-//   - timezone
-//   - device_type
-//   - is_active
-//   - last_activity
+// device_employee_assignments.device_id
+//         └── devices.id
 //
 // IMPORTANTE:
 // Este servicio NO utiliza la tabla `dispositivos`.
-// La pertenencia de un dispositivo a un cliente se determina
-// exclusivamente mediante `devices.cliente_id`.
-//
+// La fuente de verdad para dispositivos es `devices`.
 
 import { supabase } from '../../../lib/supabase'
+
+const DEFAULT_TIMEZONE = 'America/Cancun'
+const DEFAULT_DEVICE_TYPE = 'general'
+const DEFAULT_PORT = 7660
+
+const normalizeSerial = value => {
+  if (!value) return ''
+  return String(value).trim().toUpperCase()
+}
+
+const normalizeSearch = value => {
+  if (!value) return ''
+  return String(value).trim().toLowerCase()
+}
+
+const normalizeDevice = device => {
+  if (!device) return null
+
+  return {
+    ...device,
+
+    id: device.id || null,
+
+    cliente_id: device.cliente_id || null,
+
+    serial_number: normalizeSerial(
+      device.serial_number
+    ),
+
+    name: device.name || '',
+
+    location: device.location || null,
+
+    ip_address: device.ip_address || null,
+
+    port:
+      device.port !== null &&
+      device.port !== undefined
+        ? Number(device.port)
+        : DEFAULT_PORT,
+
+    timezone:
+      device.timezone ||
+      DEFAULT_TIMEZONE,
+
+    device_type:
+      device.device_type ||
+      DEFAULT_DEVICE_TYPE,
+
+    is_active:
+      Boolean(device.is_active)
+  }
+}
+
+const emptyStats = () => ({
+  totalDevices: 0,
+  activeDevices: 0,
+  inactiveDevices: 0,
+  onlineDevices: 0,
+  offlineDevices: 0,
+  totalLogsToday: 0,
+  pendingCommands: 0,
+  executedCommands: 0,
+  latestActivity: null,
+  devices: [],
+  recentLogs: [],
+  recentCommands: [],
+  syncedAssignments: 0,
+  pendingAssignments: 0,
+  errorAssignments: 0,
+  recentSyncs: [],
+  recentErrors: []
+})
 
 export const biometricsService = {
 
@@ -34,20 +107,12 @@ export const biometricsService = {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Normaliza un número de serie.
-   */
-  normalizeSerial(serial) {
-    return serial
-      ?.trim()
-      .toUpperCase() || null
-  },
-
-
-  /**
-   * Obtiene los seriales de los dispositivos pertenecientes al tenant.
+   * Obtiene los seriales de devices pertenecientes al cliente.
    *
-   * IMPORTANTE:
-   * La pertenencia se determina directamente con devices.cliente_id.
+   * FUENTE:
+   * devices.cliente_id
+   *
+   * NO utiliza dispositivos.
    */
   async getTenantDeviceSerials(clienteId) {
     if (!clienteId) return []
@@ -67,13 +132,18 @@ export const biometricsService = {
     }
 
     return (data || [])
-      .map(row => this.normalizeSerial(row.serial_number))
+      .map(row =>
+        normalizeSerial(row.serial_number)
+      )
       .filter(Boolean)
   },
 
 
   /**
-   * Obtiene los IDs globales de devices pertenecientes al tenant.
+   * Obtiene los IDs de devices pertenecientes al cliente.
+   *
+   * FUENTE:
+   * devices.id
    */
   async getTenantDeviceIds(clienteId) {
     if (!clienteId) return []
@@ -99,45 +169,10 @@ export const biometricsService = {
 
 
   /**
-   * Verifica que un device pertenezca al cliente.
-   */
-  async assertDeviceBelongsToTenant(deviceId, clienteId) {
-    if (!deviceId) {
-      throw new Error('ID de dispositivo requerido.')
-    }
-
-    if (!clienteId) {
-      throw new Error('Cliente requerido.')
-    }
-
-    const { data, error } = await supabase
-      .from('devices')
-      .select('id, cliente_id, serial_number, name')
-      .eq('id', deviceId)
-      .eq('cliente_id', clienteId)
-      .maybeSingle()
-
-    if (error) {
-      console.error(
-        '[biometricsService.assertDeviceBelongsToTenant]',
-        error
-      )
-
-      throw error
-    }
-
-    if (!data) {
-      throw new Error(
-        'El dispositivo no pertenece al cliente seleccionado.'
-      )
-    }
-
-    return data
-  },
-
-
-  /**
-   * Obtiene los devices del tenant.
+   * Obtiene devices completos del tenant.
+   *
+   * IMPORTANTE:
+   * Esta función consulta DIRECTAMENTE `devices`.
    */
   async getTenantDevices(clienteId) {
     if (!clienteId) return []
@@ -159,12 +194,92 @@ export const biometricsService = {
       throw error
     }
 
-    return (data || []).map(device => ({
-      ...device,
-      serial_number: this.normalizeSerial(
-        device.serial_number
+    return (data || [])
+      .map(normalizeDevice)
+      .filter(Boolean)
+  },
+
+
+  /**
+   * Valida que un device pertenezca al cliente.
+   */
+  async assertDeviceBelongsToTenant(
+    deviceId,
+    clienteId
+  ) {
+    if (!deviceId) {
+      throw new Error(
+        'device_id es requerido.'
       )
-    }))
+    }
+
+    if (!clienteId) {
+      throw new Error(
+        'cliente_id es requerido.'
+      )
+    }
+
+    const { data, error } = await supabase
+      .from('devices')
+      .select(
+        'id, cliente_id, serial_number, name'
+      )
+      .eq('id', deviceId)
+      .eq('cliente_id', clienteId)
+      .maybeSingle()
+
+    if (error) {
+      console.error(
+        '[biometricsService.assertDeviceBelongsToTenant]',
+        error
+      )
+
+      throw error
+    }
+
+    if (!data) {
+      throw new Error(
+        'El dispositivo no pertenece al cliente seleccionado.'
+      )
+    }
+
+    return normalizeDevice(data)
+  },
+
+
+  /**
+   * Convierte un array de devices en mapa por ID.
+   */
+  createDeviceIdMap(devices = []) {
+    const map = {}
+
+    devices.forEach(device => {
+      if (device?.id) {
+        map[String(device.id)] = device
+      }
+    })
+
+    return map
+  },
+
+
+  /**
+   * Convierte un array de devices en mapa por serial.
+   */
+  createDeviceSerialMap(devices = []) {
+    const map = {}
+
+    devices.forEach(device => {
+      const serial = normalizeSerial(
+        device?.serial_number
+      )
+
+      if (serial) {
+        map[serial] = device
+      }
+    })
+
+    return map
   },
 
 
@@ -173,13 +288,10 @@ export const biometricsService = {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Obtiene los dispositivos del tenant actual.
+   * Obtiene dispositivos del tenant actual.
    *
-   * NO utiliza `dispositivos`.
-   *
-   * La consulta es directamente:
-   *
-   * devices.cliente_id = clienteId
+   * FUENTE ÚNICA:
+   * devices
    */
   async getDevices({
     clienteId,
@@ -191,10 +303,6 @@ export const biometricsService = {
       return []
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // Consulta directa a devices
-    // ────────────────────────────────────────────────────────────────────────
-
     let query = supabase
       .from('devices')
       .select('*')
@@ -203,22 +311,28 @@ export const biometricsService = {
         ascending: false
       })
 
-    // ────────────────────────────────────────────────────────────────────────
-    // Filtro por estado
-    // ────────────────────────────────────────────────────────────────────────
-
+    // Estado
     if (status === 'active') {
-      query = query.eq('is_active', true)
+      query = query.eq(
+        'is_active',
+        true
+      )
     } else if (status === 'inactive') {
-      query = query.eq('is_active', false)
+      query = query.eq(
+        'is_active',
+        false
+      )
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // Filtro por tipo
-    // ────────────────────────────────────────────────────────────────────────
-
-    if (type && type !== 'todos') {
-      query = query.eq('device_type', type)
+    // Tipo
+    if (
+      type &&
+      type !== 'todos'
+    ) {
+      query = query.eq(
+        'device_type',
+        type
+      )
     }
 
     const { data, error } = await query
@@ -232,50 +346,41 @@ export const biometricsService = {
       throw error
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // Normalizar dispositivos
-    // ────────────────────────────────────────────────────────────────────────
+    let list = (data || [])
+      .map(normalizeDevice)
+      .filter(Boolean)
 
-    let list = (data || []).map(device => ({
-      ...device,
+    // Búsqueda
+    const q = normalizeSearch(search)
 
-      serial_number: this.normalizeSerial(
-        device.serial_number
-      )
-    }))
+    if (q) {
+      list = list.filter(device => {
+        return (
+          normalizeSearch(
+            device.name
+          ).includes(q) ||
 
-    // ────────────────────────────────────────────────────────────────────────
-    // Búsqueda client-side
-    // ────────────────────────────────────────────────────────────────────────
+          normalizeSearch(
+            device.serial_number
+          ).includes(q) ||
 
-    const normalizedSearch = search?.trim().toLowerCase()
+          normalizeSearch(
+            device.location
+          ).includes(q) ||
 
-    if (normalizedSearch) {
-      list = list.filter(device =>
-        device.name
-          ?.toLowerCase()
-          .includes(normalizedSearch) ||
+          normalizeSearch(
+            device.ip_address
+          ).includes(q) ||
 
-        device.serial_number
-          ?.toLowerCase()
-          .includes(normalizedSearch) ||
+          normalizeSearch(
+            device.device_type
+          ).includes(q) ||
 
-        device.location
-          ?.toLowerCase()
-          .includes(normalizedSearch) ||
-
-        device.ip_address
-          ?.toLowerCase()
-          .includes(normalizedSearch) ||
-
-        device.device_type
-          ?.toLowerCase()
-          .includes(normalizedSearch) ||
-
-        device.timezone
-          ?.toLowerCase()
-          .includes(normalizedSearch)
-      )
+          normalizeSearch(
+            device.timezone
+          ).includes(q)
+        )
+      })
     }
 
     return list
@@ -283,14 +388,18 @@ export const biometricsService = {
 
 
   /**
-   * Obtiene un dispositivo por ID.
+   * Obtiene un device por su UUID.
    *
-   * Si se proporciona clienteId, también valida que el device
-   * pertenezca directamente a ese cliente.
+   * También verifica cliente si se proporciona.
    */
-  async getDeviceById(id, clienteId = null) {
+  async getDeviceById(
+    id,
+    clienteId = null
+  ) {
     if (!id) {
-      throw new Error('ID de dispositivo requerido')
+      throw new Error(
+        'ID de dispositivo requerido'
+      )
     }
 
     let query = supabase
@@ -299,15 +408,23 @@ export const biometricsService = {
       .eq('id', id)
 
     if (clienteId) {
-      query = query.eq('cliente_id', clienteId)
+      query = query.eq(
+        'cliente_id',
+        clienteId
+      )
     }
 
     const {
       data: device,
       error: devErr
-    } = await query.single()
+    } = await query.maybeSingle()
 
     if (devErr) {
+      console.error(
+        '[biometricsService.getDeviceById]',
+        devErr
+      )
+
       throw devErr
     }
 
@@ -315,86 +432,122 @@ export const biometricsService = {
       return null
     }
 
-    const normalizedSerial =
-      this.normalizeSerial(device.serial_number)
+    const normalizedDevice =
+      normalizeDevice(device)
 
-    // ────────────────────────────────────────────────────────────────────────
+    const serial =
+      normalizedDevice.serial_number
+
     // Comandos recientes
-    // ────────────────────────────────────────────────────────────────────────
-
     let commands = []
 
-    if (normalizedSerial) {
+    if (serial) {
       const {
         data,
-        error: cmdErr
+        error
       } = await supabase
         .from('device_commands')
         .select('*')
-        .eq('device_serial', normalizedSerial)
-        .order('created_at', {
-          ascending: false
-        })
+        .eq(
+          'device_serial',
+          serial
+        )
+        .order(
+          'created_at',
+          {
+            ascending: false
+          }
+        )
         .limit(30)
 
-      if (cmdErr) {
-        throw cmdErr
+      if (error) {
+        throw error
       }
 
       commands = data || []
     }
 
-    // ────────────────────────────────────────────────────────────────────────
     // Logs recientes
-    // ────────────────────────────────────────────────────────────────────────
-
     let logs = []
 
-    if (normalizedSerial) {
+    if (serial) {
       const {
         data,
-        error: logsErr
+        error
       } = await supabase
         .from('attendance_logs')
         .select('*')
-        .eq('device_serial', normalizedSerial)
-        .order('timestamp', {
-          ascending: false
-        })
+        .eq(
+          'device_serial',
+          serial
+        )
+        .order(
+          'timestamp',
+          {
+            ascending: false
+          }
+        )
         .limit(30)
 
-      if (logsErr) {
-        throw logsErr
+      if (error) {
+        throw error
       }
 
       logs = data || []
     }
 
+    // Asignaciones del device
+    let assignments = []
+
+    const {
+      data: assignmentData,
+      error: assignmentError
+    } = await supabase
+      .from(
+        'device_employee_assignments'
+      )
+      .select('*')
+      .eq(
+        'device_id',
+        normalizedDevice.id
+      )
+      .order(
+        'actualizado_at',
+        {
+          ascending: false
+        }
+      )
+
+    if (assignmentError) {
+      throw assignmentError
+    }
+
+    assignments =
+      assignmentData || []
+
     return {
-      ...device,
-      serial_number: normalizedSerial,
+      ...normalizedDevice,
       commands,
-      logs
+      logs,
+      assignments
     }
   },
 
 
   /**
-   * Crea un nuevo dispositivo.
+   * Crea un device.
    *
    * IMPORTANTE:
-   * El dispositivo se crea directamente en `devices`.
-   *
-   * Ya NO se crea ninguna fila en `dispositivos`.
+   * Ya NO crea registros en `dispositivos`.
    */
   async createDevice({
     name,
     serial_number,
     location,
     ip_address,
-    port = 7660,
-    timezone = 'America/Mexico_City',
-    device_type = 'general',
+    port = DEFAULT_PORT,
+    timezone = DEFAULT_TIMEZONE,
+    device_type = DEFAULT_DEVICE_TYPE,
     is_active = true,
     cliente_id
   }) {
@@ -405,7 +558,9 @@ export const biometricsService = {
     }
 
     const normalizedSerial =
-      this.normalizeSerial(serial_number)
+      normalizeSerial(
+        serial_number
+      )
 
     if (!normalizedSerial) {
       throw new Error(
@@ -413,145 +568,32 @@ export const biometricsService = {
       )
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // Verificar si el serial ya existe
-    // ────────────────────────────────────────────────────────────────────────
-
+    // Verificar serial existente dentro del tenant
     const {
-      data: existingDevice,
-      error: existingDeviceErr
+      data: existing,
+      error: existingErr
     } = await supabase
       .from('devices')
       .select('*')
-      .eq('serial_number', normalizedSerial)
-      .maybeSingle()
-
-    if (existingDeviceErr) {
-      throw existingDeviceErr
-    }
-
-    if (existingDevice) {
-      if (
-        existingDevice.cliente_id === cliente_id
-      ) {
-        throw new Error(
-          'Este número de serie ya está registrado para este cliente.'
-        )
-      }
-
-      throw new Error(
-        'Este número de serie ya está registrado para otro cliente.'
-      )
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // Payload
-    // ────────────────────────────────────────────────────────────────────────
-
-    const hardwarePayload = {
-      name: name?.trim() || normalizedSerial,
-
-      serial_number: normalizedSerial,
-
-      location:
-        location?.trim() || null,
-
-      ip_address:
-        ip_address?.trim() || null,
-
-      port:
-        port !== undefined &&
-        port !== null &&
-        port !== ''
-          ? parseInt(port, 10)
-          : 7660,
-
-      timezone:
-        timezone || 'America/Mexico_City',
-
-      device_type:
-        device_type || 'general',
-
-      is_active:
-        Boolean(is_active),
-
-      last_activity:
-        null,
-
-      cliente_id
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // Crear directamente en devices
-    // ────────────────────────────────────────────────────────────────────────
-
-    const {
-      data,
-      error
-    } = await supabase
-      .from('devices')
-      .insert([hardwarePayload])
-      .select()
-      .single()
-
-    if (error) {
-      // Carrera de inserción / unique constraint
-      if (error.code === '23505') {
-        throw new Error(
-          'Este número de serie ya está registrado.'
-        )
-      }
-
-      throw error
-    }
-
-    return {
-      ...data,
-      serial_number: this.normalizeSerial(
-        data.serial_number
-      )
-    }
-  },
-
-
-  /**
-   * Actualiza un dispositivo.
-   *
-   * Si clienteId viene incluido en options, se valida ownership.
-   */
-  async updateDevice(
-    id,
-    {
-      name,
-      serial_number,
-      location,
-      ip_address,
-      port,
-      timezone,
-      device_type,
-      is_active,
-      cliente_id = null
-    }
-  ) {
-    if (!id) {
-      throw new Error(
-        'ID de dispositivo requerido'
-      )
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // Verificar ownership si tenemos cliente
-    // ────────────────────────────────────────────────────────────────────────
-
-    if (cliente_id) {
-      await this.assertDeviceBelongsToTenant(
-        id,
+      .eq(
+        'cliente_id',
         cliente_id
       )
+      .eq(
+        'serial_number',
+        normalizedSerial
+      )
+      .maybeSingle()
+
+    if (existingErr) {
+      throw existingErr
     }
 
-    const normalizedSerial =
-      this.normalizeSerial(serial_number)
+    if (existing) {
+      throw new Error(
+        'Este número de serie ya está asignado a este cliente.'
+      )
+    }
 
     const payload = {
       name:
@@ -567,26 +609,109 @@ export const biometricsService = {
         ip_address?.trim() || null,
 
       port:
-        port !== undefined &&
-        port !== null &&
-        port !== ''
+        port
           ? parseInt(port, 10)
-          : 7660,
+          : DEFAULT_PORT,
 
       timezone:
-        timezone || 'America/Mexico_City',
+        timezone ||
+        DEFAULT_TIMEZONE,
 
       device_type:
-        device_type || 'general',
+        device_type ||
+        DEFAULT_DEVICE_TYPE,
+
+      is_active:
+        Boolean(is_active),
+
+      cliente_id,
+
+      last_activity:
+        null
+    }
+
+    const {
+      data,
+      error
+    } = await supabase
+      .from('devices')
+      .insert([payload])
+      .select()
+      .single()
+
+    if (error) {
+      // Carrera de inserción
+      if (error.code === '23505') {
+        throw new Error(
+          'El dispositivo ya existe.'
+        )
+      }
+
+      throw error
+    }
+
+    return normalizeDevice(data)
+  },
+
+
+  /**
+   * Actualiza un device.
+   */
+  async updateDevice(
+    id,
+    {
+      name,
+      serial_number,
+      location,
+      ip_address,
+      port,
+      timezone,
+      device_type,
+      is_active
+    }
+  ) {
+    if (!id) {
+      throw new Error(
+        'ID de dispositivo requerido'
+      )
+    }
+
+    const payload = {
+      name:
+        name?.trim() || null,
+
+      serial_number:
+        normalizeSerial(
+          serial_number
+        ),
+
+      location:
+        location?.trim() || null,
+
+      ip_address:
+        ip_address?.trim() || null,
+
+      port:
+        port
+          ? parseInt(port, 10)
+          : DEFAULT_PORT,
+
+      timezone:
+        timezone ||
+        DEFAULT_TIMEZONE,
+
+      device_type:
+        device_type ||
+        DEFAULT_DEVICE_TYPE,
 
       is_active:
         Boolean(is_active)
     }
 
-    // Si se permite actualizar cliente_id,
-    // solamente hacerlo cuando explícitamente se envíe.
-    if (cliente_id) {
-      payload.cliente_id = cliente_id
+    if (!payload.serial_number) {
+      throw new Error(
+        'El número de serie es obligatorio.'
+      )
     }
 
     const {
@@ -600,74 +725,65 @@ export const biometricsService = {
       .single()
 
     if (error) {
-      if (error.code === '23505') {
-        throw new Error(
-          'El número de serie ya está registrado.'
-        )
-      }
-
       throw error
     }
 
-    return {
-      ...data,
-      serial_number: this.normalizeSerial(
-        data.serial_number
-      )
-    }
+    return normalizeDevice(data)
   },
 
 
   /**
-   * Elimina un dispositivo.
+   * Elimina un device.
    *
-   * IMPORTANTE:
-   * Ya NO elimina nada de `dispositivos`.
-   *
-   * El device es la entidad principal.
+   * Primero elimina asignaciones para evitar
+   * problemas de foreign key.
    */
-  async deleteDevice(id, clienteId = null) {
+  async deleteDevice(id) {
     if (!id) {
       throw new Error(
         'ID de dispositivo requerido'
       )
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // Verificar ownership
-    // ────────────────────────────────────────────────────────────────────────
-
-    if (clienteId) {
-      await this.assertDeviceBelongsToTenant(
-        id,
-        clienteId
-      )
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // Obtener device
-    // ────────────────────────────────────────────────────────────────────────
-
     const {
       data: device,
       error: getErr
     } = await supabase
       .from('devices')
-      .select('id, cliente_id, serial_number')
+      .select(
+        'id, cliente_id, serial_number'
+      )
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
     if (getErr) {
       throw getErr
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // Eliminar device
-    //
-    // Las tablas relacionadas deberán tener FK con ON DELETE CASCADE
-    // o deberán eliminarse antes si tu esquema no utiliza cascade.
-    // ────────────────────────────────────────────────────────────────────────
+    if (!device) {
+      throw new Error(
+        'Dispositivo no encontrado.'
+      )
+    }
 
+    // Eliminar asignaciones
+    const {
+      error: assignmentError
+    } = await supabase
+      .from(
+        'device_employee_assignments'
+      )
+      .delete()
+      .eq(
+        'device_id',
+        id
+      )
+
+    if (assignmentError) {
+      throw assignmentError
+    }
+
+    // Eliminar hardware
     const {
       error
     } = await supabase
@@ -688,7 +804,9 @@ export const biometricsService = {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Obtiene registros de asistencia exclusivamente del tenant.
+   * Obtiene registros de asistencia del tenant.
+   *
+   * Los seriales permitidos salen directamente de devices.
    */
   async getAttendanceLogs({
     clienteId,
@@ -707,10 +825,7 @@ export const biometricsService = {
       }
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 1. Empleados del tenant
-    // ────────────────────────────────────────────────────────────────────────
-
+    // Empleados
     const {
       data: empleados,
       error: empErr
@@ -719,66 +834,71 @@ export const biometricsService = {
       .select(
         'id, nombre, apellido, clave_empleado, hikvision_device_userid, avatar_url, cliente_id'
       )
-      .eq('cliente_id', clienteId)
+      .eq(
+        'cliente_id',
+        clienteId
+      )
 
     if (empErr) {
       throw empErr
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // Crear mapa de empleados
-    // ────────────────────────────────────────────────────────────────────────
-
     const employeeMap = {}
 
-    ;(empleados || []).forEach(emp => {
-      if (emp.hikvision_device_userid) {
-        employeeMap[
-          String(emp.hikvision_device_userid)
-        ] = emp
+    ;(empleados || []).forEach(
+      emp => {
+        if (
+          emp.hikvision_device_userid
+        ) {
+          employeeMap[
+            String(
+              emp.hikvision_device_userid
+            )
+          ] = emp
+        }
+
+        if (emp.clave_empleado) {
+          employeeMap[
+            String(
+              emp.clave_empleado
+            )
+          ] = emp
+        }
+
+        if (emp.id) {
+          employeeMap[
+            String(emp.id)
+          ] = emp
+        }
       }
+    )
 
-      if (emp.clave_empleado) {
-        employeeMap[
-          String(emp.clave_empleado)
-        ] = emp
-      }
+    // Devices del tenant
+    const devices =
+      await this.getDevices({
+        clienteId
+      })
 
-      if (emp.id) {
-        employeeMap[
-          String(emp.id)
-        ] = emp
-      }
-    })
-
-    // ────────────────────────────────────────────────────────────────────────
-    // 2. Devices del tenant
-    // ────────────────────────────────────────────────────────────────────────
-
-    const devices = await this.getDevices({
-      clienteId
-    })
-
-    const allowedSerials = devices
-      .map(dev =>
-        this.normalizeSerial(
-          dev.serial_number
+    const allowedSerials =
+      devices
+        .map(
+          device =>
+            normalizeSerial(
+              device.serial_number
+            )
         )
-      )
-      .filter(Boolean)
+        .filter(Boolean)
 
     if (!allowedSerials.length) {
       return {
         logs: [],
         devices,
-        employees: empleados || []
+        employees:
+          empleados || []
       }
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 3. Consultar logs
-    // ────────────────────────────────────────────────────────────────────────
-
+    // Logs
     let query = supabase
       .from('attendance_logs')
       .select('*')
@@ -786,9 +906,12 @@ export const biometricsService = {
         'device_serial',
         allowedSerials
       )
-      .order('timestamp', {
-        ascending: false
-      })
+      .order(
+        'timestamp',
+        {
+          ascending: false
+        }
+      )
       .limit(limit)
 
     if (
@@ -797,7 +920,9 @@ export const biometricsService = {
     ) {
       query = query.eq(
         'device_serial',
-        this.normalizeSerial(deviceSerial)
+        normalizeSerial(
+          deviceSerial
+        )
       )
     }
 
@@ -844,130 +969,116 @@ export const biometricsService = {
       throw error
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 4. Mapa de devices
-    // ────────────────────────────────────────────────────────────────────────
-
-    const deviceMap = {}
-
-    ;(devices || []).forEach(device => {
-      const serial =
-        this.normalizeSerial(
-          device.serial_number
-        )
-
-      if (serial) {
-        deviceMap[serial] = device
-      }
-    })
-
-    // ────────────────────────────────────────────────────────────────────────
-    // 5. Enriquecer logs
-    // ────────────────────────────────────────────────────────────────────────
-
-    let enriched = (logs || []).map(log => {
-      const emp =
-        employeeMap[
-          String(log.user_id)
-        ] || null
-
-      const serial =
-        this.normalizeSerial(
-          log.device_serial
-        )
-
-      const dev =
-        deviceMap[serial] || null
-
-      return {
-        ...log,
-
-        empleado: emp
-          ? {
-              nombreCompleto:
-                `${emp.nombre || ''} ${emp.apellido || ''}`
-                  .trim() ||
-                'Colaborador',
-
-              clave:
-                emp.clave_empleado ||
-                emp.hikvision_device_userid ||
-                log.user_id,
-
-              avatar_url:
-                emp.avatar_url
-            }
-          : null,
-
-        dispositivo: dev
-          ? {
-              id: dev.id,
-
-              nombre:
-                dev.name ||
-                dev.serial_number,
-
-              ubicacion:
-                dev.location,
-
-              ip_address:
-                dev.ip_address,
-
-              device_type:
-                dev.device_type,
-
-              serial_number:
-                dev.serial_number
-            }
-          : null
-      }
-    })
-
-    // ────────────────────────────────────────────────────────────────────────
-    // 6. Búsqueda
-    // ────────────────────────────────────────────────────────────────────────
-
-    const normalizedSearch =
-      search?.trim().toLowerCase()
-
-    if (normalizedSearch) {
-      enriched = enriched.filter(log =>
-        String(log.user_id || '')
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-
-        String(log.device_serial || '')
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-
-        String(log.status || '')
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-
-        String(
-          log.empleado?.nombreCompleto || ''
-        )
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-
-        String(
-          log.empleado?.clave || ''
-        )
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-
-        String(
-          log.dispositivo?.nombre || ''
-        )
-          .toLowerCase()
-          .includes(normalizedSearch)
+    const deviceMap =
+      this.createDeviceSerialMap(
+        devices
       )
+
+    let enriched =
+      (logs || []).map(
+        log => {
+          const emp =
+            employeeMap[
+              String(
+                log.user_id
+              )
+            ] || null
+
+          const serial =
+            normalizeSerial(
+              log.device_serial
+            )
+
+          const dev =
+            deviceMap[
+              serial
+            ] || null
+
+          return {
+            ...log,
+
+            empleado: emp
+              ? {
+                  nombreCompleto:
+                    `${emp.nombre || ''} ${emp.apellido || ''}`
+                      .trim() ||
+                    'Colaborador',
+
+                  clave:
+                    emp.clave_empleado ||
+                    emp.hikvision_device_userid ||
+                    log.user_id,
+
+                  avatar_url:
+                    emp.avatar_url
+                }
+              : null,
+
+            dispositivo: dev
+              ? {
+                  id:
+                    dev.id,
+
+                  nombre:
+                    dev.name ||
+                    dev.serial_number,
+
+                  ubicacion:
+                    dev.location,
+
+                  ip_address:
+                    dev.ip_address,
+
+                  device_type:
+                    dev.device_type,
+
+                  serial_number:
+                    dev.serial_number
+                }
+              : null
+          }
+        }
+      )
+
+    const q =
+      normalizeSearch(search)
+
+    if (q) {
+      enriched =
+        enriched.filter(
+          log =>
+            normalizeSearch(
+              log.user_id
+            ).includes(q) ||
+
+            normalizeSearch(
+              log.device_serial
+            ).includes(q) ||
+
+            normalizeSearch(
+              log.status
+            ).includes(q) ||
+
+            normalizeSearch(
+              log.empleado
+                ?.nombreCompleto
+            ).includes(q) ||
+
+            normalizeSearch(
+              log.empleado?.clave
+            ).includes(q) ||
+
+            normalizeSearch(
+              log.dispositivo?.nombre
+            ).includes(q)
+        )
     }
 
     return {
       logs: enriched,
-      devices: devices || [],
-      employees: empleados || []
+      devices,
+      employees:
+        empleados || []
     }
   },
 
@@ -977,7 +1088,7 @@ export const biometricsService = {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Obtiene comandos exclusivamente de dispositivos del tenant.
+   * Obtiene comandos exclusivamente de devices del tenant.
    */
   async getDeviceCommands({
     clienteId,
@@ -992,17 +1103,20 @@ export const biometricsService = {
       }
     }
 
-    const devices = await this.getDevices({
-      clienteId
-    })
+    const devices =
+      await this.getDevices({
+        clienteId
+      })
 
-    const allowedSerials = devices
-      .map(dev =>
-        this.normalizeSerial(
-          dev.serial_number
+    const allowedSerials =
+      devices
+        .map(
+          device =>
+            normalizeSerial(
+              device.serial_number
+            )
         )
-      )
-      .filter(Boolean)
+        .filter(Boolean)
 
     if (!allowedSerials.length) {
       return {
@@ -1018,9 +1132,12 @@ export const biometricsService = {
         'device_serial',
         allowedSerials
       )
-      .order('created_at', {
-        ascending: false
-      })
+      .order(
+        'created_at',
+        {
+          ascending: false
+        }
+      )
       .limit(limit)
 
     if (
@@ -1029,16 +1146,22 @@ export const biometricsService = {
     ) {
       query = query.eq(
         'device_serial',
-        this.normalizeSerial(deviceSerial)
+        normalizeSerial(
+          deviceSerial
+        )
       )
     }
 
-    if (status === 'executed') {
+    if (
+      status === 'executed'
+    ) {
       query = query.eq(
         'is_executed',
         true
       )
-    } else if (status === 'pending') {
+    } else if (
+      status === 'pending'
+    ) {
       query = query.eq(
         'is_executed',
         false
@@ -1054,33 +1177,24 @@ export const biometricsService = {
       throw error
     }
 
-    const deviceMap = {}
-
-    devices.forEach(device => {
-      const serial =
-        this.normalizeSerial(
-          device.serial_number
-        )
-
-      if (serial) {
-        deviceMap[serial] = device
-      }
-    })
+    const deviceMap =
+      this.createDeviceSerialMap(
+        devices
+      )
 
     const enriched =
-      (commands || []).map(command => {
-        const serial =
-          this.normalizeSerial(
-            command.device_serial
-          )
-
-        return {
+      (commands || []).map(
+        command => ({
           ...command,
 
           dispositivo:
-            deviceMap[serial] || null
-        }
-      })
+            deviceMap[
+              normalizeSerial(
+                command.device_serial
+              )
+            ] || null
+        })
+      )
 
     return {
       commands: enriched,
@@ -1090,7 +1204,7 @@ export const biometricsService = {
 
 
   /**
-   * Envía un nuevo comando.
+   * Envía un comando.
    */
   async sendCommand({
     clienteId,
@@ -1113,45 +1227,24 @@ export const biometricsService = {
     }
 
     const normalizedSerial =
-      this.normalizeSerial(
+      normalizeSerial(
         device_serial
       )
 
-    // ────────────────────────────────────────────────────────────────────────
-    // Verificar directamente en devices
-    // ────────────────────────────────────────────────────────────────────────
-
-    const {
-      data: device,
-      error: deviceErr
-    } = await supabase
-      .from('devices')
-      .select(
-        'id, cliente_id, serial_number, name'
-      )
-      .eq(
-        'cliente_id',
+    const allowedSerials =
+      await this.getTenantDeviceSerials(
         clienteId
       )
-      .eq(
-        'serial_number',
+
+    if (
+      !allowedSerials.includes(
         normalizedSerial
       )
-      .maybeSingle()
-
-    if (deviceErr) {
-      throw deviceErr
-    }
-
-    if (!device) {
+    ) {
       throw new Error(
         'El dispositivo no pertenece al cliente seleccionado.'
       )
     }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // Insertar comando
-    // ────────────────────────────────────────────────────────────────────────
 
     const payload = {
       device_serial:
@@ -1248,52 +1341,39 @@ export const biometricsService = {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Estadísticas exclusivamente del tenant.
+   * Estadísticas del tenant.
+   *
+   * Los devices vienen directamente de:
+   * devices.cliente_id
    */
-  async getBiometricsStats(clienteId) {
+  async getBiometricsStats(
+    clienteId
+  ) {
     if (!clienteId) {
-      return {
-        totalDevices: 0,
-        activeDevices: 0,
-        inactiveDevices: 0,
-        onlineDevices: 0,
-        offlineDevices: 0,
-        totalLogsToday: 0,
-        pendingCommands: 0,
-        executedCommands: 0,
-        latestActivity: null,
-        devices: [],
-        recentLogs: [],
-        recentCommands: [],
-        syncedAssignments: 0,
-        pendingAssignments: 0,
-        errorAssignments: 0,
-        recentSyncs: [],
-        recentErrors: []
-      }
+      return emptyStats()
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // Devices del tenant
-    // ────────────────────────────────────────────────────────────────────────
+    const devices =
+      await this.getDevices({
+        clienteId
+      })
 
-    const devices = await this.getDevices({
-      clienteId
-    })
-
-    const allowedSerials = devices
-      .map(device =>
-        this.normalizeSerial(
-          device.serial_number
+    const allowedSerials =
+      devices
+        .map(
+          device =>
+            normalizeSerial(
+              device.serial_number
+            )
         )
-      )
-      .filter(Boolean)
+        .filter(Boolean)
 
     // ────────────────────────────────────────────────────────────────────────
     // Fecha de hoy
     // ────────────────────────────────────────────────────────────────────────
 
-    const today = new Date()
+    const today =
+      new Date()
 
     today.setHours(
       0,
@@ -1306,7 +1386,7 @@ export const biometricsService = {
       today.toISOString()
 
     // ────────────────────────────────────────────────────────────────────────
-    // Logs de hoy
+    // Logs
     // ────────────────────────────────────────────────────────────────────────
 
     let totalLogsToday = 0
@@ -1315,13 +1395,20 @@ export const biometricsService = {
     if (allowedSerials.length) {
       const {
         count,
-        error: logsCountErr
+        error
       } = await supabase
-        .from('attendance_logs')
-        .select('*', {
-          count: 'exact',
-          head: true
-        })
+        .from(
+          'attendance_logs'
+        )
+        .select(
+          '*',
+          {
+            count:
+              'exact',
+            head:
+              true
+          }
+        )
         .in(
           'device_serial',
           allowedSerials
@@ -1331,8 +1418,8 @@ export const biometricsService = {
           todayIso
         )
 
-      if (logsCountErr) {
-        throw logsCountErr
+      if (error) {
+        throw error
       }
 
       totalLogsToday =
@@ -1340,21 +1427,28 @@ export const biometricsService = {
 
       const {
         data,
-        error: recentLogsErr
+        error:
+          recentError
       } = await supabase
-        .from('attendance_logs')
+        .from(
+          'attendance_logs'
+        )
         .select('*')
         .in(
           'device_serial',
           allowedSerials
         )
-        .order('timestamp', {
-          ascending: false
-        })
+        .order(
+          'timestamp',
+          {
+            ascending:
+              false
+          }
+        )
         .limit(10)
 
-      if (recentLogsErr) {
-        throw recentLogsErr
+      if (recentError) {
+        throw recentError
       }
 
       recentLogs =
@@ -1362,7 +1456,7 @@ export const biometricsService = {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // Comandos recientes
+    // Commands
     // ────────────────────────────────────────────────────────────────────────
 
     let recentCommands = []
@@ -1372,15 +1466,21 @@ export const biometricsService = {
         data,
         error
       } = await supabase
-        .from('device_commands')
+        .from(
+          'device_commands'
+        )
         .select('*')
         .in(
           'device_serial',
           allowedSerials
         )
-        .order('created_at', {
-          ascending: false
-        })
+        .order(
+          'created_at',
+          {
+            ascending:
+              false
+          }
+        )
         .limit(10)
 
       if (error) {
@@ -1392,12 +1492,19 @@ export const biometricsService = {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // Asignaciones
+    // Assignments
+    //
+    // AQUÍ USAMOS devices.id.
+    // NO dispositivos.
     // ────────────────────────────────────────────────────────────────────────
 
-    const deviceIds = devices
-      .map(device => device.id)
-      .filter(Boolean)
+    const deviceIds =
+      devices
+        .map(
+          device =>
+            device.id
+        )
+        .filter(Boolean)
 
     let assignments = []
 
@@ -1454,7 +1561,9 @@ export const biometricsService = {
 
         const diffMs =
           new Date() -
-          new Date(lastActivity)
+          new Date(
+            lastActivity
+          )
 
         return (
           diffMs <
@@ -1497,24 +1606,29 @@ export const biometricsService = {
 
     let latestActivity = null
 
-    devices.forEach(device => {
-      if (!device.last_activity) {
-        return
-      }
+    devices.forEach(
+      device => {
+        if (
+          !device.last_activity
+        ) {
+          return
+        }
 
-      const timestamp =
-        new Date(
-          device.last_activity
-        )
+        const timestamp =
+          new Date(
+            device.last_activity
+          )
 
-      if (
-        !latestActivity ||
-        timestamp > latestActivity
-      ) {
-        latestActivity =
-          timestamp
+        if (
+          !latestActivity ||
+          timestamp >
+            latestActivity
+        ) {
+          latestActivity =
+            timestamp
+        }
       }
-    })
+    )
 
     // ────────────────────────────────────────────────────────────────────────
     // Assignment counters
@@ -1611,7 +1725,9 @@ export const biometricsService = {
   /**
    * Obtiene política de sincronización.
    */
-  async getSyncPolicy(clienteId) {
+  async getSyncPolicy(
+    clienteId
+  ) {
     if (!clienteId) {
       return null
     }
@@ -1693,7 +1809,7 @@ export const biometricsService = {
 
     const {
       data: current,
-      error: curErr
+      error: currentError
     } = await supabase
       .from('clientes')
       .select(
@@ -1705,17 +1821,19 @@ export const biometricsService = {
       )
       .single()
 
-    if (curErr) {
-      throw curErr
+    if (currentError) {
+      throw currentError
     }
 
-    if (!current?.id_empresa) {
+    if (
+      !current?.id_empresa
+    ) {
       return [current]
     }
 
     const {
       data: related,
-      error: relErr
+      error: relatedError
     } = await supabase
       .from('clientes')
       .select(
@@ -1726,11 +1844,14 @@ export const biometricsService = {
         current.id_empresa
       )
 
-    if (relErr) {
-      throw relErr
+    if (relatedError) {
+      throw relatedError
     }
 
-    return related || [current]
+    return (
+      related ||
+      [current]
+    )
   },
 
 
@@ -1739,19 +1860,14 @@ export const biometricsService = {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Obtiene colaboradores y asignaciones.
+   * Obtiene empleados, asignaciones y devices.
    *
-   * Respeta la política EMPRESA:
+   * EMPRESA:
+   * Si la política es EMPRESA se utilizan los tenants relacionados.
    *
-   * - EMPRESA:
-   *   utiliza los tenants relacionados.
-   *
-   * - cualquier otra política:
-   *   utiliza solamente el tenant actual.
-   *
-   * Los devices se obtienen directamente desde:
-   *
-   * devices.cliente_id
+   * IMPORTANTE:
+   * Los devices se obtienen DIRECTAMENTE desde `devices`
+   * usando `cliente_id`.
    */
   async getEmployeesSync(
     clienteId
@@ -1765,13 +1881,10 @@ export const biometricsService = {
       }
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 1. Obtener tenant actual
-    // ────────────────────────────────────────────────────────────────────────
-
+    // Política actual
     const {
       data: currentTenant,
-      error: tenantErr
+      error: tenantError
     } = await supabase
       .from('clientes')
       .select(
@@ -1783,13 +1896,9 @@ export const biometricsService = {
       )
       .single()
 
-    if (tenantErr) {
-      throw tenantErr
+    if (tenantError) {
+      throw tenantError
     }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // 2. Determinar alcance
-    // ────────────────────────────────────────────────────────────────────────
 
     let relatedTenants = [
       currentTenant
@@ -1807,20 +1916,23 @@ export const biometricsService = {
 
     const tenantIds =
       relatedTenants
-        .map(tenant => tenant.id)
+        .map(
+          tenant =>
+            tenant.id
+        )
         .filter(Boolean)
 
     // ────────────────────────────────────────────────────────────────────────
-    // 3. Empleados
+    // Employees
     // ────────────────────────────────────────────────────────────────────────
 
     const {
       data: employees,
-      error: empErr
+      error: employeeError
     } = await supabase
       .from('empleados')
       .select(
-        'id, nombre, apellido, clave_empleado, activo, cliente_id, avatar_url, departamento'
+        'id, nombre, apellido, clave_empleado, activo, cliente_id, avatar_url, departamento, hikvision_device_userid'
       )
       .in(
         'cliente_id',
@@ -1833,33 +1945,31 @@ export const biometricsService = {
         }
       )
 
-    if (empErr) {
-      throw empErr
+    if (employeeError) {
+      throw employeeError
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 4. Devices
+    // DEVICES
     //
-    // AQUÍ ESTÁ EL CAMBIO IMPORTANTE:
+    // ESTA ES LA PARTE CLAVE.
     //
     // Antes:
     //
-    //   dispositivos
-    //      ↓
-    //   device_id_hikvision
-    //      ↓
-    //   devices
+    // dispositivos
+    //   -> device_id_hikvision
+    //   -> devices
     //
     // Ahora:
     //
-    //   devices.cliente_id
-    //      ↓
-    //   devices
+    // devices
+    //   -> cliente_id
+    //
     // ────────────────────────────────────────────────────────────────────────
 
     const {
-      data: filteredDevices,
-      error: devErr
+      data: devices,
+      error: deviceError
     } = await supabase
       .from('devices')
       .select('*')
@@ -1870,56 +1980,70 @@ export const biometricsService = {
       .order(
         'created_at',
         {
-          ascending: false
+          ascending:
+            false
         }
       )
 
-    if (devErr) {
-      throw devErr
+    if (deviceError) {
+      throw deviceError
     }
 
-    const normalizedDevices =
-      (filteredDevices || []).map(
-        device => ({
-          ...device,
-
-          serial_number:
-            this.normalizeSerial(
-              device.serial_number
-            )
-        })
-      )
+    const filteredDevices =
+      (devices || [])
+        .map(normalizeDevice)
+        .filter(Boolean)
 
     // ────────────────────────────────────────────────────────────────────────
-    // 5. Asignaciones
+    // DEVICE IDS
     // ────────────────────────────────────────────────────────────────────────
 
-    const {
-      data: assignments,
-      error: assignErr
-    } = await supabase
-      .from(
-        'device_employee_assignments'
-      )
-      .select('*')
-      .in(
-        'cliente_id',
-        tenantIds
-      )
+    const deviceIds =
+      filteredDevices
+        .map(
+          device =>
+            device.id
+        )
+        .filter(Boolean)
 
-    if (assignErr) {
-      throw assignErr
+    // ────────────────────────────────────────────────────────────────────────
+    // Assignments
+    //
+    // Solo consultamos si realmente existen devices.
+    // ────────────────────────────────────────────────────────────────────────
+
+    let assignments = []
+
+    if (deviceIds.length) {
+      const {
+        data,
+        error
+      } = await supabase
+        .from(
+          'device_employee_assignments'
+        )
+        .select('*')
+        .in(
+          'device_id',
+          deviceIds
+        )
+
+      if (error) {
+        throw error
+      }
+
+      assignments =
+        data || []
     }
 
     return {
       employees:
         employees || [],
 
-      assignments:
-        assignments || [],
+      assignments,
 
       devices:
-        normalizedDevices,
+        filteredDevices,
 
       tenants:
         relatedTenants
@@ -1930,8 +2054,7 @@ export const biometricsService = {
   /**
    * Crea o actualiza una asignación.
    *
-   * device_id corresponde directamente a:
-   *
+   * device_id SIEMPRE es:
    * devices.id
    */
   async saveAssignment({
@@ -1959,17 +2082,16 @@ export const biometricsService = {
       )
     }
 
-    if (!biometric_user_id?.trim()) {
+    if (
+      !biometric_user_id?.trim()
+    ) {
       throw new Error(
         'El ID de usuario biométrico es requerido'
       )
     }
 
-    const normalizedBiometricUserId =
-      biometric_user_id.trim()
-
     // ────────────────────────────────────────────────────────────────────────
-    // Verificar directamente en devices
+    // Verificar directamente contra devices
     // ────────────────────────────────────────────────────────────────────────
 
     await this.assertDeviceBelongsToTenant(
@@ -1977,9 +2099,8 @@ export const biometricsService = {
       cliente_id
     )
 
-    // ────────────────────────────────────────────────────────────────────────
-    // Payload
-    // ────────────────────────────────────────────────────────────────────────
+    const biometricUserId =
+      biometric_user_id.trim()
 
     const payload = {
       cliente_id,
@@ -1989,7 +2110,7 @@ export const biometricsService = {
       employee_id,
 
       biometric_user_id:
-        normalizedBiometricUserId,
+        biometricUserId,
 
       activo:
         Boolean(activo),
@@ -2010,28 +2131,30 @@ export const biometricsService = {
 
     const {
       data: existing,
-      error: existingErr
+      error: existingError
     } = await supabase
       .from(
         'device_employee_assignments'
       )
-      .select('id')
+      .select(
+        'id, device_id, employee_id, cliente_id, biometric_user_id'
+      )
       .eq(
         'device_id',
         device_id
       )
       .eq(
         'biometric_user_id',
-        normalizedBiometricUserId
+        biometricUserId
       )
       .maybeSingle()
 
-    if (existingErr) {
-      throw existingErr
+    if (existingError) {
+      throw existingError
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // Actualizar
+    // UPDATE
     // ────────────────────────────────────────────────────────────────────────
 
     if (existing) {
@@ -2058,7 +2181,7 @@ export const biometricsService = {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // Crear
+    // INSERT
     // ────────────────────────────────────────────────────────────────────────
 
     const {
@@ -2141,13 +2264,13 @@ export const biometricsService = {
 
     const {
       data: current,
-      error: getErr
+      error: getError
     } = await supabase
       .from(
         'device_employee_assignments'
       )
       .select(
-        'activo'
+        'id, activo'
       )
       .eq(
         'id',
@@ -2155,8 +2278,8 @@ export const biometricsService = {
       )
       .single()
 
-    if (getErr) {
-      throw getErr
+    if (getError) {
+      throw getError
     }
 
     const {
@@ -2192,6 +2315,5 @@ export const biometricsService = {
 
     return data
   }
-
 }
 
