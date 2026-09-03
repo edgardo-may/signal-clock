@@ -68,33 +68,59 @@ export default function BiometricFaceEnrollment({ empleadoId, clienteId, onEnrol
     stopCamera()
   }
 
-  const saveFaceTemplate = async () => {
+ const saveFaceTemplate = async () => {
     if (!photoData || !empleadoId) return
     setIsSaving(true)
     try {
       const base64Data = photoData.split(',')[1] // Quitar data:image/jpeg;base64,
-      
-      const payload = {
-        cliente_id: clienteId,
-        empleado_id: empleadoId,
-        tipo: 'rostro',
-        indice: 0,
-        template_data: base64Data
-      }
 
-      // Upsert (Insert o Update si ya existe)
-      const { error } = await supabase
+      // 1. Buscar si ya existe un template facial previo para este empleado
+      const { data: existing, error: findError } = await supabase
         .from('biometric_templates')
-        .upsert(payload, { onConflict: 'empleado_id,tipo,indice' })
+        .select('id')
+        .eq('empleado_id', empleadoId)
+        .eq('tipo', 'rostro')
+        .maybeSingle()
 
-      if (error) throw error
+      if (findError) throw findError
+
+      if (existing?.id) {
+        // 2. Si ya existe, actualizar el template y la marca de tiempo
+        const { error: updateError } = await supabase
+          .from('biometric_templates')
+          .update({
+            template_data: base64Data,
+            finger_key: 'face_primary',
+            actualizado_at: new Date().toISOString()
+          })
+          .eq('id', existing.id)
+
+        if (updateError) throw updateError
+      } else {
+        // 3. Si no existe, insertar nuevo registro
+        const { error: insertError } = await supabase
+          .from('biometric_templates')
+          .insert({
+            cliente_id: clienteId,
+            empleado_id: empleadoId,
+            device_id: null,
+            tipo: 'rostro',
+            indice: 0,
+            finger_key: 'face_primary',
+            template_data: base64Data,
+            actualizado_at: new Date().toISOString()
+          })
+
+        if (insertError) throw insertError
+      }
 
       toast.success('Rostro enrolado correctamente')
       setHasTemplate(true)
       if (onEnrollmentSuccess) onEnrollmentSuccess()
       setPhotoData(null)
     } catch (err) {
-      toast.error('Error al guardar rostro: ' + err.message)
+      console.error('[BiometricFaceEnrollment] Error al guardar rostro:', err)
+      toast.error('Error al guardar rostro: ' + (err.message || 'Error desconocido'))
     } finally {
       setIsSaving(false)
     }
