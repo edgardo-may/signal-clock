@@ -863,7 +863,7 @@ export const biometricsService = {
     } = await supabase
       .from('empleados')
       .select(
-        'id, nombre, apellido, clave_empleado, hikvision_device_userid, avatar_url, cliente_id'
+        'id, nombre, apellido, clave_empleado, device_userid, avatar_url, cliente_id'
       )
       .eq(
         'cliente_id',
