@@ -320,7 +320,7 @@ export default function AsignacionHorarios() {
     const [empRes, horRes, asigRes] = await Promise.all([
       supabase
         .from('empleados')
-        .select('id, nombre, apellido, clave_empleado, departamento, puesto, hikvision_device_userid, activo, email')
+        .select('id, nombre, apellido, clave_empleado, departamento, puesto, device_userid, activo, email')
         .eq('cliente_id', currentTenantId)
         .order('apellido', { ascending: true }),
       supabase
@@ -370,7 +370,7 @@ export default function AsignacionHorarios() {
         !q ||
         `${emp.nombre} ${emp.apellido}`.toLowerCase().includes(q) ||
         emp.clave_empleado?.toLowerCase().includes(q) ||
-        emp.hikvision_device_userid?.toLowerCase().includes(q) ||
+        emp.device_userid?.toLowerCase().includes(q) ||
         emp.departamento?.toLowerCase().includes(q) ||
         emp.puesto?.toLowerCase().includes(q)
 
@@ -680,7 +680,7 @@ export default function AsignacionHorarios() {
                                 {emp.nombre} {emp.apellido}
                               </p>
                               <span className="text-xs text-slate-400 dark:text-slate-500 font-mono">
-                                ID: {emp.hikvision_device_userid}
+                                ID: {emp.device_userid}
                               </span>
                             </div>
                           </td>
