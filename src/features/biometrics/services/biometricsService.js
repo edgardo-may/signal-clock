@@ -848,12 +848,9 @@ export const biometricsService = {
     dateTo = '',
     limit = 200
   } = {}) {
-    if (!clienteId) {
-      return {
-        logs: [],
-        devices: [],
-        employees: []
-      }
+   if (!clienteId) {
+      console.warn('[DEBUG logs] Abortado: no hay clienteId');
+      return { logs: [], devices: [], employees: [] };
     }
 
     // Empleados
@@ -871,7 +868,19 @@ export const biometricsService = {
       )
 
     if (empErr) {
-      throw empErr
+      console.error('[DEBUG logs] Error consultando empleados:', empErr);
+      throw empErr;
+    }
+    const devices = await this.getDevices({ clienteId });
+    const allowedSerials = devices
+      .map(device => normalizeSerial(device.serial_number))
+      .filter(Boolean);
+
+    console.log('[DEBUG logs] allowedSerials:', allowedSerials);
+
+    if (!allowedSerials.length) {
+      console.warn('[DEBUG logs] allowedSerials está vacío. Abortando búsqueda de logs.');
+      return { logs: [], devices, employees: empleados || [] };
     }
 
     const employeeMap = {}
