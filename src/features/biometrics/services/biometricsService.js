@@ -839,6 +839,14 @@ export const biometricsService = {
    *
    * Los seriales permitidos salen directamente de devices.
    */
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 3. ATTENDANCE LOGS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Obtiene registros de asistencia del tenant.
+   * Los seriales permitidos salen directamente de devices.
+   */
   async getAttendanceLogs({
     clienteId,
     search = '',
@@ -848,277 +856,124 @@ export const biometricsService = {
     dateTo = '',
     limit = 200
   } = {}) {
-   if (!clienteId) {
-      console.warn('[DEBUG logs] Abortado: no hay clienteId');
-      return { logs: [], devices: [], employees: [] };
+    if (!clienteId) {
+      console.warn('[DEBUG logs] Abortado: no hay clienteId')
+      return { logs: [], devices: [], employees: [] }
     }
 
-    // Empleados
-    const {
-      data: empleados,
-      error: empErr
-    } = await supabase
+    // 1. Obtener Empleados
+    const { data: empleados, error: empErr } = await supabase
       .from('empleados')
-      .select(
-        'id, nombre, apellido, clave_empleado, device_userid, avatar_url, cliente_id'
-      )
-      .eq(
-        'cliente_id',
-        clienteId
-      )
+      .select('id, nombre, apellido, clave_empleado, device_userid, avatar_url, cliente_id')
+      .eq('cliente_id', clienteId)
 
     if (empErr) {
-      console.error('[DEBUG logs] Error consultando empleados:', empErr);
-      throw empErr;
+      console.error('[DEBUG logs] Error consultando empleados:', empErr)
+      throw empErr
     }
-    const devices = await this.getDevices({ clienteId });
+
+    // 2. Obtener Dispositivos del Tenant
+    const devices = await this.getDevices({ clienteId })
     const allowedSerials = devices
       .map(device => normalizeSerial(device.serial_number))
-      .filter(Boolean);
+      .filter(Boolean)
 
-    console.log('[DEBUG logs] allowedSerials:', allowedSerials);
+    console.log('[DEBUG logs] allowedSerials:', allowedSerials)
 
     if (!allowedSerials.length) {
-      console.warn('[DEBUG logs] allowedSerials está vacío. Abortando búsqueda de logs.');
-      return { logs: [], devices, employees: empleados || [] };
+      console.warn('[DEBUG logs] allowedSerials está vacío. Abortando búsqueda de logs.')
+      return { logs: [], devices, employees: empleados || [] }
     }
 
+    // 3. Mapeo de Empleados
     const employeeMap = {}
+    ;(empleados || []).forEach(emp => {
+      if (emp.device_userid) employeeMap[String(emp.device_userid)] = emp
+      if (emp.clave_empleado) employeeMap[String(emp.clave_empleado)] = emp
+      if (emp.id) employeeMap[String(emp.id)] = emp
+    })
 
-    ;(empleados || []).forEach(
-      emp => {
-        if (
-          emp.device_userid
-        ) {
-          employeeMap[
-            String(
-              emp.device_userid
-            )
-          ] = emp
-        }
-
-        if (emp.clave_empleado) {
-          employeeMap[
-            String(
-              emp.clave_empleado
-            )
-          ] = emp
-        }
-
-        if (emp.id) {
-          employeeMap[
-            String(emp.id)
-          ] = emp
-        }
-      }
-    )
-
-    // Devices del tenant
-    const devices =
-      await this.getDevices({
-        clienteId
-      })
-
-    const allowedSerials =
-      devices
-        .map(
-          device =>
-            normalizeSerial(
-              device.serial_number
-            )
-        )
-        .filter(Boolean)
-
-    if (!allowedSerials.length) {
-      return {
-        logs: [],
-        devices,
-        employees:
-          empleados || []
-      }
-    }
-
-    // Logs
+    // 4. Consulta a la tabla attendance_logs
     let query = supabase
       .from('attendance_logs')
       .select('*')
-      .in(
-        'device_serial',
-        allowedSerials
-      )
-      .order(
-        'timestamp',
-        {
-          ascending: false
-        }
-      )
+      .in('device_serial', allowedSerials)
+      .order('timestamp', { ascending: false })
       .limit(limit)
 
-    if (
-      deviceSerial &&
-      deviceSerial !== 'todos'
-    ) {
-      query = query.eq(
-        'device_serial',
-        normalizeSerial(
-          deviceSerial
-        )
-      )
+    if (deviceSerial && deviceSerial !== 'todos') {
+      query = query.eq('device_serial', normalizeSerial(deviceSerial))
     }
 
-    if (
-      userId &&
-      userId !== 'todos'
-    ) {
-      query = query.eq(
-        'user_id',
-        userId
-      )
+    if (userId && userId !== 'todos') {
+      query = query.eq('user_id', userId)
     }
 
     if (dateFrom) {
-      const fromIso =
-        new Date(
-          `${dateFrom}T00:00:00`
-        ).toISOString()
-
-      query = query.gte(
-        'timestamp',
-        fromIso
-      )
+      const fromIso = new Date(`${dateFrom}T00:00:00`).toISOString()
+      query = query.gte('timestamp', fromIso)
     }
 
     if (dateTo) {
-      const toIso =
-        new Date(
-          `${dateTo}T23:59:59.999`
-        ).toISOString()
-
-      query = query.lte(
-        'timestamp',
-        toIso
-      )
+      const toIso = new Date(`${dateTo}T23:59:59.999`).toISOString()
+      query = query.lte('timestamp', toIso)
     }
 
-    const {
-      data: logs,
-      error
-    } = await query
+    const { data: logs, error } = await query
+
+    console.log('[DEBUG logs] Resultado directo de attendance_logs:', logs, 'Error:', error)
 
     if (error) {
+      console.error('[DEBUG logs] Error ejecutando query en attendance_logs:', error)
       throw error
     }
 
-    const deviceMap =
-      this.createDeviceSerialMap(
-        devices
-      )
+    const deviceMap = this.createDeviceSerialMap(devices)
 
-    let enriched =
-      (logs || []).map(
-        log => {
-          const emp =
-            employeeMap[
-              String(
-                log.user_id
-              )
-            ] || null
+    let enriched = (logs || []).map(log => {
+      const emp = employeeMap[String(log.user_id)] || null
+      const serial = normalizeSerial(log.device_serial)
+      const dev = deviceMap[serial] || null
 
-          const serial =
-            normalizeSerial(
-              log.device_serial
-            )
+      return {
+        ...log,
+        empleado: emp
+          ? {
+              nombreCompleto: `${emp.nombre || ''} ${emp.apellido || ''}`.trim() || 'Colaborador',
+              clave: emp.clave_empleado || emp.device_userid || log.user_id,
+              avatar_url: emp.avatar_url
+            }
+          : null,
+        dispositivo: dev
+          ? {
+              id: dev.id,
+              nombre: dev.name || dev.serial_number,
+              ubicacion: dev.location,
+              ip_address: dev.ip_address,
+              device_type: dev.device_type,
+              serial_number: dev.serial_number
+            }
+          : null
+      }
+    })
 
-          const dev =
-            deviceMap[
-              serial
-            ] || null
-
-          return {
-            ...log,
-
-            empleado: emp
-              ? {
-                  nombreCompleto:
-                    `${emp.nombre || ''} ${emp.apellido || ''}`
-                      .trim() ||
-                    'Colaborador',
-
-                  clave:
-                    emp.clave_empleado ||
-                    emp.device_userid ||
-                    log.user_id,
-
-                  avatar_url:
-                    emp.avatar_url
-                }
-              : null,
-
-            dispositivo: dev
-              ? {
-                  id:
-                    dev.id,
-
-                  nombre:
-                    dev.name ||
-                    dev.serial_number,
-
-                  ubicacion:
-                    dev.location,
-
-                  ip_address:
-                    dev.ip_address,
-
-                  device_type:
-                    dev.device_type,
-
-                  serial_number:
-                    dev.serial_number
-                }
-              : null
-          }
-        }
-      )
-
-    const q =
-      normalizeSearch(search)
-
+    const q = normalizeSearch(search)
     if (q) {
-      enriched =
-        enriched.filter(
-          log =>
-            normalizeSearch(
-              log.user_id
-            ).includes(q) ||
-
-            normalizeSearch(
-              log.device_serial
-            ).includes(q) ||
-
-            normalizeSearch(
-              log.status
-            ).includes(q) ||
-
-            normalizeSearch(
-              log.empleado
-                ?.nombreCompleto
-            ).includes(q) ||
-
-            normalizeSearch(
-              log.empleado?.clave
-            ).includes(q) ||
-
-            normalizeSearch(
-              log.dispositivo?.nombre
-            ).includes(q)
-        )
+      enriched = enriched.filter(
+        log =>
+          normalizeSearch(log.user_id).includes(q) ||
+          normalizeSearch(log.device_serial).includes(q) ||
+          normalizeSearch(log.status).includes(q) ||
+          normalizeSearch(log.empleado?.nombreCompleto).includes(q) ||
+          normalizeSearch(log.empleado?.clave).includes(q) ||
+          normalizeSearch(log.dispositivo?.nombre).includes(q)
+      )
     }
 
     return {
       logs: enriched,
       devices,
-      employees:
-        empleados || []
+      employees: empleados || []
     }
   },
 
