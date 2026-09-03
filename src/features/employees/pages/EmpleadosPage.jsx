@@ -155,7 +155,7 @@ function descargarPlantillaCSV() {
     'clave_empleado',
     'departamento',
     'puesto',
-    'hikvision_device_userid',
+    'device_userid',
     'tarjeta',
     'sexo',
     'fecha_ingreso',
@@ -206,7 +206,7 @@ function exportarEmpleadosCSV(empleados) {
 
   const filas = empleados.map(emp => [
     emp.clave_empleado || '',
-    emp.hikvision_device_userid || '',
+    emp.device_userid || '',
     emp.nombre || '',
     emp.apellido || '',
     emp.departamento || '',
@@ -234,13 +234,12 @@ function exportarEmpleadosCSV(empleados) {
   toast.success(`Exportados ${empleados.length} colaboradores`)
 }
 
-// Helper para normalizar cualquier formato de fecha (DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, etc.) a ISO YYYY-MM-DD
+// Helper para normalizar cualquier formato de fecha a ISO YYYY-MM-DD
 function normalizeToISODate(str) {
   if (!str) return null
   const s = String(str).trim()
   if (!s) return null
 
-  // 1. Formato YYYY-MM-DD o YYYY/MM/DD o YYYY.MM.DD
   const isoMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
   if (isoMatch) {
     const y = isoMatch[1]
@@ -249,7 +248,6 @@ function normalizeToISODate(str) {
     return `${y}-${m}-${d}`
   }
 
-  // 2. Formato latinoamericano/europeo DD/MM/YYYY o DD-MM-YYYY o DD.MM.YYYY
   const dmyMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)
   if (dmyMatch) {
     const d = dmyMatch[1].padStart(2, '0')
@@ -258,7 +256,6 @@ function normalizeToISODate(str) {
     return `${y}-${m}-${d}`
   }
 
-  // 3. Formato corto DD/MM/YY o DD-MM-YY
   const dmyShortMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})$/)
   if (dmyShortMatch) {
     const d = dmyShortMatch[1].padStart(2, '0')
@@ -268,7 +265,6 @@ function normalizeToISODate(str) {
     return `${y}-${m}-${d}`
   }
 
-  // 4. Fallback a Date.parse
   const parsed = new Date(s)
   if (!isNaN(parsed.getTime())) {
     const y = parsed.getFullYear()
@@ -332,7 +328,7 @@ function ModalImportCSV({ clienteId, disponibles, onClose, onImported }) {
       const clave = rowObj['clave_empleado'] || rowObj['clave_colaborador'] || rowObj['clave'] || ''
       const depto = rowObj['departamento'] || rowObj['area'] || ''
       const puesto = rowObj['puesto'] || rowObj['cargo'] || ''
-      const hikid = rowObj['hikvision_device_userid'] || rowObj['id_biometrico'] || rowObj['device_userid'] || rowObj['userid'] || ''
+      const devId = rowObj['device_userid'] || rowObj['hikvision_device_userid'] || rowObj['id_biometrico'] || rowObj['userid'] || ''
       const tarjeta = rowObj['tarjeta'] || rowObj['rfid'] || rowObj['card_no'] || ''
       const sexo = (rowObj['sexo'] || rowObj['genero'] || 'M').toUpperCase().charAt(0)
       const rawIngreso = rowObj['fecha_ingreso'] || rowObj['ingreso'] || ''
@@ -344,8 +340,8 @@ function ModalImportCSV({ clienteId, disponibles, onClose, onImported }) {
       const rowErrors = []
       if (!nombre) rowErrors.push('Falta nombre')
       if (!apellido) rowErrors.push('Falta apellido')
-      if (!hikid) rowErrors.push('Falta ID biométrico')
-      else if (!/^\d+$/.test(hikid)) rowErrors.push('ID biométrico no es numérico')
+      if (!devId) rowErrors.push('Falta ID biométrico')
+      else if (!/^\d+$/.test(devId)) rowErrors.push('ID biométrico no es numérico')
 
       if (rawIngreso && !ingreso) rowErrors.push('Fecha de ingreso no reconocida')
       if (rawCumple && !cumple) rowErrors.push('Fecha de cumpleaños no reconocida')
@@ -357,7 +353,7 @@ function ModalImportCSV({ clienteId, disponibles, onClose, onImported }) {
         clave_empleado: clave,
         departamento: depto,
         puesto,
-        hikvision_device_userid: hikid,
+        device_userid: devId,
         tarjeta,
         sexo: ['M', 'F'].includes(sexo) ? sexo : 'M',
         fecha_ingreso: ingreso,
@@ -417,7 +413,7 @@ function ModalImportCSV({ clienteId, disponibles, onClose, onImported }) {
         clave_empleado: r.clave_empleado || null,
         departamento: r.departamento || null,
         puesto: r.puesto || null,
-        hikvision_device_userid: r.hikvision_device_userid,
+        device_userid: r.device_userid,
         tarjeta: r.tarjeta || null,
         sexo: r.sexo || 'M',
         fecha_ingreso: r.fecha_ingreso || null,
@@ -451,22 +447,22 @@ function ModalImportCSV({ clienteId, disponibles, onClose, onImported }) {
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="relative w-[95%] sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-white dark:bg-white border border-slate-200 dark:border-slate-800  shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800  sticky top-0 bg-white dark:bg-white z-10">
+      <div className="relative w-[95%] sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white z-10">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/60  text-blue-600 dark:text-blue-400 ">
+            <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
               <Upload className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white ">
+              <h3 className="text-base font-bold text-slate-900">
                 Importación Masiva de Colaboradores (CSV)
               </h3>
-              <p className="text-xs text-slate-700 dark:text-slate-300">
-                Carga masiva de empleados para sincronización con terminales Hikvision
+              <p className="text-xs text-slate-700">
+                Carga masiva de empleados para sincronización con terminales biométricas
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-300 ">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -479,8 +475,8 @@ function ModalImportCSV({ clienteId, disponibles, onClose, onImported }) {
             onClick={() => fileInputRef.current?.click()}
             className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all duration-200 ${
               dragOver
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 dark:bg-blue-950/30'
-                : 'border-slate-200 dark:border-slate-800  hover:border-blue-400 hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-50 dark:bg-slate-800/60'
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-slate-200 hover:border-blue-400 hover:bg-slate-50'
             }`}
           >
             <input
@@ -491,27 +487,27 @@ function ModalImportCSV({ clienteId, disponibles, onClose, onImported }) {
               className="hidden"
             />
             <div className="flex flex-col items-center justify-center gap-2">
-              <div className="p-3 rounded-full bg-blue-50 dark:bg-blue-950/60  text-blue-600 dark:text-blue-400 ">
+              <div className="p-3 rounded-full bg-blue-50 text-blue-600">
                 <FileSpreadsheet className="w-8 h-8" strokeWidth={1.6} />
               </div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-white ">
+              <p className="text-sm font-semibold text-slate-900">
                 {csvFile ? csvFile.name : 'Haz clic para seleccionar o arrastra tu archivo CSV'}
               </p>
-              <p className="text-xs text-slate-700 dark:text-slate-300">
+              <p className="text-xs text-slate-700">
                 Formato UTF-8 delimitado por comas o punto y coma (.csv)
               </p>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3.5 rounded-md bg-[#F8FAFC]  border border-slate-200 dark:border-slate-800  gap-3">
-            <div className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 ">
-              <FileDown className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3.5 rounded-md bg-[#F8FAFC] border border-slate-200 gap-3">
+            <div className="flex items-center gap-2 text-xs text-slate-700">
+              <FileDown className="w-4 h-4 text-blue-600 flex-shrink-0" />
               <span>¿No conoces el formato requerido? Descarga la plantilla oficial.</span>
             </div>
             <button
               type="button"
               onClick={descargarPlantillaCSV}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold bg-white dark:bg-white text-blue-600 dark:text-blue-400  border border-slate-200 dark:border-slate-800  hover:bg-blue-50 dark:bg-blue-950/60  transition-colors whitespace-nowrap shadow-sm"
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold bg-white text-blue-600 border border-slate-200 hover:bg-blue-50 transition-colors whitespace-nowrap shadow-sm"
             >
               <Download className="w-3.5 h-3.5" />
               Descargar Plantilla CSV
@@ -521,24 +517,24 @@ function ModalImportCSV({ clienteId, disponibles, onClose, onImported }) {
           {parsedRows.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 ">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                   Vista Previa ({parsedRows.length} filas detectadas)
                 </h4>
                 <div className="flex items-center gap-3 text-xs">
-                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                  <span className="text-emerald-600 font-semibold flex items-center gap-1">
                     <Check className="w-3.5 h-3.5" /> {totalValid} válidos
                   </span>
                   {totalInvalid > 0 && (
-                    <span className="text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-1">
+                    <span className="text-rose-600 font-semibold flex items-center gap-1">
                       <AlertTriangle className="w-3.5 h-3.5" /> {totalInvalid} con error
                     </span>
                   )}
                 </div>
               </div>
 
-              <div className="max-h-56 overflow-y-auto overflow-x-auto rounded border border-slate-200 dark:border-slate-800 ">
+              <div className="max-h-56 overflow-y-auto overflow-x-auto rounded border border-slate-200">
                 <table className="w-full text-left text-xs table-auto">
-                  <thead className="bg-slate-50 dark:bg-slate-800/60  border-b border-slate-200 dark:border-slate-800  text-slate-700 dark:text-slate-300  sticky top-0">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 sticky top-0">
                     <tr>
                       <th className="px-3 py-2">Fila</th>
                       <th className="px-3 py-2">Clave Laboral</th>
@@ -548,30 +544,30 @@ function ModalImportCSV({ clienteId, disponibles, onClose, onImported }) {
                       <th className="px-3 py-2">Estado</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[rgba(3,54,61,0.07)] ">
+                  <tbody className="divide-y divide-[rgba(3,54,61,0.07)]">
                     {parsedRows.map((r, i) => (
                       <tr
                         key={i}
-                        className={r.isValid ? 'hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-50 dark:bg-slate-800/60/50' : 'bg-rose-50/50 dark:bg-rose-950/20'}
+                        className={r.isValid ? 'hover:bg-slate-50' : 'bg-rose-50/50'}
                       >
-                        <td className="px-3 py-2 font-mono text-slate-400 dark:text-slate-500">{r.lineNum}</td>
-                        <td className="px-3 py-2 font-mono text-slate-700 dark:text-slate-300  font-semibold">
+                        <td className="px-3 py-2 font-mono text-slate-400">{r.lineNum}</td>
+                        <td className="px-3 py-2 font-mono text-slate-700 font-semibold">
                           {r.clave_empleado || '—'}
                         </td>
-                        <td className="px-3 py-2 font-mono font-bold text-blue-600 dark:text-blue-400 ">
-                          {r.hikvision_device_userid || '—'}
+                        <td className="px-3 py-2 font-mono font-bold text-blue-600">
+                          {r.device_userid || '—'}
                         </td>
-                        <td className="px-3 py-2 font-medium text-slate-900 dark:text-white ">
+                        <td className="px-3 py-2 font-medium text-slate-900">
                           {r.nombre} {r.apellido}
                         </td>
-                        <td className="px-3 py-2 text-slate-700 dark:text-slate-300 ">{r.departamento || '—'}</td>
+                        <td className="px-3 py-2 text-slate-700">{r.departamento || '—'}</td>
                         <td className="px-3 py-2">
                           {r.isValid ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-semibold">
                               <CheckCircle2 className="w-3.5 h-3.5" /> Válido
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-rose-600 dark:text-rose-400 font-semibold" title={r.errors.join(', ')}>
+                            <span className="inline-flex items-center gap-1 text-[11px] text-rose-600 font-semibold" title={r.errors.join(', ')}>
                               <XCircle className="w-3.5 h-3.5" /> {r.errors[0]}
                             </span>
                           )}
@@ -585,12 +581,12 @@ function ModalImportCSV({ clienteId, disponibles, onClose, onImported }) {
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-200 dark:border-slate-800 ">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-200">
           <button
             type="button"
             onClick={onClose}
             disabled={importing}
-            className="px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300  hover:bg-blue-100 dark:bg-blue-900/40 dark:hover:bg-slate-50 dark:bg-slate-800/60"
+            className="px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-100"
           >
             Cancelar
           </button>
@@ -598,7 +594,7 @@ function ModalImportCSV({ clienteId, disponibles, onClose, onImported }) {
             type="button"
             onClick={handleExecuteImport}
             disabled={importing || totalValid === 0}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-md text-xs sm:text-sm font-semibold text-white bg-blue-600 hover:bg-slate-100 shadow-md shadow-blue-600/25 transition-all active:scale-98 disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-md text-xs sm:text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/25 transition-all active:scale-98 disabled:opacity-50"
           >
             {importing ? <><Spinner size={14} /> Importando...</> : <><Upload className="w-4 h-4" /> Importar {totalValid} Colaboradores</>}
           </button>
@@ -609,7 +605,7 @@ function ModalImportCSV({ clienteId, disponibles, onClose, onImported }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MODAL: ALTA / EDICIÓN (Clave de Colaborador en Datos Laborales)
+// MODAL: ALTA / EDICIÓN
 // ═══════════════════════════════════════════════════════════════
 const EMPTY_FORM = {
   nombre: '',
@@ -618,7 +614,7 @@ const EMPTY_FORM = {
   departamento: '',
   puesto: '',
   pin: '',
-  hikvision_device_userid: '',
+  device_userid: '',
   tarjeta: '',
   sexo: 'M',
   fecha_ingreso: '',
@@ -638,6 +634,7 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
           ...EMPTY_FORM,
           ...empleado,
           pin: empleado.pin || '',
+          device_userid: empleado.device_userid || '',
           fecha_ingreso: empleado.fecha_ingreso ? String(empleado.fecha_ingreso).split('T')[0] : '',
           fecha_cumpleanos: empleado.fecha_cumpleanos ? String(empleado.fecha_cumpleanos).split('T')[0] : '',
         }
@@ -651,12 +648,12 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
     if (!isEdit) {
       if (empleados && empleados.length > 0) {
         const maxId = empleados.reduce((max, emp) => {
-          const current = parseInt(emp.hikvision_device_userid, 10)
+          const current = parseInt(emp.device_userid, 10)
           return (!isNaN(current) && current > max) ? current : max
         }, 0)
-        setForm(f => ({ ...f, hikvision_device_userid: String(maxId + 1) }))
+        setForm(f => ({ ...f, device_userid: String(maxId + 1) }))
       } else {
-        setForm(f => ({ ...f, hikvision_device_userid: '1' }))
+        setForm(f => ({ ...f, device_userid: '1' }))
       }
     }
   }, [isEdit, empleados])
@@ -670,8 +667,8 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
     const e = {}
     if (!form.nombre.trim()) e.nombre = 'Campo requerido'
     if (!form.apellido.trim()) e.apellido = 'Campo requerido'
-    if (form.hikvision_device_userid && !/^\d+$/.test(form.hikvision_device_userid.trim())) {
-      e.hikvision_device_userid = 'Solo dígitos numéricos'
+    if (form.device_userid && !/^\d+$/.test(form.device_userid.trim())) {
+      e.device_userid = 'Solo dígitos numéricos'
     }
     if (form.pin && !/^\d{4,10}$/.test(form.pin.trim())) {
       e.pin = 'El PIN debe contener entre 4 y 10 dígitos numéricos'
@@ -702,7 +699,7 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
         departamento: form.departamento.trim() || null,
         puesto: form.puesto.trim() || null,
         pin: form.pin ? form.pin.trim() : null,
-        hikvision_device_userid: form.hikvision_device_userid.trim(),
+        device_userid: form.device_userid.trim(),
         tarjeta: form.tarjeta ? form.tarjeta.trim() : null,
         sexo: form.sexo || 'M',
         fecha_ingreso: form.fecha_ingreso || null,
@@ -740,7 +737,7 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
       onClose()
     } catch (err) {
       if (err?.code === '23505') {
-        setErrors({ hikvision_device_userid: 'Este ID biométrico ya existe en su empresa.' })
+        setErrors({ device_userid: 'Este ID biométrico ya existe en su empresa.' })
         toast.error('ID biométrico duplicado en la terminal')
       } else {
         toast.error(err?.message ?? 'Error al guardar el colaborador')
@@ -755,22 +752,22 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="relative w-[95%] sm:max-w-xl max-h-[90vh] overflow-y-auto rounded-lg bg-white dark:bg-white border border-slate-200 dark:border-slate-800  shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800  sticky top-0 bg-white dark:bg-white z-10">
+      <div className="relative w-[95%] sm:max-w-xl max-h-[90vh] overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white z-10">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/60  text-blue-600 dark:text-blue-400 ">
+            <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
               {isEdit ? <Edit3 className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white ">
+              <h3 className="text-base font-bold text-slate-900">
                 {isEdit ? 'Editar Colaborador' : 'Registrar Nuevo Colaborador'}
               </h3>
-              <p className="text-xs text-slate-700 dark:text-slate-300">
+              <p className="text-xs text-slate-700">
                 {isEdit ? `${empleado.nombre} ${empleado.apellido}` : 'Vinculación de datos personales, laborales y hardware'}
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-300 ">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -778,8 +775,8 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
         <form onSubmit={handleSubmit} noValidate className="p-6 space-y-5">
           {/* ── Selector de Tenant Destino (Solo SuperAdmin) ── */}
           {isSuperAdmin && !isEdit && (
-            <div className="p-4 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-2">
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+            <div className="p-4 rounded-lg bg-blue-50/80 border border-blue-200 space-y-2">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-600">
                 <Building2 className="w-4 h-4" />
                 Empresa / Tenant Destino <span className="text-rose-500">*</span>
               </div>
@@ -787,7 +784,7 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
                 value={targetClienteId}
                 onChange={(e) => setTargetClienteId(e.target.value)}
                 disabled={saving}
-                className="w-full py-2 px-3 text-xs sm:text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold outline-none focus:border-blue-500 cursor-pointer shadow-sm"
+                className="w-full py-2 px-3 text-xs sm:text-sm rounded-md border border-slate-300 bg-white text-slate-900 font-semibold outline-none focus:border-blue-500 cursor-pointer shadow-sm"
               >
                 {tenants.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -795,23 +792,23 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
                   </option>
                 ))}
               </select>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] text-slate-500">
                 Como SuperAdmin, selecciona a qué empresa pertenecerá este colaborador.
               </p>
             </div>
           )}
 
           {!isSuperAdmin && currentTenant && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs">
-              <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span className="text-slate-600 dark:text-slate-400">Empresa:</span>
-              <strong className="text-slate-800 dark:text-slate-200 font-semibold">{currentTenant.nombre_empresa}</strong>
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+              <Building2 className="w-4 h-4 text-blue-600" />
+              <span className="text-slate-600">Empresa:</span>
+              <strong className="text-slate-800 font-semibold">{currentTenant.nombre_empresa}</strong>
             </div>
           )}
 
           {/* ── Sección 1: Datos Personales ── */}
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400  mb-3 flex items-center gap-1.5">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-blue-600 mb-3 flex items-center gap-1.5">
               <User className="w-4 h-4" />
               Información Personal
             </h4>
@@ -832,7 +829,7 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
               <div className="space-y-1.5">
-                <label htmlFor="f-sexo" className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 ">
+                <label htmlFor="f-sexo" className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
                   Sexo / Género
                 </label>
                 <select
@@ -840,7 +837,7 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
                   value={form.sexo}
                   onChange={set('sexo')}
                   disabled={saving}
-                  className="w-full py-2.5 px-3 text-xs sm:text-sm rounded-md border border-slate-200 dark:border-slate-800  bg-white  text-slate-900 dark:text-white  outline-none focus:border-blue-500 dark:focus:border-blue-500"
+                  className="w-full py-2.5 px-3 text-xs sm:text-sm rounded-md border border-slate-200 bg-white text-slate-900 outline-none focus:border-blue-500"
                 >
                   <option value="M">Masculino (Hombre)</option>
                   <option value="F">Femenino (Mujer)</option>
@@ -855,14 +852,12 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
                 hint="Fecha de nacimiento"
               />
             </div>
-
-
           </div>
 
-          {/* ── Sección 2: Datos Laborales (Aquí se aloja la Clave de Colaborador) ── */}
-          <div className="pt-2 border-t border-slate-200 dark:border-slate-800 ">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300  mb-3 flex items-center gap-1.5">
-              <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          {/* ── Sección 2: Datos Laborales ── */}
+          <div className="pt-2 border-t border-slate-200">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
+              <Building2 className="w-4 h-4 text-blue-600" />
               Datos Laborales
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -879,7 +874,6 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-              {/* Clave de Colaborador interna */}
               <FormInput
                 id="f-clave" label="Clave de Colaborador" icon={BadgeCheck}
                 value={form.clave_empleado} onChange={set('clave_empleado')}
@@ -887,8 +881,6 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
                 disabled={saving}
                 hint="Código interno laboral de la empresa."
               />
-
-              {/* Fecha de Ingreso */}
               <FormInput
                 id="f-ingreso" label="Fecha de Ingreso" icon={CalendarDays}
                 type="date" value={form.fecha_ingreso} onChange={set('fecha_ingreso')}
@@ -899,11 +891,11 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
           </div>
 
           {/* ── Sección 3: Seguridad y Acceso Kiosco Web ── */}
-          <div className="rounded-lg p-4 bg-blue-50 dark:bg-blue-950/60/60  border border-blue-100  space-y-4">
+          <div className="rounded-lg p-4 bg-blue-50 border border-blue-100 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400 " />
-                <span className="text-xs font-bold text-slate-900 dark:text-white ">
+                <ShieldCheck className="w-4.5 h-4.5 text-blue-600" />
+                <span className="text-xs font-bold text-slate-900">
                   Autenticación en Kiosco Checador Web
                 </span>
               </div>
@@ -916,14 +908,14 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
                   setShowPin(true)
                   toast.success(`PIN generado: ${randomPin}`)
                 }}
-                className="text-[11px] text-blue-600 dark:text-blue-400  hover:underline font-semibold"
+                className="text-[11px] text-blue-600 hover:underline font-semibold"
               >
                 Generar PIN aleatorio
               </button>
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="f-pin" className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 ">
+              <label htmlFor="f-pin" className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
                 PIN de Seguridad Personal (4 a 6 dígitos)
               </label>
               <div className="relative">
@@ -935,14 +927,14 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
                   onChange={set('pin')}
                   placeholder="ej. 1234"
                   disabled={saving}
-                  className={`w-full py-2.5 px-3 text-xs sm:text-sm rounded-md border bg-white dark:bg-white text-slate-900 dark:text-white  placeholder-slate-400 outline-none font-mono tracking-widest ${
-                    errors.pin ? 'border-rose-500' : 'border-slate-200 dark:border-slate-800  focus:border-blue-500'
+                  className={`w-full py-2.5 px-3 text-xs sm:text-sm rounded-md border bg-white text-slate-900 placeholder-slate-400 outline-none font-mono tracking-widest ${
+                    errors.pin ? 'border-rose-500' : 'border-slate-200 focus:border-blue-500'
                   }`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPin(!showPin)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-blue-600 dark:text-blue-400 font-semibold"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-blue-600 font-semibold"
                 >
                   {showPin ? 'Ocultar' : 'Ver'}
                 </button>
@@ -950,33 +942,30 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
               {errors.pin ? (
                 <p className="text-[11px] text-rose-500">{errors.pin}</p>
               ) : (
-                <p className="text-[11px] text-slate-700 dark:text-slate-300">Clave numérica requerida para autenticarse y checar en el Kiosco Web.</p>
+                <p className="text-[11px] text-slate-700">Clave numérica requerida para autenticarse y checar en el Kiosco Web.</p>
               )}
             </div>
           </div>
 
-          {/* ── Sección 4: Credenciales de Acceso Hardware (Hikvision ISUP 5.0) ── */}
-          <div className="rounded-lg p-4 bg-[#F8FAFC]/60 dark:bg-[#1f2937] border border-slate-200  space-y-4">
+          {/* ── Sección 4: Credenciales de Acceso Hardware Biométrico ── */}
+          <div className="rounded-lg p-4 bg-[#F8FAFC] border border-slate-200 space-y-4">
             <div className="flex items-center gap-2">
-              <Fingerprint className="w-4.5 h-4.5 text-slate-700 dark:text-slate-300 " />
-              <span className="text-xs font-bold text-slate-900 dark:text-white ">
-                Credenciales de Acceso Hardware (Hikvision ISUP 5.0)
+              <Fingerprint className="w-4.5 h-4.5 text-slate-700" />
+              <span className="text-xs font-bold text-slate-900">
+                Credenciales de Acceso Hardware Biométrico
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* ID Biométrico en Terminal */}
               <FormInput
-                id="f-hikid" label="ID Biométrico (Device UserID)" icon={Hash}
-                value={form.hikvision_device_userid}
-                onChange={set('hikvision_device_userid')}
+                id="f-devid" label="ID Biométrico (Device UserID)" icon={Hash}
+                value={form.device_userid}
+                onChange={set('device_userid')}
                 placeholder="ej. 101"
                 hint="ID numérico registrado en la terminal."
-                error={errors.hikvision_device_userid}
+                error={errors.device_userid}
                 disabled={saving}
               />
-
-              {/* Número de Tarjeta RFID */}
               <FormInput
                 id="f-tarjeta" label="Tarjeta RFID / Mifare" icon={CreditCard}
                 value={form.tarjeta} onChange={set('tarjeta')}
@@ -988,18 +977,18 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
           </div>
 
           {/* ── Sección 5: Estatus Operativo ── */}
-          <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800 ">
+          <div className="flex items-center justify-between pt-2 border-t border-slate-200">
             <div>
-              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 ">Estatus Operativo</p>
-              <p className="text-[11px] text-slate-400 dark:text-slate-500">Si está inactivo, el hardware no procesará sus marcajes.</p>
+              <p className="text-xs font-semibold text-slate-700">Estatus Operativo</p>
+              <p className="text-[11px] text-slate-400">Si está inactivo, el hardware no procesará sus marcajes.</p>
             </div>
             <button
               type="button"
               onClick={() => setForm(f => ({ ...f, activo: !f.activo }))}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded text-xs font-semibold border transition-all ${
                 form.activo
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                  : 'bg-[#F8FAFC]0/10 text-slate-700 dark:text-slate-300  border-slate-500/30'
+                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                  : 'bg-slate-100 text-slate-700 border-slate-300'
               }`}
             >
               {form.activo ? <><CheckCircle2 className="w-3.5 h-3.5" /> Activo</> : <><XCircle className="w-3.5 h-3.5" /> Inactivo</>}
@@ -1007,19 +996,19 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
           </div>
 
           {/* Botones de acción */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800 ">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
             <button
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300  hover:bg-blue-100 dark:bg-blue-900/40 dark:hover:bg-slate-50 dark:bg-slate-800/60 transition-colors"
+              className="px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-md text-xs sm:text-sm font-semibold text-white bg-blue-600 hover:bg-slate-100 shadow-md shadow-blue-600/25 transition-all active:scale-98 disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-md text-xs sm:text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/25 transition-all active:scale-98 disabled:opacity-50"
             >
               {saving ? <><Spinner size={14} /> Guardando...</> : <><Save className="w-4 h-4" /> {isEdit ? 'Actualizar Colaborador' : 'Guardar Colaborador'}</>}
             </button>
@@ -1032,19 +1021,19 @@ function ModalForm({ empleado, empleados = [], clienteId, isSuperAdmin, tenants 
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MODAL: FICHA DE EMPLEADO COMPLETA (PRO MAX)
+// MODAL: FICHA DE EMPLEADO COMPLETA
 // ═══════════════════════════════════════════════════════════════
 function ModalDetalle({ empleado, onClose, onReactivate, onDelete }) {
   const nombre = `${empleado.nombre} ${empleado.apellido}`
 
   const InfoItem = ({ icon: Icon, label, value, isMono }) => (
     <div className="flex items-start gap-3">
-      <div className="p-2 rounded bg-blue-50 dark:bg-blue-950/60  text-slate-700 dark:text-slate-300  flex-shrink-0 mt-0.5">
+      <div className="p-2 rounded bg-blue-50 text-slate-700 flex-shrink-0 mt-0.5">
         <Icon className="w-4 h-4" />
       </div>
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</p>
-        <p className={`text-xs sm:text-sm font-semibold text-slate-900 dark:text-white  ${isMono ? 'font-mono' : ''}`}>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+        <p className={`text-xs sm:text-sm font-semibold text-slate-900 ${isMono ? 'font-mono' : ''}`}>
           {value || '—'}
         </p>
       </div>
@@ -1059,19 +1048,19 @@ function ModalDetalle({ empleado, onClose, onReactivate, onDelete }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="relative w-[95%] sm:max-w-xl max-h-[90vh] overflow-y-auto rounded-lg bg-white dark:bg-white border border-slate-200 dark:border-slate-800  shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800  sticky top-0 bg-white dark:bg-white z-10">
+      <div className="relative w-[95%] sm:max-w-xl max-h-[90vh] overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white z-10">
           <div className="flex items-center gap-3">
             <AvatarCircle empleado={empleado} size={48} />
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white  leading-tight">{nombre}</h3>
+              <h3 className="text-base font-bold text-slate-900 leading-tight">{nombre}</h3>
               <div className="flex items-center gap-2 mt-1">
                 <EstatusBadge activo={empleado.activo} />
-                <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">Clave: {empleado.clave_empleado || 'Sin clave'}</span>
+                <span className="text-xs text-slate-400 font-medium">Clave: {empleado.clave_empleado || 'Sin clave'}</span>
               </div>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-300 ">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -1079,7 +1068,7 @@ function ModalDetalle({ empleado, onClose, onReactivate, onDelete }) {
         <div className="p-6 space-y-6">
           {/* Datos Personales */}
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400  mb-3 flex items-center gap-1.5">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-blue-600 mb-3 flex items-center gap-1.5">
               <User className="w-4 h-4" />
               Datos Personales
             </h4>
@@ -1091,9 +1080,9 @@ function ModalDetalle({ empleado, onClose, onReactivate, onDelete }) {
           </div>
 
           {/* Datos Laborales */}
-          <div className="pt-2 border-t border-slate-200 dark:border-slate-800 ">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300  mb-3 flex items-center gap-1.5">
-              <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          <div className="pt-2 border-t border-slate-200">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
+              <Building2 className="w-4 h-4 text-blue-600" />
               Datos Laborales
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1104,14 +1093,14 @@ function ModalDetalle({ empleado, onClose, onReactivate, onDelete }) {
             </div>
           </div>
 
-          {/* Sincronización Hardware Hikvision & Kiosco */}
-          <div className="p-4 rounded-lg bg-[#F8FAFC]  border border-slate-200 dark:border-slate-800 ">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400  mb-3 flex items-center gap-1.5">
+          {/* Sincronización Hardware Biométrico & Kiosco */}
+          <div className="p-4 rounded-lg bg-[#F8FAFC] border border-slate-200">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-blue-600 mb-3 flex items-center gap-1.5">
               <Fingerprint className="w-4 h-4" />
               Credenciales de Acceso Hardware & Kiosco Web
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <InfoItem icon={Hash} label="ID Biométrico (Device UserID)" value={empleado.hikvision_device_userid} isMono />
+              <InfoItem icon={Hash} label="ID Biométrico (Device UserID)" value={empleado.device_userid} isMono />
               <InfoItem icon={CreditCard} label="Tarjeta RFID / Mifare" value={empleado.tarjeta || 'Sin tarjeta asignada'} isMono />
               <InfoItem icon={ShieldCheck} label="PIN de Acceso Kiosco" value={empleado.pin ? '••••••' : 'Sin PIN configurado'} isMono />
               <InfoItem icon={Calendar} label="Última Actualización" value={formatDate(empleado.actualizado_at)} />
@@ -1119,7 +1108,7 @@ function ModalDetalle({ empleado, onClose, onReactivate, onDelete }) {
           </div>
         </div>
 
-        <div className="flex justify-between items-center px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
+        <div className="flex justify-between items-center px-6 py-4 border-t border-slate-200 bg-slate-50">
           <div className="flex items-center gap-2">
             {!empleado.activo ? (
               <button
@@ -1140,7 +1129,7 @@ function ModalDetalle({ empleado, onClose, onReactivate, onDelete }) {
           </div>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-md text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300  bg-blue-50 dark:bg-blue-950/60  hover:bg-blue-600/25  transition-colors"
+            className="px-4 py-2 rounded-md text-xs sm:text-sm font-semibold text-slate-700 bg-slate-200 hover:bg-slate-300 transition-colors"
           >
             Cerrar Ficha
           </button>
@@ -1157,7 +1146,6 @@ export default function Empleados() {
   const [sidebarOpen, setSidebarOpen] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : true))
   const navigate = useNavigate()
 
-  // Contexto y abstracción de Tenant Activo (SuperAdmin Global vs Tenant Regular)
   const {
     isSuperAdmin,
     tenants,
@@ -1178,7 +1166,6 @@ export default function Empleados() {
   const [modalDetalle, setModalDetalle] = useState(null)
   const [modalImport, setModalImport] = useState(false)
 
-  // Hook reactivo de capacidades y límites del tenant activo
   const {
     limiteEmpleados,
     empleadosActuales,
@@ -1193,7 +1180,7 @@ export default function Empleados() {
     refreshLimits,
   } = useTenantLimits(currentTenantId)
 
-  // Cargar lista de empleados para el tenant seleccionado
+  // Cargar lista de empleados con columna device_userid
   const fetchEmpleados = useCallback(async () => {
     if (!currentTenantId) {
       setEmpleados([])
@@ -1203,7 +1190,7 @@ export default function Empleados() {
     setLoading(true)
     const { data, error } = await supabase
       .from('empleados')
-      .select('id, nombre, apellido, clave_empleado, pin, departamento, puesto, hikvision_device_userid, tarjeta, sexo, fecha_ingreso, fecha_cumpleanos, activo, avatar_url, creado_at, actualizado_at')
+      .select('id, nombre, apellido, clave_empleado, pin, departamento, puesto, device_userid, tarjeta, sexo, fecha_ingreso, fecha_cumpleanos, activo, avatar_url, creado_at, actualizado_at')
       .eq('cliente_id', currentTenantId)
       .order('apellido', { ascending: true })
 
@@ -1223,7 +1210,6 @@ export default function Empleados() {
 
   const handleDelete = async (empleado) => {
     try {
-      // 1. Simulación (diagnóstico) delegada enteramente al backend
       const { data: res, error } = await supabase.rpc('fn_employee_lifecycle', {
         p_empleado_id: empleado.id,
         p_action: 'CHECK'
@@ -1232,7 +1218,6 @@ export default function Empleados() {
       if (error) throw error
 
       const status = res?.status
-      console.log('Employee lifecycle CHECK:', res)
 
       if (status === 'ERROR') {
         toast.error('Error interno: ' + res?.message)
@@ -1266,23 +1251,23 @@ export default function Empleados() {
         if (devCount > 0) details += `- ${devCount} asignación(es) en terminales biométricas\n`
 
         const okSoft = await confirmDialog({
-           title: 'Baja Laboral',
-           message: `Se encontraron:\n${details}\nEl colaborador dejará de poder registrar checadas en los dispositivos asignados. Su PIN, enrolamientos e historial serán conservados para un posible reingreso.`,
-           variant: 'warning',
-           confirmLabel: 'Confirmar Baja Laboral'
+          title: 'Baja Laboral',
+          message: `Se encontraron:\n${details}\nEl colaborador dejará de poder registrar checadas en los dispositivos asignados. Su PIN, enrolamientos e historial serán conservados para un posible reingreso.`,
+          variant: 'warning',
+          confirmLabel: 'Confirmar Baja Laboral'
         })
         
         if (okSoft) {
-           const { data: deactRes, error: deactErr } = await supabase.rpc('fn_employee_lifecycle', {
-             p_empleado_id: empleado.id,
-             p_action: 'DEACTIVATE'
-           })
-           if (deactErr) throw deactErr
-           if (deactRes?.status === 'ERROR') throw new Error(deactRes.message)
-           
-           toast.success(`${empleado.nombre} ha sido dado de baja`)
-           fetchEmpleados()
-           refreshLimits()
+          const { data: deactRes, error: deactErr } = await supabase.rpc('fn_employee_lifecycle', {
+            p_empleado_id: empleado.id,
+            p_action: 'DEACTIVATE'
+          })
+          if (deactErr) throw deactErr
+          if (deactRes?.status === 'ERROR') throw new Error(deactRes.message)
+          
+          toast.success(`${empleado.nombre} ha sido dado de baja`)
+          fetchEmpleados()
+          refreshLimits()
         }
         return
       }
@@ -1290,29 +1275,28 @@ export default function Empleados() {
       if (status === 'DEVICE_REMOVAL_REQUIRED') {
         const devCount = res?.devices_count || 0
         const okSoft = await confirmDialog({
-           title: 'Retiro Físico Requerido',
-           message: `Este colaborador no tiene historial, pero está asignado a ${devCount} reloj(es) biométrico(s).\n\nPrimero debe ser dado de baja para que el sistema le envíe la orden de borrado a las terminales físicas.`,
-           variant: 'warning',
-           confirmLabel: 'Dar de baja y borrar de reloj'
+          title: 'Retiro Físico Requerido',
+          message: `Este colaborador no tiene historial, pero está asignado a ${devCount} reloj(es) biométrico(s).\n\nPrimero debe ser dado de baja para que el sistema le envíe la orden de borrado a las terminales físicas.`,
+          variant: 'warning',
+          confirmLabel: 'Dar de baja y borrar de reloj'
         })
         
         if (okSoft) {
-           const { data: deactRes, error: deactErr } = await supabase.rpc('fn_employee_lifecycle', {
-             p_empleado_id: empleado.id,
-             p_action: 'DEACTIVATE'
-           })
-           if (deactErr) throw deactErr
-           if (deactRes?.status === 'ERROR') throw new Error(deactRes.message)
-           
-           toast.success(`Orden enviada. ${empleado.nombre} ha sido dado de baja.`)
-           fetchEmpleados()
-           refreshLimits()
+          const { data: deactRes, error: deactErr } = await supabase.rpc('fn_employee_lifecycle', {
+            p_empleado_id: empleado.id,
+            p_action: 'DEACTIVATE'
+          })
+          if (deactErr) throw deactErr
+          if (deactRes?.status === 'ERROR') throw new Error(deactRes.message)
+          
+          toast.success(`Orden enviada. ${empleado.nombre} ha sido dado de baja.`)
+          fetchEmpleados()
+          refreshLimits()
         }
         return
       }
 
       if (status === 'CAN_DELETE') {
-        // 2. Pedimos confirmación final porque SÍ se puede borrar físicamente
         const ok = await confirmDialog({
           title: 'Eliminar colaborador',
           message: `Este colaborador no tiene registros históricos ni biométricos asociados.\n\n¿Estás seguro de eliminar definitivamente a ${empleado.nombre} ${empleado.apellido}? Esta acción no se puede deshacer.`,
@@ -1322,7 +1306,6 @@ export default function Empleados() {
         
         if (!ok) return
         
-        // 3. Ejecución real del borrado
         const { data: finalRes, error: finalErr } = await supabase.rpc('fn_employee_lifecycle', {
           p_empleado_id: empleado.id,
           p_action: 'DELETE'
@@ -1345,7 +1328,6 @@ export default function Empleados() {
 
   const handleReactivate = async (empleado) => {
     try {
-      // 1. Obtener información de biometrías y dispositivos afectados
       const [{ data: templates }, { data: devices }] = await Promise.all([
         supabase.from('biometric_templates').select('tipo').eq('empleado_id', empleado.id),
         supabase.from('device_employee_assignments').select('id, biometric_user_id').eq('employee_id', empleado.id).eq('suspension_reason', 'EMPLOYEE_DEACTIVATED')
@@ -1375,7 +1357,6 @@ export default function Empleados() {
       fetchEmpleados()
       refreshLimits()
 
-      // Determinar el mensaje de identidad según la cantidad de PINs únicos
       let identidadMsg = 'Se restauró su identidad'
       if (uniquePins.length === 1) {
         identidadMsg += ` con el PIN ${uniquePins[0]}`
@@ -1391,23 +1372,23 @@ export default function Empleados() {
 
       toast((t) => (
         <div className="flex flex-col gap-2 min-w-[300px]">
-          <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
+          <div className="flex items-center gap-2 font-bold text-slate-800">
             <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
             <span>Colaborador reactivado</span>
           </div>
-          <div className="text-sm text-slate-600 dark:text-slate-300">
+          <div className="text-sm text-slate-600">
             {identidadMsg}
           </div>
           
           {hasHuella && (
             <div className="mt-2 text-sm">
-              <p className="text-amber-700 dark:text-amber-400 font-medium mb-2">
+              <p className="text-amber-700 font-medium mb-2">
                 Las huellas deben enrolarse nuevamente en los dispositivos.
               </p>
               <div className="flex justify-end gap-2 mt-2">
                 <button 
                   onClick={() => toast.dismiss(t.id)}
-                  className="px-3 py-1.5 bg-transparent text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-xs font-semibold transition-colors"
+                  className="px-3 py-1.5 bg-transparent text-slate-500 hover:bg-slate-100 rounded text-xs font-semibold transition-colors"
                 >
                   Cerrar
                 </button>
@@ -1457,14 +1438,13 @@ export default function Empleados() {
     setModalImport(true)
   }
 
-  // Filtrado reactivo
   const filtered = empleados.filter(emp => {
     const q = search.toLowerCase()
     const matchSearch =
       !q ||
       `${emp.nombre} ${emp.apellido}`.toLowerCase().includes(q) ||
       emp.clave_empleado?.toLowerCase().includes(q) ||
-      emp.hikvision_device_userid?.toLowerCase().includes(q) ||
+      emp.device_userid?.toLowerCase().includes(q) ||
       emp.tarjeta?.toLowerCase().includes(q) ||
       emp.departamento?.toLowerCase().includes(q) ||
       emp.puesto?.toLowerCase().includes(q)
@@ -1477,7 +1457,6 @@ export default function Empleados() {
     return matchSearch && matchActivo
   })
 
-  // Usar el custom hook de paginación
   const {
     currentPage,
     totalPages,
@@ -1490,23 +1469,17 @@ export default function Empleados() {
   } = usePagination(filtered, 5, [search, filterActivo])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F8FAFC]  text-slate-900 dark:text-white ">
+    <div className="flex h-screen overflow-hidden bg-[#F8FAFC] text-slate-900">
       <Toaster position="top-right" containerStyle={{ top: 20, right: 20 }} />
 
-      {/* ── Sidebar TailAdmin ───────────────────────────────── */}
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
-      {/* ── Content Area ────────────────────────────────────── */}
       <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
-        {/* ── Header TailAdmin ──────────────────────────────── */}
         <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
-        {/* ── Main Content Container ────────────────────────── */}
         <main className="mx-auto max-w-screen-2xl p-4 md:p-6 2xl:p-10 w-full space-y-6">
-
-          {/* Banner de Suspensión o Vencimiento */}
           {bloqueado && (
-            <div className="flex items-center gap-3 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs sm:text-sm">
+            <div className="flex items-center gap-3 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-600 text-xs sm:text-sm">
               <AlertTriangle className="w-5 h-5 flex-shrink-0" />
               <span>
                 {vencido
@@ -1517,35 +1490,31 @@ export default function Empleados() {
             </div>
           )}
 
-          {/* Banner de Asignación de Tenant (SOLO para usuarios regulares sin cliente_id) */}
           {requiresTenantAssignment && (
-            <div className="flex items-center gap-3 p-4 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs sm:text-sm">
+            <div className="flex items-center gap-3 p-4 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-600 text-xs sm:text-sm">
               <AlertTriangle className="w-5 h-5 flex-shrink-0" />
               <span>Tu usuario requiere asignación de <strong>cliente_id</strong> en Supabase para vincular registros.</span>
             </div>
           )}
 
-          {/* Barra superior de acciones */}
           <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
+                <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
                   Gestión de Empleados
                 </h2>
                 {isSuperAdmin && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 border border-purple-500/20">
                     Modo SuperAdmin
                   </span>
                 )}
               </div>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-0.5">
+              <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
                 Padrón de colaboradores activos
               </p>
             </div>
 
-            {/* Fila única de Capacidad + [Exportar | Importar | Agregar Empleado] */}
             <div className="flex items-center gap-2.5 flex-nowrap overflow-x-auto pb-1 xl:pb-0">
-              {/* Selector de Tenant para SuperAdmin */}
               {isSuperAdmin && (
                 <TenantSelector
                   tenants={tenants}
@@ -1555,46 +1524,42 @@ export default function Empleados() {
                 />
               )}
 
-              {/* Badge de Capacidad del Tenant */}
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl border bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-sm text-xs font-semibold whitespace-nowrap flex-shrink-0">
-                <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                <span className="text-slate-500 dark:text-slate-400">Capacidad:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl border bg-white border-slate-200 shadow-sm text-xs font-semibold whitespace-nowrap flex-shrink-0">
+                <Users className="w-3.5 h-3.5 text-blue-600" />
+                <span className="text-slate-500">Capacidad:</span>
+                <span className="font-mono font-bold text-slate-900">
                   {empleados.length} / {limiteEmpleados}
                 </span>
                 {empleadosAlcanzado ? (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-600 border border-rose-500/20">
                     LÍMITE ALCANZADO
                   </span>
                 ) : empleadosAlerta80 ? (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20">
                     {porcentajeEmpleados}%
                   </span>
                 ) : null}
               </div>
 
-              {/* Botón Exportar Colaboradores */}
               <button
                 onClick={() => exportarEmpleadosCSV(empleados)}
                 disabled={empleados.length === 0}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-all shadow-sm active:scale-98 disabled:opacity-50 cursor-pointer whitespace-nowrap flex-shrink-0"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition-all shadow-sm active:scale-98 disabled:opacity-50 cursor-pointer whitespace-nowrap flex-shrink-0"
                 title="Exportar todos los colaboradores a CSV"
               >
                 <Download className="w-3.5 h-3.5 text-emerald-500" />
                 <span>Exportar ({empleados.length})</span>
               </button>
 
-              {/* Botón Importar CSV */}
               <button
                 onClick={handleOpenImport}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 dark:bg-slate-800 text-white border border-slate-700 hover:bg-slate-900 transition-all shadow-sm active:scale-98 cursor-pointer whitespace-nowrap flex-shrink-0"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-white border border-slate-700 hover:bg-slate-900 transition-all shadow-sm active:scale-98 cursor-pointer whitespace-nowrap flex-shrink-0"
                 title="Importar colaboradores desde archivo CSV"
               >
                 <Upload className="w-3.5 h-3.5 text-sky-400" />
                 <span>Importar CSV</span>
               </button>
 
-              {/* Botón Agregar Empleado */}
               <button
                 onClick={handleOpenNuevoEmpleado}
                 className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/25 transition-all active:scale-98 cursor-pointer whitespace-nowrap flex-shrink-0"
@@ -1605,23 +1570,20 @@ export default function Empleados() {
             </div>
           </div>
 
-          {/* Toolbar de Filtros y Búsqueda */}
-          <div className="rounded-sm border border-slate-200 dark:border-slate-800 bg-white p-4 shadow-sm  dark:bg-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            {/* Buscador */}
+          <div className="rounded-sm border border-slate-200 bg-white p-4 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar por clave laboral, nombre, ID biométrico, puesto..."
-                className="w-full pl-9 pr-4 py-2 rounded-md border border-slate-200 dark:border-slate-800  bg-[#F8FAFC]  text-xs sm:text-sm text-slate-900 dark:text-white  placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                className="w-full pl-9 pr-4 py-2 rounded-md border border-slate-200 bg-[#F8FAFC] text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500"
               />
             </div>
 
-            {/* Filtros de Estatus */}
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 flex items-center gap-1">
+              <span className="text-xs font-semibold text-slate-400 flex items-center gap-1">
                 <Filter className="w-3.5 h-3.5" /> Estado:
               </span>
               {['todos', 'activo', 'inactivo'].map(val => (
@@ -1631,7 +1593,7 @@ export default function Empleados() {
                   className={`px-3 py-1 rounded text-xs font-semibold capitalize transition-all ${
                     filterActivo === val
                       ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-blue-50 dark:bg-blue-950/60  text-slate-700 dark:text-slate-300  hover:bg-blue-600/25'
+                      : 'bg-blue-50 text-slate-700 hover:bg-blue-100'
                   }`}
                 >
                   {val}
@@ -1641,7 +1603,7 @@ export default function Empleados() {
               <button
                 onClick={fetchEmpleados}
                 disabled={loading}
-                className="p-2 rounded-md border border-slate-200 dark:border-slate-800  text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-white  transition-colors"
+                className="p-2 rounded-md border border-slate-200 text-slate-700 hover:text-slate-900 transition-colors"
                 title="Recargar"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -1649,21 +1611,20 @@ export default function Empleados() {
             </div>
           </div>
 
-          {/* Tabla de Empleados TailAdmin */}
-          <div className="rounded-sm border border-slate-200 dark:border-slate-800 bg-white shadow-sm  dark:bg-white">
+          <div className="rounded-sm border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
               {loading ? (
-                <div className="flex items-center justify-center py-16 gap-2 text-slate-700 dark:text-slate-300 text-sm">
+                <div className="flex items-center justify-center py-16 gap-2 text-slate-700 text-sm">
                   <Spinner size={18} />
                   Cargando colaboradores...
                 </div>
               ) : filtered.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400 dark:text-slate-500">
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
                   <User className="w-10 h-10 stroke-1" />
                   <p className="text-sm font-medium">No se encontraron colaboradores registrados.</p>
                   <button
                     onClick={() => setModalImport(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold text-blue-600 dark:text-blue-400  bg-blue-50 dark:bg-blue-950/60  border border-blue-500/40 "
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-500/40"
                   >
                     <Upload className="w-3.5 h-3.5" />
                     Importar lista desde un CSV
@@ -1672,70 +1633,68 @@ export default function Empleados() {
               ) : (
                 <table className="w-full table-auto">
                   <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-800/60  text-left border-b border-slate-200 dark:border-slate-800 ">
+                    <tr className="bg-slate-50 text-left border-b border-slate-200">
                       {['Clave de Colaborador', 'Colaborador', 'ID Biométrico', 'Tarjeta RFID', 'Departamento', 'Puesto', 'Estatus', 'Acciones'].map(h => (
-                        <th key={h} className="px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 ">
+                        <th key={h} className="px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-slate-700">
                           {h}
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[rgba(3,54,61,0.07)] ">
+                  <tbody className="divide-y divide-[rgba(3,54,61,0.07)]">
                     {paginatedEmpleados.map(emp => (
-                      <tr key={emp.id} className="hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-50 dark:bg-slate-800/60/50 transition-colors">
-                        {/* 1. Clave de Colaborador (Laboral) */}
+                      <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
+                        {/* 1. Clave de Colaborador */}
                         <td className="px-4 py-3.5">
                           {emp.clave_empleado ? (
-                            <span className="inline-flex items-center gap-1.5 font-mono text-xs font-bold px-2.5 py-1 rounded bg-blue-50 dark:bg-blue-950/60  text-slate-900 dark:text-white  border border-slate-200 dark:border-slate-800  shadow-sm">
-                              <BadgeCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                            <span className="inline-flex items-center gap-1.5 font-mono text-xs font-bold px-2.5 py-1 rounded bg-blue-50 text-slate-900 border border-slate-200 shadow-sm">
+                              <BadgeCheck className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
                               {emp.clave_empleado}
                             </span>
                           ) : (
-                            <span className="text-slate-400 dark:text-slate-500 text-xs font-mono">—</span>
+                            <span className="text-slate-400 text-xs font-mono">—</span>
                           )}
                         </td>
 
-                        {/* 2. Colaborador (Nombre, Avatar, Correo) */}
+                        {/* 2. Colaborador */}
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-3">
                             <AvatarCircle empleado={emp} size={36} />
                             <div>
-                              <p className="text-sm font-semibold text-slate-900 dark:text-white  leading-tight">
+                              <p className="text-sm font-semibold text-slate-900 leading-tight">
                                 {emp.nombre} {emp.apellido}
                               </p>
-                              <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                              </div>
                             </div>
                           </div>
                         </td>
 
                         {/* 3. ID Biométrico (Device UserID en Hardware) */}
                         <td className="px-4 py-3.5">
-                          <span className="inline-flex items-center gap-1 font-mono text-xs font-bold px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60  text-blue-600 dark:text-blue-400  border border-blue-500/40 ">
+                          <span className="inline-flex items-center gap-1 font-mono text-xs font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-500/40">
                             <Fingerprint className="w-3 h-3" />
-                            {emp.hikvision_device_userid}
+                            {emp.device_userid}
                           </span>
                         </td>
 
                         {/* 4. Tarjeta RFID */}
                         <td className="px-4 py-3.5">
                           {emp.tarjeta ? (
-                            <span className="inline-flex items-center gap-1 font-mono text-xs text-slate-700 dark:text-slate-300 ">
-                              <CreditCard className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                            <span className="inline-flex items-center gap-1 font-mono text-xs text-slate-700">
+                              <CreditCard className="w-3.5 h-3.5 text-slate-400" />
                               {emp.tarjeta}
                             </span>
                           ) : (
-                            <span className="text-slate-400 dark:text-slate-500 text-xs">—</span>
+                            <span className="text-slate-400 text-xs">—</span>
                           )}
                         </td>
 
                         {/* 5. Departamento */}
-                        <td className="px-4 py-3.5 text-xs sm:text-sm text-slate-700 dark:text-slate-300 ">
+                        <td className="px-4 py-3.5 text-xs sm:text-sm text-slate-700">
                           {emp.departamento || '—'}
                         </td>
 
                         {/* 6. Puesto */}
-                        <td className="px-4 py-3.5 text-xs sm:text-sm text-slate-700 dark:text-slate-300 ">
+                        <td className="px-4 py-3.5 text-xs sm:text-sm text-slate-700">
                           {emp.puesto || '—'}
                         </td>
 
@@ -1749,14 +1708,14 @@ export default function Empleados() {
                           <div className="flex items-center gap-1.5">
                             <button
                               onClick={() => setModalDetalle(emp)}
-                              className="p-1.5 rounded hover:bg-blue-100 dark:bg-blue-900/40 dark:hover:bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:text-blue-400 transition-colors"
+                              className="p-1.5 rounded hover:bg-blue-100 text-slate-700 hover:text-blue-600 transition-colors"
                               title="Ver Ficha Completa"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => setModalForm(emp)}
-                              className="p-1.5 rounded hover:bg-blue-100 dark:bg-blue-900/40 dark:hover:bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:text-sky-600 transition-colors"
+                              className="p-1.5 rounded hover:bg-blue-100 text-slate-700 hover:text-sky-600 transition-colors"
                               title="Editar"
                             >
                               <Edit3 className="w-4 h-4" />
@@ -1764,7 +1723,7 @@ export default function Empleados() {
                             {!emp.activo && (
                               <button
                                 onClick={() => handleReactivate(emp)}
-                                className="p-1.5 rounded hover:bg-green-100 dark:bg-green-900/40 dark:hover:bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:text-green-600 transition-colors"
+                                className="p-1.5 rounded hover:bg-green-100 text-slate-700 hover:text-green-600 transition-colors"
                                 title="Reactivar"
                               >
                                 <RefreshCw className="w-4 h-4" />
@@ -1772,7 +1731,7 @@ export default function Empleados() {
                             )}
                             <button
                               onClick={() => handleDelete(emp)}
-                              className="p-1.5 rounded hover:bg-red-100 dark:bg-red-900/40 dark:hover:bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:text-red-600 transition-colors"
+                              className="p-1.5 rounded hover:bg-red-100 text-slate-700 hover:text-red-600 transition-colors"
                               title={emp.activo ? 'Eliminar / Dar de Baja' : 'Eliminar Definitivamente'}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1786,7 +1745,6 @@ export default function Empleados() {
               )}
             </div>
             
-            {/* Controles de Paginación Global */}
             {!loading && (
               <PaginationControl
                 currentPage={currentPage}
@@ -1800,11 +1758,9 @@ export default function Empleados() {
               />
             )}
           </div>
-
         </main>
       </div>
 
-      {/* ── Modales ─────────────────────────────────────────── */}
       {modalForm && (
         <ModalForm
           empleado={modalForm === 'nuevo' ? null : modalForm}
@@ -1832,7 +1788,6 @@ export default function Empleados() {
         />
       )}
 
-
       {modalImport && (
         <ModalImportCSV
           clienteId={currentTenantId}
@@ -1847,9 +1802,3 @@ export default function Empleados() {
     </div>
   )
 }
-
-
-
-
-
-
