@@ -25,11 +25,13 @@ import {
 
 // ─── Configuración de Badges Semánticos ─────────────────────────
 const TIPO_BADGE = {
-  entrada:         { label: 'Entrada',    cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',  dot: 'bg-emerald-500' },
-  salida:          { label: 'Salida',     cls: 'bg-rose-500/10    text-rose-600    dark:text-rose-400    border-rose-500/20',     dot: 'bg-rose-500'    },
-  descanso_inicio: { label: 'Descanso ↓', cls: 'bg-amber-500/10   text-amber-600   dark:text-amber-400   border-amber-500/20',    dot: 'bg-amber-500'   },
-  descanso_fin:    { label: 'Descanso ↑', cls: 'bg-sky-500/10     text-sky-600     dark:text-sky-400     border-sky-500/20',      dot: 'bg-sky-500'     },
-  extra:           { label: 'Extra',      cls: 'bg-violet-500/10  text-violet-600  dark:text-violet-400  border-violet-500/20',   dot: 'bg-violet-500'  },
+  entrada:         { label: 'Entrada',     cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',  dot: 'bg-emerald-500' },
+  salida:          { label: 'Salida',      cls: 'bg-rose-500/10    text-rose-600    dark:text-rose-400    border-rose-500/20',     dot: 'bg-rose-500'    },
+  descanso_inicio: { label: 'Descanso ↓',  cls: 'bg-amber-500/10   text-amber-600   dark:text-amber-400   border-amber-500/20',    dot: 'bg-amber-500'   },
+  descanso_fin:    { label: 'Descanso ↑',  cls: 'bg-sky-500/10     text-sky-600     dark:text-sky-400     border-sky-500/20',      dot: 'bg-sky-500'     },
+  inicio_extra:    { label: 'Extra ↓',     cls: 'bg-violet-500/10  text-violet-600  dark:text-violet-400  border-violet-500/20',   dot: 'bg-violet-500'  },
+  fin_extra:       { label: 'Extra ↑',     cls: 'bg-purple-500/10  text-purple-600  dark:text-purple-400  border-purple-500/20',   dot: 'bg-purple-500'  },
+  extra:           { label: 'Extra',       cls: 'bg-violet-500/10  text-violet-600  dark:text-violet-400  border-violet-500/20',   dot: 'bg-violet-500'  },
 }
 
 const METODO_CONFIG = {
@@ -187,7 +189,7 @@ function AnalyticsChart({ marcajes }) {
           </p>
         </div>
         <span className="self-start sm:self-auto px-2.5 py-1 text-xs font-semibold rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/40">
-          Terminales Hikvision ISUP 5.0
+          Terminales Conectadas
         </span>
       </div>
 
@@ -335,7 +337,7 @@ function RealtimeTable({ marcajes, newFlash, loadingInit }) {
             Últimos Marcajes en Tiempo Real
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Recepción instantánea de eventos ISUP 5.0 con notificación visual
+            Recepción instantánea de eventos con notificación visual
           </p>
         </div>
 
@@ -381,6 +383,7 @@ function RealtimeTable({ marcajes, newFlash, loadingInit }) {
                 const nombre  = m.empleados ? `${m.empleados.nombre} ${m.empleados.apellido}` : 'Desconocido'
                 const avatar  = m.empleados?.avatar_url
                 const initials = m.empleados ? `${m.empleados.nombre[0]}${m.empleados.apellido[0]}` : '?'
+                const ubicacion = m.devices?.location || m.devices?.name || null
 
                 return (
                   <tr
@@ -429,12 +432,12 @@ function RealtimeTable({ marcajes, newFlash, loadingInit }) {
                       <MethodBadge metodo={m.metodo} />
                     </td>
 
-                    {/* Ubicación */}
+                    {/* Ubicación / Dispositivo */}
                     <td className="px-4 py-3.5 text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                      {m.dispositivos?.nombre_ubicacion ? (
+                      {ubicacion ? (
                         <span className="flex items-center gap-1.5">
                           <MapPinIcon size={16} className="text-blue-500 flex-shrink-0" />
-                          {m.dispositivos.nombre_ubicacion}
+                          {ubicacion}
                         </span>
                       ) : (
                         <span className="text-slate-400">—</span>
@@ -601,18 +604,18 @@ export default function Dashboard() {
     ] = await Promise.all([
       supabase.from('empleados').select('*', { count: 'exact', head: true }).eq('activo', true),
       supabase.from('empleados').select('*', { count: 'exact', head: true }).eq('activo', false),
-      supabase.from('dispositivos').select('*', { count: 'exact', head: true }).eq('estatus', 'activo'),
+      supabase.from('devices').select('*', { count: 'exact', head: true }).eq('is_active', true),
       supabase.from('registro_asistencia').select('*', { count: 'exact', head: true }).gte('verificado_at', today.toISOString()),
       supabase
         .from('registro_asistencia')
         .select('*', { count: 'exact', head: true })
         .gte('verificado_at', today.toISOString())
-        .in('tipo_verificacion', ['extra', 'descanso_inicio', 'descanso_fin']),
+        .in('tipo_verificacion', ['extra', 'inicio_extra', 'fin_extra', 'descanso_inicio', 'descanso_fin']),
       supabase
         .from('registro_asistencia')
         .select(`id, verificado_at, tipo_verificacion, metodo,
                  empleados(nombre, apellido, avatar_url),
-                 dispositivos(nombre_ubicacion)`)
+                 devices(name, location)`)
         .order('verificado_at', { ascending: false })
         .limit(50),
     ])
@@ -642,7 +645,7 @@ export default function Dashboard() {
             .from('registro_asistencia')
             .select(`id, verificado_at, tipo_verificacion, metodo,
                      empleados(nombre, apellido, avatar_url),
-                     dispositivos(nombre_ubicacion)`)
+                     devices(name, location)`)
             .eq('id', payload.new.id)
             .single()
 
@@ -651,7 +654,7 @@ export default function Dashboard() {
             setStats(prev => ({
               ...prev,
               hoy: prev.hoy + 1,
-              incidencias: ['extra', 'descanso_inicio', 'descanso_fin'].includes(data.tipo_verificacion)
+              incidencias: ['extra', 'inicio_extra', 'fin_extra', 'descanso_inicio', 'descanso_fin'].includes(data.tipo_verificacion)
                 ? prev.incidencias + 1
                 : prev.incidencias,
             }))
@@ -701,7 +704,7 @@ export default function Dashboard() {
             <StatCard
               label="Empleados Activos"
               value={stats.empleados}
-              sub="Habilitados en terminales Hikvision"
+              sub="Habilitados en terminales biométricas"
               icon={UsersIcon}
               trend="100%"
               up={true}
@@ -712,7 +715,7 @@ export default function Dashboard() {
             <StatCard
               label="Biométricos Conectados"
               value={stats.dispositivos}
-              sub="Dispositivos ISUP 5.0 sincronizados"
+              sub="Terminales activas sincronizadas"
               icon={CpuIcon}
               trend="Online"
               up={true}
