@@ -879,11 +879,11 @@ export const biometricsService = {
     ;(empleados || []).forEach(
       emp => {
         if (
-          emp.hikvision_device_userid
+          emp.device_userid
         ) {
           employeeMap[
             String(
-              emp.hikvision_device_userid
+              emp.device_userid
             )
           ] = emp
         }
@@ -1037,7 +1037,7 @@ export const biometricsService = {
 
                   clave:
                     emp.clave_empleado ||
-                    emp.hikvision_device_userid ||
+                    emp.device_userid ||
                     log.user_id,
 
                   avatar_url:
@@ -1963,7 +1963,7 @@ export const biometricsService = {
     } = await supabase
       .from('empleados')
       .select(
-        'id, nombre, apellido, clave_empleado, activo, cliente_id, avatar_url, departamento, hikvision_device_userid'
+        'id, nombre, apellido, clave_empleado, activo, cliente_id, avatar_url, departamento, device_userid'
       )
       .in(
         'cliente_id',
