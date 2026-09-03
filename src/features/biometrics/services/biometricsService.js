@@ -383,6 +383,37 @@ export const biometricsService = {
       })
     }
 
+    // Cargar estadísticas de sincronización por dispositivo
+    try {
+      const { data: assignments } = await supabase
+        .from('device_employee_assignments')
+        .select('device_id, sync_status, activo')
+        .eq('cliente_id', clienteId)
+        .eq('activo', true)
+
+      const assignmentMap = {}
+      ;(assignments || []).forEach(a => {
+        if (!assignmentMap[a.device_id]) {
+          assignmentMap[a.device_id] = { total: 0, synced: 0, pending: 0, error: 0 }
+        }
+        assignmentMap[a.device_id].total += 1
+        if (a.sync_status === 'SYNCED') {
+          assignmentMap[a.device_id].synced += 1
+        } else if (a.sync_status === 'ERROR') {
+          assignmentMap[a.device_id].error += 1
+        } else {
+          assignmentMap[a.device_id].pending += 1
+        }
+      })
+
+      list = list.map(device => ({
+        ...device,
+        syncStats: assignmentMap[device.id] || { total: 0, synced: 0, pending: 0, error: 0 }
+      }))
+    } catch (e) {
+      console.warn('[biometricsService.getDevices] No se pudieron cargar syncStats:', e)
+    }
+
     return list
   },
 

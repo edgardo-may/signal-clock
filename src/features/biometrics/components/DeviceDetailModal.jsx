@@ -18,6 +18,7 @@ import {
   Utensils,
   UserCheck,
   ShieldCheck,
+  RefreshCw,
 } from 'lucide-react'
 
 const TYPE_CONFIG = {
@@ -29,8 +30,8 @@ const TYPE_CONFIG = {
   acceso: { label: 'Control de Acceso', icon: ShieldCheck, badge: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' },
 }
 
-export default function DeviceDetailModal({ device, onClose, onOpenSendCommand }) {
-  const [activeTab, setActiveTab] = useState('info') // 'info' | 'commands' | 'logs'
+export default function DeviceDetailModal({ device, onClose, onOpenSendCommand, onSyncEmployees, onSyncTime }) {
+  const [activeTab, setActiveTab] = useState('info') // 'info' | 'colaboradores' | 'commands' | 'logs'
 
   if (!device) return null
 
@@ -50,6 +51,27 @@ export default function DeviceDetailModal({ device, onClose, onOpenSendCommand }
 
   const typeInfo = TYPE_CONFIG[device.device_type] || TYPE_CONFIG.general
   const TypeIcon = typeInfo.icon
+
+  const targetTz = device.timezone || 'America/Cancun'
+  let expectedTimeFormatted = '—'
+  try {
+    expectedTimeFormatted = new Intl.DateTimeFormat('es-MX', {
+      timeZone: targetTz,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).format(new Date())
+  } catch {
+    expectedTimeFormatted = '—'
+  }
+
+  const syncStats = device.syncStats || {
+    total: device.assignedEmployees?.length || 0,
+    synced: (device.assignedEmployees || []).filter(a => a.sync_status === 'SYNCED').length,
+    pending: (device.assignedEmployees || []).filter(a => a.sync_status === 'PENDING' || a.sync_status === 'SYNCING').length,
+    error: (device.assignedEmployees || []).filter(a => a.sync_status === 'ERROR').length
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
@@ -188,13 +210,28 @@ export default function DeviceDetailModal({ device, onClose, onOpenSendCommand }
                   </p>
                 </div>
 
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1">
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5 text-blue-500" />
-                    Zona Horaria Configurada
-                  </span>
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-blue-500" />
+                      Zona Horaria & Hora
+                    </span>
+                    {onSyncTime && (
+                      <button
+                        onClick={() => onSyncTime(device)}
+                        className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                        title="Emitir comando SET OPTIONS DateTime/TimeZone al ZKTeco"
+                      >
+                        <Clock className="w-3 h-3" />
+                        Sincronizar hora
+                      </button>
+                    )}
+                  </div>
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                    {device.timezone || 'America/Mexico_City'}
+                    {targetTz}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Hora esperada: <strong className="text-slate-800 dark:text-slate-200 font-mono">{expectedTimeFormatted}</strong>
                   </p>
                 </div>
 
@@ -258,7 +295,39 @@ export default function DeviceDetailModal({ device, onClose, onOpenSendCommand }
           )}
 
           {activeTab === 'colaboradores' && (
-            <div className="space-y-3">
+            <div className="space-y-4">
+              {/* Resumen de Sincronización y Acción */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center w-full sm:w-auto">
+                  <div className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Total</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white">{syncStats.total}</span>
+                  </div>
+                  <div className="px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/40">
+                    <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 block">Sync</span>
+                    <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{syncStats.synced}</span>
+                  </div>
+                  <div className="px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/40">
+                    <span className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 block">Pendiente</span>
+                    <span className="text-sm font-bold text-amber-700 dark:text-amber-300">{syncStats.pending}</span>
+                  </div>
+                  <div className="px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/40">
+                    <span className="text-[10px] uppercase font-bold text-rose-600 dark:text-rose-400 block">Error</span>
+                    <span className="text-sm font-bold text-rose-700 dark:text-rose-300">{syncStats.error}</span>
+                  </div>
+                </div>
+
+                {onSyncEmployees && (
+                  <button
+                    onClick={() => onSyncEmployees(device)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer transition-all"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Sincronizar colaboradores
+                  </button>
+                )}
+              </div>
+
               {(!device.assignedEmployees || device.assignedEmployees.length === 0) ? (
                 <div className="p-8 text-center text-xs text-slate-500">
                   No hay colaboradores asignados a esta terminal.

@@ -9,6 +9,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import toast from 'react-hot-toast'
+import { supabase } from '../../../lib/supabase'
+import { syncService } from '../services/syncService'
 
 import {
   enrollmentService,
@@ -51,6 +53,12 @@ export function useFingerEnrollment(empleadoId, clienteId) {
 
   const [loading, setLoading] = useState(false)
 
+  // Estado de sincronización del colaborador con la terminal seleccionada
+  // 'SYNCED' | 'NOT_SYNCED' | 'PENDING' | 'SYNCING' | 'ERROR' | null
+  const [deviceSyncStatus, setDeviceSyncStatus] = useState(null)
+  const [checkingSync, setCheckingSync] = useState(false)
+  const [syncingEmployee, setSyncingEmployee] = useState(false)
+
   // Datos del empleado
   const [empleadoData, setEmpleadoData] = useState(null)
 
@@ -73,6 +81,103 @@ export function useFingerEnrollment(empleadoId, clienteId) {
     },
     []
   )
+
+  // Verificar estado de asignación / sincronización para el device y empleado
+  const checkSyncStatus = useCallback(
+    async (devId, empId) => {
+      if (!devId || !empId || !clienteId) {
+        setDeviceSyncStatus(null)
+        return
+      }
+
+      setCheckingSync(true)
+      try {
+        const { data: ass, error } = await supabase
+          .from('device_employee_assignments')
+          .select('sync_status, biometric_user_id, activo')
+          .eq('device_id', devId)
+          .eq('employee_id', empId)
+          .eq('cliente_id', clienteId)
+          .maybeSingle()
+
+        if (error) {
+          console.error('[useFingerEnrollment] Error consultando sync status:', error)
+          setDeviceSyncStatus('NOT_SYNCED')
+          return
+        }
+
+        if (!ass || !ass.activo) {
+          setDeviceSyncStatus('NOT_SYNCED')
+        } else {
+          setDeviceSyncStatus(ass.sync_status || 'NOT_SYNCED')
+        }
+      } catch (err) {
+        console.error('[useFingerEnrollment] Error en checkSyncStatus:', err)
+        setDeviceSyncStatus('NOT_SYNCED')
+      } finally {
+        setCheckingSync(false)
+      }
+    },
+    [clienteId]
+  )
+
+  // Disparar sincronización inmediata de este colaborador hacia la terminal seleccionada
+  const handleSyncEmployeeNow = useCallback(async () => {
+    if (!selectedDeviceId || !selectedDeviceSerial || !empleadoId || !empleadoData) {
+      toast.error('Selecciona una terminal activa para sincronizar.')
+      return
+    }
+
+    const pin = empleadoData.device_userid
+    if (!pin || !/^\d+$/.test(String(pin).trim())) {
+      toast.error('El colaborador no cuenta con un device_userid numérico asignado.')
+      return
+    }
+
+    setSyncingEmployee(true)
+    try {
+      await syncService.syncSingleEmployeeToDevice({
+        clienteId,
+        deviceId: selectedDeviceId,
+        deviceSerial: selectedDeviceSerial,
+        employeeId,
+        pin: String(pin).trim(),
+        fullName: empleadoData.nombreCompleto
+      })
+
+      toast.success('Comando de sincronización encolado para la terminal.')
+      setDeviceSyncStatus('PENDING')
+
+      // Sondeo periódico para detectar confirmación de la terminal
+      let attempts = 0
+      const pollInterval = setInterval(async () => {
+        attempts += 1
+        const { data: updated } = await supabase
+          .from('device_employee_assignments')
+          .select('sync_status')
+          .eq('device_id', selectedDeviceId)
+          .eq('employee_id', empleadoId)
+          .maybeSingle()
+
+        if (updated?.sync_status === 'SYNCED') {
+          setDeviceSyncStatus('SYNCED')
+          toast.success('¡Colaborador confirmado en la terminal! Ya puedes enrolar.')
+          clearInterval(pollInterval)
+        } else if (updated?.sync_status === 'ERROR' || attempts >= 10) {
+          clearInterval(pollInterval)
+          if (updated?.sync_status === 'ERROR') {
+            setDeviceSyncStatus('ERROR')
+            toast.error('La terminal reportó un error al sincronizar al colaborador.')
+          }
+        }
+      }, 3000)
+    } catch (err) {
+      console.error('[useFingerEnrollment] Error sincronizando colaborador:', err)
+      toast.error('Error al sincronizar: ' + err.message)
+    } finally {
+      setSyncingEmployee(false)
+    }
+  }, [clienteId, selectedDeviceId, selectedDeviceSerial, empleadoId, empleadoData])
 
   // ─────────────────────────────────────────────────────────────────────────
   // CARGA INICIAL
@@ -477,6 +582,14 @@ export function useFingerEnrollment(empleadoId, clienteId) {
         return
       }
 
+      if (deviceSyncStatus !== 'SYNCED') {
+        toast.error(
+          'Este colaborador aún no está sincronizado con esta terminal. Pulsa "Sincronizar ahora" antes de enrolar.'
+        )
+
+        return
+      }
+
       // ───────────────────────────────────────────────────────────────────
       // IDENTIFICADOR DEL USUARIO EN ZKTECO
       //
@@ -713,27 +826,31 @@ export function useFingerEnrollment(empleadoId, clienteId) {
   // CAMBIAR DEVICE
   // ─────────────────────────────────────────────────────────────────────────
 
-  const handleSetSelectedDevice =
-    useCallback(deviceId => {
-      setSelectedDeviceId(
-        deviceId || ''
-      )
+  const handleSetSelectedDevice = useCallback((deviceId) => {
+    setSelectedDeviceId(deviceId || '')
+    const device = devices.find(d => String(d.id) === String(deviceId))
+    if (device) {
+      setSelectedDeviceSerial(device.serial_number || '')
+    } else {
+      setSelectedDeviceSerial('')
+    }
+    if (deviceId && empleadoId) {
+      checkSyncStatus(deviceId, empleadoId)
+    }
+  }, [devices, empleadoId, checkSyncStatus])
 
-      const device =
-        devices.find(
-          d =>
-            String(d.id) ===
-            String(deviceId)
-        )
-
-      if (device) {
-        setSelectedDeviceSerial(
-          device.serial_number || ''
-        )
-      } else {
-        setSelectedDeviceSerial('')
+  const handleSetSelectedDeviceSerial = useCallback((serial) => {
+    setSelectedDeviceSerial(serial || '')
+    const device = devices.find(d => (d.serial_number || d.device_serial || d.numero_serie) === serial)
+    if (device) {
+      setSelectedDeviceId(device.id || '')
+      if (device.id && empleadoId) {
+        checkSyncStatus(device.id, empleadoId)
       }
-    }, [devices])
+    } else {
+      setSelectedDeviceId('')
+    }
+  }, [devices, empleadoId, checkSyncStatus])
 
   // ─────────────────────────────────────────────────────────────────────────
   // RETURN
@@ -742,26 +859,25 @@ export function useFingerEnrollment(empleadoId, clienteId) {
   return {
     // Huellas
     fingerStates,
-
     selectedFinger,
-
     selectFinger,
-
     requestEnrollment,
-
     retryFinger,
 
     // Devices ZKTeco
     devices,
-
     selectedDeviceId,
-
-    setSelectedDeviceId:
-      handleSetSelectedDevice,
-
+    setSelectedDeviceId: handleSetSelectedDevice,
     selectedDeviceSerial,
+    setSelectedDeviceSerial: handleSetSelectedDeviceSerial,
 
-    setSelectedDeviceSerial,
+    // Estado de Sincronización con la Terminal
+    deviceSyncStatus,
+    isDeviceSynced: deviceSyncStatus === 'SYNCED',
+    checkingSync,
+    syncingEmployee,
+    handleSyncEmployeeNow,
+    checkSyncStatus,
 
     // Estado
     loading,

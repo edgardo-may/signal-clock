@@ -1,5 +1,6 @@
 // src/features/biometrics/hooks/useBiometrics.js
 import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '../../../lib/supabase'
 import { biometricsService } from '../services/biometricsService'
 import toast from 'react-hot-toast'
 
@@ -250,25 +251,54 @@ const loadDevices = useCallback(async () => {
 
   const handleOpenDeviceDetail = async (device) => {
     try {
-      const fullDetail = await biometricsService.getDeviceById(device.id)
-      // Cargar también asignados al dispositivo
-      const assignResponse = await biometricsService.getEmployeesSync(currentTenantId)
-      const assigned = assignResponse.assignments
-        .filter(a => a.device_id === device.id && a.activo)
-        .map(a => {
-          const emp = assignResponse.employees.find(e => e.id === a.employee_id)
-          return {
-            ...a,
-            empleado: emp ? `${emp.nombre} ${emp.apellido}` : 'Desconocido',
-            clave: emp?.clave_empleado || '—'
-          }
-        })
+      const fullDetail = await biometricsService.getDeviceById(device.id, currentTenantId)
+
+      // Cargar asignaciones reales desde device_employee_assignments con datos de empleados
+      const { data: assignments } = await supabase
+        .from('device_employee_assignments')
+        .select(`
+          id,
+          device_id,
+          employee_id,
+          biometric_user_id,
+          sync_status,
+          activo,
+          last_attempt_at,
+          last_synced_at,
+          last_error,
+          empleados (
+            id,
+            nombre,
+            apellido,
+            device_userid
+          )
+        `)
+        .eq('device_id', device.id)
+        .eq('cliente_id', currentTenantId)
+        .eq('activo', true)
+
+      const assigned = (assignments || []).map(a => ({
+        ...a,
+        empleado: a.empleados ? `${a.empleados.nombre || ''} ${a.empleados.apellido || ''}`.trim() : 'Desconocido',
+        device_userid: a.biometric_user_id || a.empleados?.device_userid || '—'
+      }))
+
+      const synced = assigned.filter(a => a.sync_status === 'SYNCED').length
+      const pending = assigned.filter(a => a.sync_status === 'PENDING' || a.sync_status === 'SYNCING').length
+      const error = assigned.filter(a => a.sync_status === 'ERROR').length
 
       setDeviceDetailModal({
         ...fullDetail,
+        syncStats: {
+          total: assigned.length,
+          synced,
+          pending,
+          error
+        },
         assignedEmployees: assigned
       })
     } catch (err) {
+      console.error('[useBiometrics] Error cargando detalle de terminal:', err)
       setDeviceDetailModal(device)
     }
   }

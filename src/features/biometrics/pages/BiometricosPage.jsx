@@ -115,6 +115,42 @@ export default function BiometricosPage({ forcedSubview }) {
     handleSyncAssignmentNow
   } = useBiometrics(currentTenantId)
 
+  // ── Sincronización de Terminales ZKTeco (Colaboradores y Hora) ────────────
+
+  const handleSyncEmployeesForDevice = async (device) => {
+    if (!device?.serial_number || !device?.id) return
+    try {
+      toast.loading('Sincronizando colaboradores con la terminal...', { id: 'sync-emp' })
+      const res = await syncService.syncAllEmployeesToDevice({
+        clienteId: currentTenantId,
+        deviceSerial: device.serial_number,
+        deviceId: device.id
+      })
+      toast.success(`Se encolaron ${res.total} colaboradores para sincronizar con ${device.name || device.serial_number}`, { id: 'sync-emp' })
+      refreshCurrentTab()
+    } catch (err) {
+      console.error('[BiometricosPage] Error sincronizando colaboradores:', err)
+      toast.error('Error al sincronizar colaboradores: ' + err.message, { id: 'sync-emp' })
+    }
+  }
+
+  const handleSyncTimeForDevice = async (device) => {
+    if (!device?.serial_number) return
+    const targetTz = device.timezone || currentTenant?.timezone || 'America/Cancun'
+    try {
+      toast.loading('Sincronizando fecha y hora física con la terminal...', { id: 'sync-time' })
+      const res = await syncService.syncDeviceTime({
+        deviceSerial: device.serial_number,
+        timezone: targetTz
+      })
+      toast.success(`Comando de sincronización de hora encolado (Zona: ${targetTz}, Offset: ${res.tzOffset}h)`, { id: 'sync-time' })
+      refreshCurrentTab()
+    } catch (err) {
+      console.error('[BiometricosPage] Error sincronizando hora:', err)
+      toast.error('Error al sincronizar hora: ' + err.message, { id: 'sync-time' })
+    }
+  }
+
   const [deviceToDelete, setDeviceToDelete] = useState(null)
 
   const confirmDeleteDevice = async () => {
@@ -338,6 +374,8 @@ export default function BiometricosPage({ forcedSubview }) {
                 onOpenSendCommand={(data) => setSendCommandModal(data)}
                 onDeleteDevice={(dev) => setDeviceToDelete(dev)}
                 onRefresh={refreshCurrentTab}
+                onSyncEmployees={handleSyncEmployeesForDevice}
+                onSyncTime={handleSyncTimeForDevice}
               />
             )}
 
@@ -443,6 +481,8 @@ export default function BiometricosPage({ forcedSubview }) {
             setDeviceDetailModal(null)
             setSendCommandModal(data)
           }}
+          onSyncEmployees={handleSyncEmployeesForDevice}
+          onSyncTime={handleSyncTimeForDevice}
         />
       )}
 

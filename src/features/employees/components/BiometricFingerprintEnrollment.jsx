@@ -7,6 +7,9 @@ import {
   Info,
   AlertCircle,
   Fingerprint,
+  UserCheck,
+  Clock,
+  CheckCircle2,
 } from "lucide-react";
 import { useFingerEnrollment } from "../../biometrics/hooks/useFingerEnrollment";
 import { FINGER_DISPLAY_NAMES } from "../../biometrics/services/enrollmentService";
@@ -114,9 +117,18 @@ export default function BiometricFingerprintEnrollment({
     requestEnrollment,
     retryFinger,
     devices,
+    selectedDeviceId,
+    setSelectedDeviceId,
     selectedDeviceSerial,
     setSelectedDeviceSerial,
     loading,
+    empleadoData,
+    deviceSyncStatus,
+    isDeviceSynced,
+    checkingSync,
+    syncingEmployee,
+    handleSyncEmployeeNow,
+    checkSyncStatus,
   } = useFingerEnrollment(empleadoId, clienteId);
 
   const enrolledCount = Object.values(fingerStates).filter(
@@ -262,6 +274,92 @@ export default function BiometricFingerprintEnrollment({
           </p>
         )}
 
+        {/* ── Banner de Sincronización con la Terminal ────────────────────── */}
+        {selectedDeviceSerial && (
+          <div className="rounded-lg text-xs overflow-hidden">
+            {checkingSync ? (
+              <div className="p-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 rounded-lg flex items-center gap-2 text-slate-500">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                <span>Verificando sincronización del colaborador con la terminal...</span>
+              </div>
+            ) : deviceSyncStatus === 'SYNCED' ? (
+              <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-lg flex items-center justify-between text-emerald-800 dark:text-emerald-300">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                  <span>Sincronizado en la terminal (PIN: {empleadoData?.device_userid || '—'})</span>
+                </div>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-100 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded">
+                  Listo para enrolar
+                </span>
+              </div>
+            ) : deviceSyncStatus === 'PENDING' ? (
+              <div className="p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-lg flex items-center justify-between gap-2 text-amber-800 dark:text-amber-300">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <Clock className="w-3.5 h-3.5 animate-pulse text-amber-600 flex-shrink-0" />
+                  <span>Sincronización pendiente con la terminal...</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => checkSyncStatus(selectedDeviceId, empleadoId)}
+                  className="text-[11px] underline font-semibold hover:text-amber-900 dark:hover:text-amber-200 cursor-pointer"
+                >
+                  Consultar estado
+                </button>
+              </div>
+            ) : deviceSyncStatus === 'SYNCING' ? (
+              <div className="p-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/40 rounded-lg flex items-center gap-2 text-blue-800 dark:text-blue-300 font-medium">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600 flex-shrink-0" />
+                <span>Sincronizando colaborador con la terminal...</span>
+              </div>
+            ) : deviceSyncStatus === 'ERROR' ? (
+              <div className="p-2.5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 rounded-lg flex items-center justify-between gap-2 text-rose-800 dark:text-rose-300">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
+                  <span>Error de sincronización</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSyncEmployeeNow}
+                  disabled={syncingEmployee}
+                  className="px-2 py-1 rounded bg-rose-600 text-white text-[11px] font-bold hover:bg-rose-700 disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                >
+                  {syncingEmployee ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      Reintentando...
+                    </>
+                  ) : (
+                    'Reintentar sincronización'
+                  )}
+                </button>
+              </div>
+            ) : (
+              // NOT_SYNCED
+              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-lg flex items-center justify-between gap-2 text-amber-900 dark:text-amber-200">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                  <span>Este colaborador aún no está sincronizado con esta terminal.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSyncEmployeeNow}
+                  disabled={syncingEmployee}
+                  className="px-2.5 py-1 rounded bg-indigo-600 text-white text-[11px] font-bold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1 flex-shrink-0 cursor-pointer shadow-sm"
+                >
+                  {syncingEmployee ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      Sincronizando...
+                    </>
+                  ) : (
+                    'Sincronizar ahora'
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Monitor className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
@@ -269,16 +367,20 @@ export default function BiometricFingerprintEnrollment({
               value={selectedDeviceSerial}
               onChange={(e) => setSelectedDeviceSerial(e.target.value)}
               disabled={isEnrolling}
-              className="w-full pl-8 pr-2 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
+              className="w-full pl-8 pr-2 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50 cursor-pointer"
             >
               {devices.length === 0 && (
                 <option value="">Sin terminales activas</option>
               )}
-              {devices.map((d) => (
-                <option key={d.numero_serie} value={d.numero_serie}>
-                  {d.nombre_ubicacion || d.numero_serie}
-                </option>
-              ))}
+              {devices.map((d) => {
+                const serial = d.serial_number || d.device_serial || d.numero_serie;
+                const label = d.name || d.nombre || d.nombre_ubicacion || serial;
+                return (
+                  <option key={d.id || serial} value={serial}>
+                    {label} ({serial})
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -287,9 +389,15 @@ export default function BiometricFingerprintEnrollment({
             disabled={
               !selectedFinger ||
               isEnrolling ||
-              !selectedDeviceSerial
+              !selectedDeviceSerial ||
+              !isDeviceSynced
             }
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 dark:disabled:bg-slate-700 disabled:text-slate-400 dark:disabled:text-slate-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-sm disabled:shadow-none"
+            title={
+              !isDeviceSynced
+                ? "Debes sincronizar el colaborador con esta terminal antes de enrolar"
+                : undefined
+            }
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 dark:disabled:bg-slate-700 disabled:text-slate-400 dark:disabled:text-slate-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-sm disabled:shadow-none cursor-pointer disabled:cursor-not-allowed"
           >
             {isEnrolling ? (
               <>
