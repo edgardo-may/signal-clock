@@ -1209,7 +1209,7 @@ export default function Empleados() {
 
   const { confirmDialog, ConfirmDialogNode } = useConfirm()
 
-  const handleDelete = async (empleado) => {
+const handleDelete = async (empleado) => {
     try {
       const { data: res, error } = await supabase.rpc('fn_employee_lifecycle', {
         p_empleado_id: empleado.id,
@@ -1234,14 +1234,14 @@ export default function Empleados() {
         const count = res?.count || 1
         await confirmDialog({
           title: 'Operación Bloqueada',
-          message: `Este empleado tiene ${count} turno(s) asignado(s) o agendado(s) en el futuro. Debes retirar o finalizar sus asignaciones en el módulo de turnos antes de poder eliminarlo o darlo de baja.`,
+          message: `Este empleado tiene ${count} turno(s) asignado(s) o agendado(s) en el futuro. Debes retirar o finalizar sus asignaciones en el módulo de turnos antes de poder darlo de baja o eliminarlo.`,
           variant: 'warning',
           confirmLabel: 'Entendido'
         })
         return
       }
 
-      if (status === 'CAN_DEACTIVATE') {
+      if (status === 'CAN_DEACTIVATE' || status === 'DEVICE_REMOVAL_REQUIRED') {
         const attCount = res?.attendance_count || 0
         const incCount = res?.incidents_count || 0
         const devCount = res?.devices_count || 0
@@ -1249,50 +1249,42 @@ export default function Empleados() {
         let details = ''
         if (attCount > 0) details += `- ${attCount} registro(s) de asistencia\n`
         if (incCount > 0) details += `- ${incCount} incidencia(s)\n`
-        if (devCount > 0) details += `- ${devCount} asignación(es) en terminales biométricas\n`
+        if (devCount > 0) details += `- ${devCount} terminal(es) biométrica(s) vinculada(s)\n`
 
         const okSoft = await confirmDialog({
-          title: 'Baja Laboral',
-          message: `Se encontraron:\n${details}\nEl colaborador dejará de poder registrar checadas en los dispositivos asignados. Su PIN, enrolamientos e historial serán conservados para un posible reingreso.`,
+          title: 'Baja Laboral y Retiro Biométrico',
+          message: `Se detectaron:\n${details || '- Empleado activo en el sistema\n'}\nSe dará de baja al colaborador y se enviará la orden inmediata para borrarlo de las terminales físicas. Su historial y plantillas biométricas quedarán respaldadas para un futuro reingreso.`,
           variant: 'warning',
-          confirmLabel: 'Confirmar Baja Laboral'
+          confirmLabel: 'Confirmar Baja y Desvincular Relojes'
         })
         
         if (okSoft) {
-          const { data: deactRes, error: deactErr } = await supabase.rpc('fn_employee_lifecycle', {
-            p_empleado_id: empleado.id,
-            p_action: 'DEACTIVATE'
-          })
-          if (deactErr) throw deactErr
-          if (deactRes?.status === 'ERROR') throw new Error(deactRes.message)
-          
-          toast.success(`${empleado.nombre} ha sido dado de baja`)
-          fetchEmpleados()
-          refreshLimits()
-        }
-        return
-      }
+          const toastId = toast.loading('Procesando baja y comunicando con checadores...')
+          try {
+            // 1. Ejecutar cambio de estado en la base de datos
+            const { data: deactRes, error: deactErr } = await supabase.rpc('fn_employee_lifecycle', {
+              p_empleado_id: empleado.id,
+              p_action: 'DEACTIVATE'
+            })
+            if (deactErr) throw deactErr
+            if (deactRes?.status === 'ERROR') throw new Error(deactRes.message)
 
-      if (status === 'DEVICE_REMOVAL_REQUIRED') {
-        const devCount = res?.devices_count || 0
-        const okSoft = await confirmDialog({
-          title: 'Retiro Físico Requerido',
-          message: `Este colaborador no tiene historial, pero está asignado a ${devCount} reloj(es) biométrico(s).\n\nPrimero debe ser dado de baja para que el sistema le envíe la orden de borrado a las terminales físicas.`,
-          variant: 'warning',
-          confirmLabel: 'Dar de baja y borrar de reloj'
-        })
-        
-        if (okSoft) {
-          const { data: deactRes, error: deactErr } = await supabase.rpc('fn_employee_lifecycle', {
-            p_empleado_id: empleado.id,
-            p_action: 'DEACTIVATE'
-          })
-          if (deactErr) throw deactErr
-          if (deactRes?.status === 'ERROR') throw new Error(deactRes.message)
-          
-          toast.success(`Orden enviada. ${empleado.nombre} ha sido dado de baja.`)
-          fetchEmpleados()
-          refreshLimits()
+            // 2. Encolar orden ADMS de borrado en los checadores (DATA DELETE USERINFO)
+            await syncService.handleEmployeeDeactivation({
+              clienteId: empleado.cliente_id || currentTenantId,
+              employeeId: empleado.id
+            })
+
+            toast.dismiss(toastId)
+            toast.success(`${empleado.nombre} ha sido dado de baja y removido de los checadores.`)
+            fetchEmpleados()
+            refreshLimits()
+          } catch (syncErr) {
+            toast.dismiss(toastId)
+            console.error('[handleDelete] Error en ciclo de baja:', syncErr)
+            toast.error('Baja aplicada en BD, pero hubo un error con los checadores: ' + syncErr.message)
+            fetchEmpleados()
+          }
         }
         return
       }
@@ -1300,53 +1292,60 @@ export default function Empleados() {
       if (status === 'CAN_DELETE') {
         const ok = await confirmDialog({
           title: 'Eliminar colaborador',
-          message: `Este colaborador no tiene registros históricos ni biométricos asociados.\n\n¿Estás seguro de eliminar definitivamente a ${empleado.nombre} ${empleado.apellido}? Esta acción no se puede deshacer.`,
+          message: `Este colaborador no tiene registros históricos asociados.\n\n¿Estás seguro de eliminar definitivamente a ${empleado.nombre} ${empleado.apellido}? Esta acción no se puede deshacer.`,
           variant: 'danger',
           confirmLabel: 'Eliminar definitivamente'
         })
         
         if (!ok) return
         
-        const { data: finalRes, error: finalErr } = await supabase.rpc('fn_employee_lifecycle', {
-          p_empleado_id: empleado.id,
-          p_action: 'DELETE'
-        })
+        const toastId = toast.loading('Eliminando colaborador...')
+        try {
+          // Remover del checador antes del purge físico
+          await syncService.handleEmployeeDeactivation({
+            clienteId: empleado.cliente_id || currentTenantId,
+            employeeId: empleado.id
+          })
 
-        if (finalErr) throw finalErr
-        
-        if (finalRes?.status === 'SUCCESS') {
-          toast.success(`${empleado.nombre} eliminado definitivamente`)
-          fetchEmpleados()
-          refreshLimits()
-        } else {
-          toast.error('Error al intentar eliminar físicamente: ' + finalRes?.status)
+          const { data: finalRes, error: finalErr } = await supabase.rpc('fn_employee_lifecycle', {
+            p_empleado_id: empleado.id,
+            p_action: 'DELETE'
+          })
+
+          if (finalErr) throw finalErr
+          
+          toast.dismiss(toastId)
+          if (finalRes?.status === 'SUCCESS') {
+            toast.success(`${empleado.nombre} eliminado definitivamente`)
+            fetchEmpleados()
+            refreshLimits()
+          } else {
+            toast.error('Error al intentar eliminar físicamente: ' + finalRes?.status)
+          }
+        } catch (errDel) {
+          toast.dismiss(toastId)
+          toast.error('Error en eliminación: ' + errDel.message)
         }
       }
     } catch (err) {
-      toast.error(err?.message ?? 'Error al procesar la solicitud de eliminación')
+      toast.error(err?.message ?? 'Error al procesar la solicitud de baja/eliminación')
     }
   }
 
   const handleReactivate = async (empleado) => {
     try {
-      const [{ data: templates }, { data: devices }] = await Promise.all([
-        supabase.from('biometric_templates').select('tipo').eq('empleado_id', empleado.id),
-        supabase.from('device_employee_assignments').select('id, biometric_user_id').eq('employee_id', empleado.id).eq('suspension_reason', 'EMPLOYEE_DEACTIVATED')
-      ])
-
-      const hasHuella = templates?.some(t => t.tipo === 'huella')
-      const deviceCount = devices?.length || 0
-      const uniquePins = [...new Set((devices || []).map(d => d.biometric_user_id).filter(Boolean))]
-
       const ok = await confirmDialog({
         title: 'Reactivar Colaborador',
-        message: `La identidad y el PIN se restaurarán en los dispositivos.${hasHuella ? '\n\nLas huellas deberán enrolarse nuevamente si el dispositivo las eliminó durante la baja.' : ''}`,
+        message: `Se reactivará la cuenta de ${empleado.nombre} ${empleado.apellido} y se reinyectarán sus credenciales, huellas y rostro automáticamente hacia los relojes checadores.`,
         variant: 'info',
-        confirmLabel: 'Reactivar empleado'
+        confirmLabel: 'Reactivar y Sincronizar Relojes'
       })
       
       if (!ok) return
 
+      const toastId = toast.loading('Reactivando colaborador y enviando biometría a terminales...')
+
+      // 1. Reactivar en base de datos
       const { data: reactRes, error: reactErr } = await supabase.rpc('fn_employee_lifecycle', {
         p_empleado_id: empleado.id,
         p_action: 'ACTIVATE'
@@ -1355,64 +1354,27 @@ export default function Empleados() {
       if (reactErr) throw reactErr
       if (reactRes?.status === 'ERROR') throw new Error(reactRes.message)
 
+      // 2. Reenviar usuario, huellas y fotos respaldadas hacia el checador
+      try {
+        await syncService.handleEmployeeReactivation({
+          clienteId: empleado.cliente_id || currentTenantId,
+          employeeId: empleado.id
+        })
+        toast.dismiss(toastId)
+        toast.success(`¡${empleado.nombre} reactivado y re-sincronizado con su biometría en el checador!`)
+      } catch (syncErr) {
+        toast.dismiss(toastId)
+        console.error('[handleReactivate] Error sincronizando checadores:', syncErr)
+        toast.error('Empleado activo en BD, pero falló la sincronización con el checador: ' + syncErr.message)
+      }
+
       fetchEmpleados()
       refreshLimits()
-
-      let identidadMsg = 'Se restauró su identidad'
-      if (uniquePins.length === 1) {
-        identidadMsg += ` con el PIN ${uniquePins[0]}`
-      } else if (uniquePins.length > 1) {
-        identidadMsg = 'Se restauró la identidad del colaborador'
-      }
-
-      if (deviceCount > 0) {
-        identidadMsg += ` y se enviaron solicitudes de sincronización a ${deviceCount} dispositivos.`
-      } else {
-        identidadMsg += '.'
-      }
-
-      toast((t) => (
-        <div className="flex flex-col gap-2 min-w-[300px]">
-          <div className="flex items-center gap-2 font-bold text-slate-800">
-            <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-            <span>Colaborador reactivado</span>
-          </div>
-          <div className="text-sm text-slate-600">
-            {identidadMsg}
-          </div>
-          
-          {hasHuella && (
-            <div className="mt-2 text-sm">
-              <p className="text-amber-700 font-medium mb-2">
-                Las huellas deben enrolarse nuevamente en los dispositivos.
-              </p>
-              <div className="flex justify-end gap-2 mt-2">
-                <button 
-                  onClick={() => toast.dismiss(t.id)}
-                  className="px-3 py-1.5 bg-transparent text-slate-500 hover:bg-slate-100 rounded text-xs font-semibold transition-colors"
-                >
-                  Cerrar
-                </button>
-                <button 
-                  onClick={() => {
-                    toast.dismiss(t.id)
-                    navigate(`/enrolamiento?empleado_id=${empleado.id}`)
-                  }}
-                  className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-semibold hover:bg-blue-700 transition-colors"
-                >
-                  Ir a Enrolamiento
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      ), { duration: hasHuella ? 8000 : 4000, position: 'bottom-right' })
-
     } catch (err) {
       toast.error(err?.message ?? 'Error al intentar reactivar al colaborador')
     }
   }
-
+  
   const handleOpenNuevoEmpleado = () => {
     if (!currentTenantId) {
       toast.error(isSuperAdmin ? 'Por favor selecciona o crea una empresa primero.' : 'No tienes una empresa asignada.')
