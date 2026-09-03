@@ -4,64 +4,86 @@ import {
   Search,
   Download,
   RefreshCw,
-  Cpu,
-  User,
 } from 'lucide-react'
 
-// Status ATTLOG según protocolo ZKTeco (verificado en parser)
+// Soporta tanto códigos numéricos de ZKTeco ADMS como strings normalizados
 const ATTLOG_STATUS = {
+  // Numéricos estándar ZKTeco
   '0': { label: 'Entrada',          style: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20' },
   '1': { label: 'Salida',           style: 'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600' },
   '2': { label: 'Salida a comer',   style: 'bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-500/20' },
   '3': { label: 'Regreso de comer', style: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20' },
   '4': { label: 'Entrada extra',    style: 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20' },
   '5': { label: 'Salida extra',     style: 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20' },
+  // Normalizados en BD
+  'check_in':  { label: 'Entrada',  style: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20' },
+  'check_out': { label: 'Salida',   style: 'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600' },
 }
 
 function getAttlogStatus(status) {
-  return ATTLOG_STATUS[String(status)] || { label: `Estado: ${status ?? '—'}`, style: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700' }
+  const key = String(status || '').toLowerCase()
+  return ATTLOG_STATUS[key] || { 
+    label: status ? String(status).toUpperCase() : 'Marcaje', 
+    style: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700' 
+  }
 }
 
 function formatTimestamp(ts) {
   if (!ts) return { date: '—', time: '' }
   const d = new Date(ts)
+  
   return {
-    date: d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }),
-    time: d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    date: d.toLocaleDateString('es-MX', {
+      timeZone: 'America/Cancun',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    }),
+    time: d.toLocaleTimeString('es-MX', {
+      timeZone: 'America/Cancun',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    })
   }
 }
 
 const inputClass = 'py-2 px-3 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 outline-none focus:border-[#03363D] transition-all'
 
 export default function AttendanceLogsList({
-  logs,
-  loading,
-  search,
+  logs = [],
+  loading = false,
+  search = '',
   onSearchChange,
-  deviceFilter,
+  deviceFilter = 'todos',
   onDeviceFilterChange,
-  userFilter,
+  userFilter = 'todos',
   onUserFilterChange,
-  dateFrom,
+  dateFrom = '',
   onDateFromChange,
-  dateTo,
+  dateTo = '',
   onDateToChange,
-  devicesCatalog,
-  employeesCatalog,
+  devicesCatalog = [],
+  employeesCatalog = [],
   onRefresh,
 }) {
   const exportToCsv = () => {
     if (!logs.length) return
-    const headers = ['ID', 'Device Serial', 'Dispositivo', 'User ID', 'Empleado', 'Timestamp', 'Status']
-    const rows = logs.map((l) => [
-      l.id,
-      l.device_serial,
-      l.dispositivo?.nombre || '',
-      l.user_id,
-      l.empleado?.nombreCompleto || '',
-      l.timestamp,
-      l.status || 'OK',
-    ])
+    const headers = ['ID', 'Device Serial', 'Dispositivo', 'User ID', 'Empleado', 'Timestamp Local (Cancun)', 'Status']
+    const rows = logs.map((l) => {
+      const { date, time } = formatTimestamp(l.timestamp)
+      const empName = l.empleado?.nombreCompleto || `${l.empleado?.nombre || ''} ${l.empleado?.apellido || ''}`.trim()
+      return [
+        l.id,
+        l.device_serial,
+        l.dispositivo?.name || l.dispositivo?.nombre || l.device_serial,
+        l.user_id,
+        empName,
+        `${date} ${time}`,
+        l.status || 'check_in',
+      ]
+    })
     const csvContent =
       'data:text/csv;charset=utf-8,' +
       [headers.join(','), ...rows.map((e) => e.map((val) => `"${val}"`).join(','))].join('\n')
@@ -123,8 +145,8 @@ export default function AttendanceLogsList({
           <select value={userFilter} onChange={(e) => onUserFilterChange(e.target.value)} className={inputClass}>
             <option value="todos">Todos los colaboradores</option>
             {employeesCatalog.map((emp) => (
-              <option key={emp.id} value={emp.hikvision_device_userid || emp.clave_empleado || emp.id}>
-                {emp.nombre} {emp.apellido}
+              <option key={emp.id} value={emp.clave_empleado || emp.device_userid || emp.id}>
+                {emp.nombre} {emp.apellido} {emp.clave_empleado ? `(${emp.clave_empleado})` : ''}
               </option>
             ))}
           </select>
@@ -148,7 +170,7 @@ export default function AttendanceLogsList({
             <thead className="border-b border-slate-100 dark:border-slate-800">
               <tr className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 <th className="px-5 py-3.5">Colaborador</th>
-                <th className="px-5 py-3.5">Fecha y hora</th>
+                <th className="px-5 py-3.5">Fecha y hora (Local)</th>
                 <th className="px-5 py-3.5">Estado</th>
                 <th className="px-5 py-3.5">Dispositivo</th>
                 <th className="px-5 py-3.5 text-right">Registrado</th>
@@ -174,21 +196,24 @@ export default function AttendanceLogsList({
                 logs.map((log) => {
                   const { date, time } = formatTimestamp(log.timestamp)
                   const status = getAttlogStatus(log.status)
+                  const empName = log.empleado?.nombreCompleto || 
+                    (log.empleado ? `${log.empleado.nombre || ''} ${log.empleado.apellido || ''}`.trim() : null)
+                  const devName = log.dispositivo?.name || log.dispositivo?.nombre || log.device_serial
 
                   return (
                     <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
                       {/* Colaborador */}
                       <td className="px-5 py-3.5">
                         <p className="text-sm font-medium text-slate-900 dark:text-white leading-tight">
-                          {log.empleado?.nombreCompleto || <span className="text-slate-400 font-normal">Sin vincular</span>}
+                          {empName || <span className="text-slate-400 font-normal">Sin vincular</span>}
                         </p>
                         <p className="text-[11px] font-mono text-slate-400 mt-0.5">
                           ID: {log.user_id}
-                          {log.empleado?.clave && ` · ${log.empleado.clave}`}
+                          {log.empleado?.clave_empleado && ` · ${log.empleado.clave_empleado}`}
                         </p>
                       </td>
 
-                      {/* Fecha y hora */}
+                      {/* Fecha y hora local */}
                       <td className="px-5 py-3.5">
                         <p className="text-sm text-slate-800 dark:text-slate-200">{date}</p>
                         <p className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400 mt-0.5">{time}</p>
@@ -198,7 +223,7 @@ export default function AttendanceLogsList({
                       <td className="px-5 py-3.5">
                         <span
                           className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-medium border ${status.style}`}
-                          title="Estado reportado por la terminal"
+                          title={`Estado: ${log.status}`}
                         >
                           {status.label}
                         </span>
@@ -207,9 +232,9 @@ export default function AttendanceLogsList({
                       {/* Dispositivo */}
                       <td className="px-5 py-3.5">
                         <p className="text-sm text-slate-700 dark:text-slate-300">
-                          {log.dispositivo?.nombre || log.device_serial}
+                          {devName}
                         </p>
-                        {log.dispositivo?.nombre && (
+                        {devName !== log.device_serial && (
                           <p className="text-[11px] font-mono text-slate-400 mt-0.5">{log.device_serial}</p>
                         )}
                       </td>
@@ -218,6 +243,7 @@ export default function AttendanceLogsList({
                       <td className="px-5 py-3.5 text-right">
                         <span className="text-xs text-slate-400 tabular-nums">
                           {log.created_at ? new Date(log.created_at).toLocaleString('es-MX', {
+                            timeZone: 'America/Cancun',
                             day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
                           }) : '—'}
                         </span>
@@ -246,18 +272,21 @@ export default function AttendanceLogsList({
             logs.map((log) => {
               const { date, time } = formatTimestamp(log.timestamp)
               const status = getAttlogStatus(log.status)
+              const empName = log.empleado?.nombreCompleto || 
+                (log.empleado ? `${log.empleado.nombre || ''} ${log.empleado.apellido || ''}`.trim() : null)
+              const devName = log.dispositivo?.name || log.dispositivo?.nombre || log.device_serial
+
               return (
                 <div key={log.id} className="p-4 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                        {log.empleado?.nombreCompleto || <span className="text-slate-400 font-normal text-xs">Sin vincular</span>}
+                        {empName || <span className="text-slate-400 font-normal text-xs">Sin vincular</span>}
                       </p>
                       <p className="text-[11px] font-mono text-slate-400 mt-0.5">ID: {log.user_id}</p>
                     </div>
                     <span
                       className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-medium border flex-shrink-0 ${status.style}`}
-                      title="Estado reportado por la terminal"
                     >
                       {status.label}
                     </span>
@@ -265,7 +294,7 @@ export default function AttendanceLogsList({
                   <div className="flex items-center gap-4 text-xs text-slate-500">
                     <span>{date} · <span className="font-mono font-semibold">{time}</span></span>
                     <span className="text-slate-300 dark:text-slate-700">·</span>
-                    <span className="truncate">{log.dispositivo?.nombre || log.device_serial}</span>
+                    <span className="truncate">{devName}</span>
                   </div>
                 </div>
               )
