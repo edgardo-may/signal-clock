@@ -303,35 +303,6 @@ export default function BiometricosPage({ forcedSubview }) {
                 />
               )}
 
-              {/* ── BOTÓN DE SINCRONIZACIÓN MASIVA ── */}
-              {canMutate && (subview === 'devices' || subview === 'colaboradores' || subview === 'sync') && (
-                <button
-                  onClick={handleSyncAllEmployees}
-                  disabled={syncingAll || loading}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-md text-xs sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap border ${
-                    syncingAll
-                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700 cursor-not-allowed'
-                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm'
-                  }`}
-                  title="Envía el padrón de colaboradores activos a la memoria de los checadores"
-                >
-                  <RefreshCw className={`w-4 h-4 text-blue-600 dark:text-blue-400 ${syncingAll ? 'animate-spin' : ''}`} />
-                  <span>{syncingAll ? 'Sincronizando...' : 'Sincronizar Colaboradores'}</span>
-                </button>
-              )}
-
-              {/* Botón Registrar Dispositivo Existente */}
-              {canMutate && subview === 'devices' && (
-                <button
-                  onClick={() => setDeviceModalForm('nuevo')}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/25 transition-all cursor-pointer whitespace-nowrap"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Registrar Dispositivo</span>
-                </button>
-              )}
-            </div>
-
               {canMutate && subview === 'devices' && (
                 <button
                   onClick={() => setDeviceModalForm('nuevo')}
