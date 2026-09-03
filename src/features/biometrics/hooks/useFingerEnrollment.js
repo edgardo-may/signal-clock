@@ -67,6 +67,7 @@ export function useFingerEnrollment(empleadoId, clienteId) {
 
   // Suscripción Realtime
   const unsubscribeRef = useRef(null)
+  const selectedDeviceIdRef = useRef('')
 
   // ─────────────────────────────────────────────────────────────────────────
   // HELPER
@@ -120,6 +121,60 @@ export function useFingerEnrollment(empleadoId, clienteId) {
     },
     [clienteId]
   )
+
+  useEffect(() => {
+    if (!selectedDeviceId || !empleadoId || !clienteId) {
+      setDeviceSyncStatus(null)
+      return
+    }
+
+    checkSyncStatus(selectedDeviceId, empleadoId)
+  }, [
+    selectedDeviceId,
+    empleadoId,
+    clienteId,
+    checkSyncStatus
+  ])
+
+  useEffect(() => {
+    selectedDeviceIdRef.current = selectedDeviceId
+  }, [selectedDeviceId])
+
+  useEffect(() => {
+    if (!selectedDeviceId || !empleadoId || !clienteId) {
+      setFingerStates(INITIAL_STATES())
+      return
+    }
+
+    let cancelled = false
+
+    const loadEnrolledFingers = async () => {
+      try {
+        const enrolledMap = await enrollmentService.getEnrolledFingers(
+          empleadoId,
+          selectedDeviceId
+        )
+
+        if (!cancelled) {
+          setFingerStates({
+            ...INITIAL_STATES(),
+            ...(enrolledMap || {})
+          })
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[useFingerEnrollment] Error loading fingerprints:', err)
+          setFingerStates(INITIAL_STATES())
+        }
+      }
+    }
+
+    loadEnrolledFingers()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedDeviceId, empleadoId, clienteId])
 
   // Disparar sincronización inmediata de este colaborador hacia la terminal seleccionada
   const handleSyncEmployeeNow = useCallback(async () => {
@@ -217,15 +272,7 @@ export function useFingerEnrollment(empleadoId, clienteId) {
 
       try {
         // Cargar todo en paralelo
-        const [
-          enrolledMap,
-          devList,
-          empData
-        ] = await Promise.all([
-          enrollmentService.getEnrolledFingers(
-            empleadoId
-          ),
-
+        const [devList, empData] = await Promise.all([
           enrollmentService.getActiveDevices(
             clienteId
           ),
@@ -238,11 +285,6 @@ export function useFingerEnrollment(empleadoId, clienteId) {
         // ───────────────────────────────────────────────────────────────────
         // HUELLAS YA ENROLADAS
         // ───────────────────────────────────────────────────────────────────
-
-        setFingerStates(prev => ({
-          ...prev,
-          ...(enrolledMap || {})
-        }))
 
         // ───────────────────────────────────────────────────────────────────
         // EMPLEADO
@@ -329,7 +371,11 @@ export function useFingerEnrollment(empleadoId, clienteId) {
         unsubscribeRef.current =
           enrollmentService.subscribeToEnrollmentUpdates(
             empleadoId,
-            (fingerKey, status) => {
+            (fingerKey, status, row) => {
+              if (row.device_id !== selectedDeviceIdRef.current) {
+                return
+              }
+
               setFingerStates(prev => {
                 const current =
                   prev[fingerKey]
@@ -794,6 +840,7 @@ export function useFingerEnrollment(empleadoId, clienteId) {
       empleadoData,
       empleadoId,
       clienteId,
+      deviceSyncStatus,
       setFingerState
     ])
 
@@ -834,23 +881,17 @@ export function useFingerEnrollment(empleadoId, clienteId) {
     } else {
       setSelectedDeviceSerial('')
     }
-    if (deviceId && empleadoId) {
-      checkSyncStatus(deviceId, empleadoId)
-    }
-  }, [devices, empleadoId, checkSyncStatus])
+  }, [devices])
 
   const handleSetSelectedDeviceSerial = useCallback((serial) => {
     setSelectedDeviceSerial(serial || '')
     const device = devices.find(d => (d.serial_number || d.device_serial || d.numero_serie) === serial)
     if (device) {
       setSelectedDeviceId(device.id || '')
-      if (device.id && empleadoId) {
-        checkSyncStatus(device.id, empleadoId)
-      }
     } else {
       setSelectedDeviceId('')
     }
-  }, [devices, empleadoId, checkSyncStatus])
+  }, [devices])
 
   // ─────────────────────────────────────────────────────────────────────────
   // RETURN
@@ -886,4 +927,3 @@ export function useFingerEnrollment(empleadoId, clienteId) {
     empleadoData
   }
 }
-

@@ -109,8 +109,8 @@ export const enrollmentService = {
    *   left_index: 'enrolled'
    * }
    */
-  async getEnrolledFingers(empleadoId) {
-    if (!empleadoId) {
+  async getEnrolledFingers(empleadoId, deviceId) {
+    if (!empleadoId || !deviceId) {
       return {}
     }
 
@@ -123,6 +123,7 @@ export const enrollmentService = {
         tipo
       `)
       .eq('empleado_id', empleadoId)
+      .eq('device_id', deviceId)
       .eq('tipo', 'huella')
 
     if (error) {
@@ -477,28 +478,47 @@ async getEmpleadoBiometricPin(empleadoId) {
     // ASEGURAR ASIGNACIÓN DEL COLABORADOR AL DISPOSITIVO
     // ═══════════════════════════════════════════════════════════════════════
 
-    const { error: assignError } = await supabase
+    const { data: assignment, error: assignmentError } = await supabase
       .from('device_employee_assignments')
-      .upsert(
-        {
-          cliente_id: clienteId,
-          device_id: device.id,
-          employee_id: empleadoId,
-          biometric_user_id: normalizedPin,
-          activo: true,
-          sync_status: 'SYNCED',
-          last_attempt_at: new Date().toISOString()
-        },
-        {
-          onConflict: 'device_id,biometric_user_id'
-        }
-      )
+      .select(`
+        id,
+        cliente_id,
+        device_id,
+        employee_id,
+        biometric_user_id,
+        activo,
+        sync_status,
+        last_error
+      `)
+      .eq('cliente_id', clienteId)
+      .eq('device_id', device.id)
+      .eq('employee_id', empleadoId)
+      .eq('biometric_user_id', normalizedPin)
+      .maybeSingle()
 
-    if (assignError) {
-      console.warn(
-        '[enrollmentService.requestEnrollment] Warning asegurando assignment:',
-        assignError
-      )
+    if (assignmentError) {
+      throw assignmentError
+    }
+
+    if (!assignment) {
+      throw new Error('El colaborador no est\u00e1 asignado a esta terminal.')
+    }
+
+    if (assignment.activo !== true) {
+      throw new Error('La asignaci\u00f3n del colaborador a esta terminal est\u00e1 inactiva.')
+    }
+
+    switch (assignment.sync_status) {
+      case 'SYNCED':
+        break
+      case 'PENDING':
+        throw new Error('La sincronizaci\u00f3n del colaborador est\u00e1 pendiente.')
+      case 'SYNCING':
+        throw new Error('El colaborador todav\u00eda se est\u00e1 sincronizando con la terminal.')
+      case 'ERROR':
+        throw new Error('La sincronizaci\u00f3n del colaborador fall\u00f3. Reintenta desde Dispositivos.')
+      default:
+        throw new Error('El colaborador no est\u00e1 sincronizado con esta terminal.')
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -531,7 +551,7 @@ async getEmpleadoBiometricPin(empleadoId) {
           },
           {
             onConflict:
-              'empleado_id,tipo,indice',
+              'empleado_id,device_id,tipo,indice',
           }
         )
 
@@ -578,6 +598,10 @@ async getEmpleadoBiometricPin(empleadoId) {
         .eq(
           'empleado_id',
           empleadoId
+        )
+        .eq(
+          'device_id',
+          device.id
         )
         .eq(
           'tipo',
@@ -715,7 +739,8 @@ async getEmpleadoBiometricPin(empleadoId) {
 
         callback(
           fingerKey,
-          status
+          status,
+          row
         )
       }
     )
