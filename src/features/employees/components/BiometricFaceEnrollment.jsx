@@ -19,13 +19,15 @@ export default function BiometricFaceEnrollment({ empleadoId, clienteId, onEnrol
 
   const checkExistingTemplate = async () => {
     if (!empleadoId) return
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('biometric_templates')
       .select('id')
       .eq('empleado_id', empleadoId)
       .eq('tipo', 'rostro')
       .maybeSingle()
+
     if (data) setHasTemplate(true)
+    else setHasTemplate(false)
   }
 
   const startCamera = async () => {
@@ -40,6 +42,7 @@ export default function BiometricFaceEnrollment({ empleadoId, clienteId, onEnrol
         videoRef.current.srcObject = mediaStream
       }
     } catch (err) {
+      console.error('[BiometricFaceEnrollment] Error al acceder a la cámara:', err)
       toast.error('No se pudo acceder a la cámara')
       setIsCapturing(false)
     }
@@ -57,24 +60,42 @@ export default function BiometricFaceEnrollment({ empleadoId, clienteId, onEnrol
     if (!videoRef.current || !canvasRef.current) return
     const video = videoRef.current
     const canvas = canvasRef.current
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
+    canvas.width = video.videoWidth || 640
+    canvas.height = video.videoHeight || 480
     const ctx = canvas.getContext('2d')
+
+    // Espejar para que coincida con lo que el usuario vio en pantalla
+    ctx.translate(canvas.width, 0)
+    ctx.scale(-1, 1)
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-    
-    // Obtener en Base64 JPEG
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+
+    // Obtener en Base64 JPEG con compresión adecuada para SpeedFace
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
     setPhotoData(dataUrl)
     stopCamera()
   }
 
- const saveFaceTemplate = async () => {
+  const saveFaceTemplate = async () => {
     if (!photoData || !empleadoId) return
     setIsSaving(true)
     try {
       const base64Data = photoData.split(',')[1] // Quitar data:image/jpeg;base64,
 
-      // 1. Buscar si ya existe un template facial previo para este empleado
+      // 1. Resolver el PIN biométrico del empleado para el SpeedFace
+      const { data: emp, error: empErr } = await supabase
+        .from('empleados')
+        .select('device_userid, clave_empleado')
+        .eq('id', empleadoId)
+        .single()
+
+      if (empErr) throw empErr
+
+      const targetPin = emp?.device_userid || emp?.clave_empleado
+      if (!targetPin) {
+        throw new Error('El colaborador no cuenta con un PIN biométrico o clave asignada.')
+      }
+
+      // 2. Guardar o actualizar en biometric_templates
       const { data: existing, error: findError } = await supabase
         .from('biometric_templates')
         .select('id')
@@ -85,7 +106,6 @@ export default function BiometricFaceEnrollment({ empleadoId, clienteId, onEnrol
       if (findError) throw findError
 
       if (existing?.id) {
-        // 2. Si ya existe, actualizar el template y la marca de tiempo
         const { error: updateError } = await supabase
           .from('biometric_templates')
           .update({
@@ -97,7 +117,6 @@ export default function BiometricFaceEnrollment({ empleadoId, clienteId, onEnrol
 
         if (updateError) throw updateError
       } else {
-        // 3. Si no existe, insertar nuevo registro
         const { error: insertError } = await supabase
           .from('biometric_templates')
           .insert({
@@ -114,7 +133,34 @@ export default function BiometricFaceEnrollment({ empleadoId, clienteId, onEnrol
         if (insertError) throw insertError
       }
 
-      toast.success('Rostro enrolado correctamente')
+      // 3. Despachar el comando ADMS al SpeedFace
+      const { data: devices, error: devErr } = await supabase
+        .from('devices')
+        .select('serial_number')
+        .eq('cliente_id', clienteId)
+        .eq('is_active', true)
+
+      if (devErr) throw devErr
+
+      if (devices && devices.length > 0) {
+        const byteSize = Math.round((base64Data.length * 3) / 4)
+
+        const commandsToInsert = devices.map(dev => ({
+          device_serial: dev.serial_number,
+          command_string: `DATA UPDATE USERPIC PIN=${targetPin}\tSize=${byteSize}\tContent=${base64Data}`,
+          is_executed: false
+        }))
+
+        const { error: cmdErr } = await supabase
+          .from('device_commands')
+          .insert(commandsToInsert)
+
+        if (cmdErr) {
+          console.error('[BiometricFaceEnrollment] Error al encolar comando para checador:', cmdErr)
+        }
+      }
+
+      toast.success('Rostro guardado y enviado al SpeedFace')
       setHasTemplate(true)
       if (onEnrollmentSuccess) onEnrollmentSuccess()
       setPhotoData(null)
@@ -149,7 +195,7 @@ export default function BiometricFaceEnrollment({ empleadoId, clienteId, onEnrol
               Ninguna foto capturada
             </div>
           )}
-          
+
           {isCapturing && (
             <video
               ref={videoRef}
@@ -161,10 +207,10 @@ export default function BiometricFaceEnrollment({ empleadoId, clienteId, onEnrol
           )}
 
           {photoData && (
-            <img 
-              src={photoData} 
-              alt="Rostro capturado" 
-              className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]"
+            <img
+              src={photoData}
+              alt="Rostro capturado"
+              className="absolute inset-0 w-full h-full object-cover"
             />
           )}
         </div>
@@ -175,6 +221,7 @@ export default function BiometricFaceEnrollment({ empleadoId, clienteId, onEnrol
         <div className="flex flex-wrap items-center justify-center gap-2">
           {!isCapturing && !photoData && (
             <button
+              type="button"
               onClick={startCamera}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2 shadow-md shadow-indigo-500/20"
             >
@@ -185,12 +232,14 @@ export default function BiometricFaceEnrollment({ empleadoId, clienteId, onEnrol
           {isCapturing && (
             <>
               <button
+                type="button"
                 onClick={capturePhoto}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2 shadow-md shadow-emerald-500/20"
               >
                 Capturar Foto
               </button>
               <button
+                type="button"
                 onClick={stopCamera}
                 className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white text-xs font-bold rounded-lg transition-colors"
               >
@@ -202,6 +251,7 @@ export default function BiometricFaceEnrollment({ empleadoId, clienteId, onEnrol
           {photoData && (
             <>
               <button
+                type="button"
                 onClick={startCamera}
                 disabled={isSaving}
                 className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
@@ -209,12 +259,13 @@ export default function BiometricFaceEnrollment({ empleadoId, clienteId, onEnrol
                 <RefreshCw className="w-4 h-4" /> Repetir
               </button>
               <button
+                type="button"
                 onClick={saveFaceTemplate}
                 disabled={isSaving}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2 shadow-md shadow-indigo-500/20 disabled:opacity-50"
               >
-                {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} 
-                {isSaving ? 'Guardando...' : 'Guardar Rostro'}
+                {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {isSaving ? 'Guardando y Enviando...' : 'Guardar Rostro'}
               </button>
             </>
           )}
