@@ -33,22 +33,10 @@ export const syncService = {
       throw new Error('Ningún colaborador activo tiene un device_userid numérico asignado.')
     }
 
-    const commandsToInsert = []
     const assignmentUpserts = []
 
     for (const emp of validEmployees) {
       const pin = String(emp.device_userid).trim()
-      const rawName = `${emp.nombre || ''} ${emp.apellido || ''}`.trim() || `User_${pin}`
-      const fullName = rawName.substring(0, 20).trim()
-
-      // Sintaxis confirmada compatible ZKTeco ADMS (Variante B)
-      const commandString = `DATA UPDATE USERINFO PIN=${pin}\tName=${fullName}\tPrivilege=0`
-
-      commandsToInsert.push({
-        device_serial: deviceSerial,
-        command_string: commandString,
-        is_executed: false
-      })
 
       assignmentUpserts.push({
         cliente_id: clienteId,
@@ -73,19 +61,9 @@ export const syncService = {
       throw assignErr
     }
 
-    // 4. Encolar comandos en device_commands
-    const { error: cmdError } = await supabase
-      .from('device_commands')
-      .insert(commandsToInsert)
-
-    if (cmdError) {
-      console.error('[syncService.syncAllEmployeesToDevice] Error encolando comandos:', cmdError)
-      throw cmdError
-    }
-
     return {
       success: true,
-      total: commandsToInsert.length
+      total: assignmentUpserts.length
     }
   },
 
@@ -93,7 +71,7 @@ export const syncService = {
    * Sincroniza un único empleado hacia un dispositivo específico.
    * Utilizado en el flujo de enrolamiento para habilitar inmediatamente al colaborador.
    */
-  async syncSingleEmployeeToDevice({ clienteId, deviceId, deviceSerial, employeeId, pin, fullName }) {
+  async syncSingleEmployeeToDevice({ clienteId, deviceId, deviceSerial, employeeId, pin }) {
     if (!clienteId || !deviceId || !deviceSerial || !employeeId || !pin) {
       throw new Error('Todos los parámetros son requeridos para sincronizar al colaborador.')
     }
@@ -102,10 +80,6 @@ export const syncService = {
     if (!/^\d+$/.test(cleanPin)) {
       throw new Error(`El PIN "${pin}" debe ser puramente numérico.`)
     }
-
-    const safeName = (fullName || `User_${cleanPin}`).substring(0, 20).trim()
-    // Sintaxis confirmada compatible ZKTeco ADMS (Variante B)
-    const commandString = `DATA UPDATE USERINFO PIN=${cleanPin}\tName=${safeName}\tPrivilege=0`
 
     // 1. Upsert en assignments con estado PENDING
     const { error: assignErr } = await supabase
@@ -124,22 +98,8 @@ export const syncService = {
 
     if (assignErr) throw assignErr
 
-    // 2. Encolar comando en device_commands
-    const { data: cmd, error: cmdErr } = await supabase
-      .from('device_commands')
-      .insert({
-        device_serial: deviceSerial,
-        command_string: commandString,
-        is_executed: false
-      })
-      .select()
-      .single()
-
-    if (cmdErr) throw cmdErr
-
     return {
-      success: true,
-      commandId: cmd.id
+      success: true
     }
   },
 
