@@ -64,6 +64,10 @@ export function useFingerEnrollment(empleadoId, clienteId) {
 
   // Timeout del enrolamiento
   const enrollTimeoutRef = useRef(null)
+  const enrollPollRef = useRef(null)
+  const enrollSuccessTimersRef = useRef(new Set())
+  const activeEnrollmentRef = useRef(null)
+  const completedEnrollmentRef = useRef(new Set())
 
   // Suscripción Realtime
   const unsubscribeRef = useRef(null)
@@ -82,6 +86,184 @@ export function useFingerEnrollment(empleadoId, clienteId) {
     },
     []
   )
+
+  const clearPendingEnrollment = useCallback(() => {
+    if (enrollTimeoutRef.current) {
+      clearTimeout(enrollTimeoutRef.current)
+      enrollTimeoutRef.current = null
+    }
+
+    if (enrollPollRef.current) {
+      clearInterval(enrollPollRef.current)
+      enrollPollRef.current = null
+    }
+  }, [])
+
+  const clearEnrollmentLifecycle = useCallback(() => {
+    clearPendingEnrollment()
+
+    enrollSuccessTimersRef.current.forEach(timer => clearTimeout(timer))
+    enrollSuccessTimersRef.current.clear()
+    activeEnrollmentRef.current = null
+    completedEnrollmentRef.current.clear()
+  }, [clearPendingEnrollment])
+
+  const completeEnrollment = useCallback((fingerKey) => {
+    const activeEnrollment = activeEnrollmentRef.current
+
+    if (activeEnrollment?.fingerKey === fingerKey) {
+      if (activeEnrollment.completed) {
+        return
+      }
+
+      activeEnrollment.completed = true
+      completedEnrollmentRef.current.add(fingerKey)
+      clearPendingEnrollment()
+      activeEnrollmentRef.current = null
+      toast.dismiss(`enroll-${fingerKey}`)
+      setFingerState(fingerKey, 'success')
+      setSelectedFinger(current => current === fingerKey ? null : current)
+
+      const successTimer = setTimeout(() => {
+        setFingerState(fingerKey, 'enrolled')
+        enrollSuccessTimersRef.current.delete(successTimer)
+      }, 12_000)
+
+      enrollSuccessTimersRef.current.add(successTimer)
+      toast.success(`${FINGER_DISPLAY_NAMES[fingerKey]} enrolado exitosamente`)
+      return
+    }
+
+    if (!completedEnrollmentRef.current.has(fingerKey)) {
+      setFingerState(fingerKey, 'enrolled')
+      setSelectedFinger(current => current === fingerKey ? null : current)
+    }
+  }, [clearPendingEnrollment, setFingerState])
+
+  const failEnrollment = useCallback((fingerKey, timedOut = false) => {
+    const activeEnrollment = activeEnrollmentRef.current
+
+    if (!activeEnrollment || activeEnrollment.fingerKey !== fingerKey || activeEnrollment.completed) {
+      return
+    }
+
+    clearPendingEnrollment()
+    activeEnrollmentRef.current = null
+    toast.dismiss(`enroll-${fingerKey}`)
+    setFingerState(fingerKey, 'error')
+    setSelectedFinger(current => current === fingerKey ? null : current)
+    toast.error(
+      timedOut
+        ? `Tiempo de espera agotado para ${FINGER_DISPLAY_NAMES[fingerKey]}`
+        : `Error al enrolar ${FINGER_DISPLAY_NAMES[fingerKey]}`
+    )
+  }, [clearPendingEnrollment, setFingerState])
+
+  const checkEnrollmentTemplate = useCallback(async activeEnrollment => {
+    try {
+      const template = await enrollmentService.getEnrollmentTemplate(
+        activeEnrollment.empleadoId,
+        activeEnrollment.deviceId,
+        activeEnrollment.fid
+      )
+
+      if (activeEnrollmentRef.current !== activeEnrollment || activeEnrollment.completed) {
+        return null
+      }
+
+      const templateData = template?.template_data
+      if (templateData === 'ERROR') {
+        failEnrollment(activeEnrollment.fingerKey)
+      } else if (templateData && templateData !== 'PENDING') {
+        completeEnrollment(activeEnrollment.fingerKey)
+      }
+
+      return template
+    } catch (err) {
+      console.error('[useFingerEnrollment] Error polling enrollment template:', err)
+      return null
+    }
+  }, [completeEnrollment, failEnrollment])
+
+  const startEnrollmentMonitoring = useCallback(({ empleadoId: monitoredEmployeeId, deviceId, fid, fingerKey }) => {
+    clearPendingEnrollment()
+
+    const activeEnrollment = {
+      empleadoId: monitoredEmployeeId,
+      deviceId,
+      fid,
+      fingerKey,
+      completed: false
+    }
+
+    activeEnrollmentRef.current = activeEnrollment
+
+    const poll = () => {
+      void checkEnrollmentTemplate(activeEnrollment)
+    }
+
+    enrollPollRef.current = setInterval(poll, 1_000)
+    poll()
+
+    enrollTimeoutRef.current = setTimeout(async () => {
+      const template = await checkEnrollmentTemplate(activeEnrollment)
+
+      if (activeEnrollmentRef.current === activeEnrollment && !activeEnrollment.completed) {
+        if (template?.template_data === 'PENDING') {
+          failEnrollment(fingerKey, true)
+          return
+        }
+
+        clearPendingEnrollment()
+        activeEnrollmentRef.current = null
+        toast.dismiss(`enroll-${fingerKey}`)
+        setFingerState(fingerKey, 'error')
+        setSelectedFinger(current => current === fingerKey ? null : current)
+        toast.error(`No se pudo confirmar el enrolamiento de ${FINGER_DISPLAY_NAMES[fingerKey]}`)
+      }
+    }, ENROLL_TIMEOUT_MS)
+  }, [checkEnrollmentTemplate, clearPendingEnrollment, failEnrollment, setFingerState])
+
+  useEffect(() => {
+    return () => {
+      clearEnrollmentLifecycle()
+    }
+  }, [empleadoId, selectedDeviceId, clearEnrollmentLifecycle])
+
+  useEffect(() => {
+    if (!empleadoId || !selectedDeviceId) {
+      return undefined
+    }
+
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current()
+      unsubscribeRef.current = null
+    }
+
+    const unsubscribe = enrollmentService.subscribeToEnrollmentUpdates(
+      empleadoId,
+      (fingerKey, status, row) => {
+        if (row.device_id !== selectedDeviceId) {
+          return
+        }
+
+        if (status === 'enrolled') {
+          completeEnrollment(fingerKey)
+        } else if (status === 'error') {
+          failEnrollment(fingerKey)
+        }
+      }
+    )
+
+    unsubscribeRef.current = unsubscribe
+
+    return () => {
+      unsubscribe()
+      if (unsubscribeRef.current === unsubscribe) {
+        unsubscribeRef.current = null
+      }
+    }
+  }, [empleadoId, selectedDeviceId, completeEnrollment, failEnrollment])
 
   // Verificar estado de asignación / sincronización para el device y empleado
   const checkSyncStatus = useCallback(
@@ -376,6 +558,16 @@ export function useFingerEnrollment(empleadoId, clienteId) {
                 return
               }
 
+              if (status === 'enrolled') {
+                completeEnrollment(fingerKey)
+                return
+              }
+
+              if (status === 'error') {
+                failEnrollment(fingerKey)
+                return
+              }
+
               setFingerStates(prev => {
                 const current =
                   prev[fingerKey]
@@ -510,7 +702,7 @@ export function useFingerEnrollment(empleadoId, clienteId) {
         enrollTimeoutRef.current = null
       }
     }
-  }, [empleadoId, clienteId])
+  }, [empleadoId, clienteId, completeEnrollment, failEnrollment])
 
   // ─────────────────────────────────────────────────────────────────────────
   // SELECCIONAR DEDO
@@ -524,7 +716,9 @@ export function useFingerEnrollment(empleadoId, clienteId) {
 
         // No cambiar mientras está enrolando
         if (
-          current === 'enrolling'
+          current === 'enrolling' ||
+          current === 'enrolled' ||
+          current === 'success'
         ) {
           return prev
         }
@@ -716,48 +910,9 @@ export function useFingerEnrollment(empleadoId, clienteId) {
       // CANCELAR TIMEOUT ANTERIOR
       // ───────────────────────────────────────────────────────────────────
 
-      if (
-        enrollTimeoutRef.current
-      ) {
-        clearTimeout(
-          enrollTimeoutRef.current
-        )
-      }
-
       // ───────────────────────────────────────────────────────────────────
       // TIMEOUT DE SEGURIDAD
       // ───────────────────────────────────────────────────────────────────
-
-      enrollTimeoutRef.current =
-        setTimeout(() => {
-          setFingerStates(prev => {
-            if (
-              prev[currentFinger] ===
-              'enrolling'
-            ) {
-              toast.dismiss(
-                `enroll-${currentFinger}`
-              )
-
-              toast.error(
-                `Tiempo de espera agotado para ${FINGER_DISPLAY_NAMES[currentFinger]}`
-              )
-
-              return {
-                ...prev,
-                [currentFinger]:
-                  'error'
-              }
-            }
-
-            return prev
-          })
-
-          setSelectedFinger(null)
-
-          enrollTimeoutRef.current =
-            null
-        }, ENROLL_TIMEOUT_MS)
 
       // ───────────────────────────────────────────────────────────────────
       // ENVIAR SOLICITUD AL SERVICIO
@@ -797,22 +952,20 @@ export function useFingerEnrollment(empleadoId, clienteId) {
               `enroll-${currentFinger}`
           }
         )
+
+        startEnrollmentMonitoring({
+          empleadoId,
+          deviceId: currentDeviceId,
+          fid: fingerId,
+          fingerKey: currentFinger
+        })
       } catch (err) {
         console.error(
           '[useFingerEnrollment] Error solicitando enrolamiento:',
           err
         )
 
-        if (
-          enrollTimeoutRef.current
-        ) {
-          clearTimeout(
-            enrollTimeoutRef.current
-          )
-
-          enrollTimeoutRef.current =
-            null
-        }
+        clearPendingEnrollment()
 
         toast.dismiss(
           `enroll-${currentFinger}`
@@ -841,7 +994,9 @@ export function useFingerEnrollment(empleadoId, clienteId) {
       empleadoId,
       clienteId,
       deviceSyncStatus,
-      setFingerState
+      setFingerState,
+      clearPendingEnrollment,
+      startEnrollmentMonitoring
     ])
 
   // ─────────────────────────────────────────────────────────────────────────

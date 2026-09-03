@@ -181,13 +181,21 @@ export default function BiometricFingerprintEnrollment({
             const state = fingerStates[f.key] || "not_enrolled";
             const color = getColor(state);
             const isEnrollingThis = state === "enrolling";
+            const isEnrolledThis = state === "enrolled" || state === "success";
 
             return (
               <g
                 key={`fp-${f.key}`}
-                onClick={() => selectFinger(f.key)}
-                style={{ cursor: "pointer" }}
+                onClick={() => {
+                  if (!isEnrolledThis) selectFinger(f.key);
+                }}
+                style={{ cursor: isEnrolledThis ? "not-allowed" : "pointer" }}
               >
+                <title>
+                  {isEnrolledThis
+                    ? `${FINGER_DISPLAY_NAMES[f.key]}: Ya enrolado`
+                    : FINGER_DISPLAY_NAMES[f.key]}
+                </title>
                 {/* El ícono de huella y halos interactivos irán directamente sobre el fondo */}
 
                 {(state === "selected" || state === "enrolling") && (
@@ -390,7 +398,9 @@ export default function BiometricFingerprintEnrollment({
               !selectedFinger ||
               isEnrolling ||
               !selectedDeviceSerial ||
-              !isDeviceSynced
+              !isDeviceSynced ||
+              currentState === "enrolled" ||
+              currentState === "success"
             }
             title={
               !isDeviceSynced
@@ -404,10 +414,10 @@ export default function BiometricFingerprintEnrollment({
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                 Enrolando...
               </>
-            ) : currentState === "enrolled" ? (
+            ) : currentState === "enrolled" || currentState === "success" ? (
               <>
-                <RefreshCw className="w-3.5 h-3.5" />
-                Re-enrolar
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Ya enrolado
               </>
             ) : (
               <>

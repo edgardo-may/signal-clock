@@ -159,6 +159,27 @@ export const enrollmentService = {
     return result
   },
 
+  async getEnrollmentTemplate(empleadoId, deviceId, fid) {
+    if (!empleadoId || !deviceId || fid === undefined || fid === null) {
+      return null
+    }
+
+    const { data, error } = await supabase
+      .from('biometric_templates')
+      .select('template_data')
+      .eq('empleado_id', empleadoId)
+      .eq('device_id', deviceId)
+      .eq('tipo', 'huella')
+      .eq('indice', fid)
+      .maybeSingle()
+
+    if (error) {
+      throw error
+    }
+
+    return data || null
+  },
+
   // ═════════════════════════════════════════════════════════════════════════
   // 2. DISPOSITIVOS ZKTECO ACTIVOS
   // ═════════════════════════════════════════════════════════════════════════
