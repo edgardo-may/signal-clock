@@ -41,8 +41,8 @@ export const syncService = {
       const rawName = `${emp.nombre || ''} ${emp.apellido || ''}`.trim() || `User_${pin}`
       const fullName = rawName.substring(0, 20).trim()
 
-      // Sintaxis estándar ZKTeco ADMS
-      const commandString = `DATA UPDATE USERINFO Pin=${pin}\tName=${fullName}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=0000000100000000`
+      // Sintaxis confirmada compatible ZKTeco ADMS (Variante B)
+      const commandString = `DATA UPDATE USERINFO PIN=${pin}\tName=${fullName}\tPrivilege=0`
 
       commandsToInsert.push({
         device_serial: deviceSerial,
@@ -104,7 +104,8 @@ export const syncService = {
     }
 
     const safeName = (fullName || `User_${cleanPin}`).substring(0, 20).trim()
-    const commandString = `DATA UPDATE USERINFO Pin=${cleanPin}\tName=${safeName}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=0000000100000000`
+    // Sintaxis confirmada compatible ZKTeco ADMS (Variante B)
+    const commandString = `DATA UPDATE USERINFO PIN=${cleanPin}\tName=${safeName}\tPrivilege=0`
 
     // 1. Upsert en assignments con estado PENDING
     const { error: assignErr } = await supabase
