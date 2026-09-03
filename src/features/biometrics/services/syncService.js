@@ -1,17 +1,65 @@
 // src/features/biometrics/services/syncService.js
 import { supabase } from '../../../lib/supabase'
 
+/**
+ * Normaliza y trunca el nombre al estándar admitido por los firmwares ZKTeco (ASCII/24 caracteres).
+ */
+function sanitizeZkName(nombre = '', apellido = '') {
+  const full = `${nombre} ${apellido}`.trim()
+  return full
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Quitar acentos y diacríticos
+    .replace(/[^\w\s.-]/gi, '')     // Caracteres seguros
+    .slice(0, 24)
+    .trim()
+}
+
 export const syncService = {
   /**
+   * Valida si un dispositivo está físicamente conectado y enviando heartbeats (ventana de 120s).
+   */
+  async checkDeviceOnline(deviceId) {
+    const { data: device, error } = await supabase
+      .from('devices')
+      .select('id, serial_number, is_online, last_heartbeat')
+      .eq('id', deviceId)
+      .single()
+
+    if (error || !device) {
+      throw new Error('No se pudo verificar el estado del dispositivo.')
+    }
+
+    const lastSeen = device.last_heartbeat ? new Date(device.last_heartbeat).getTime() : 0
+    const now = Date.now()
+    const isOnline = Boolean(device.is_online) && (now - lastSeen <= 120000)
+
+    return {
+      isOnline,
+      serialNumber: device.serial_number,
+      lastHeartbeat: device.last_heartbeat
+    }
+  },
+
+  /**
    * Encola comandos de sincronización de todos los empleados activos hacia un dispositivo ZKTeco.
-   * Utiliza exclusivamente empleados.device_userid (numérico) sin fallback a clave_empleado.
+   * Si el dispositivo está OFFLINE, aborta la sincronización para evitar saturar la cola.
    */
   async syncAllEmployeesToDevice({ clienteId, deviceSerial, deviceId }) {
     if (!clienteId || !deviceSerial || !deviceId) {
       throw new Error('Cliente, dispositivo y número de serie del checador son requeridos.')
     }
 
-    // 1. Obtener los empleados activos del cliente
+    // 1. Validar si el checador está online
+    const { isOnline } = await this.checkDeviceOnline(deviceId)
+    if (!isOnline) {
+      return {
+        success: false,
+        skipped: true,
+        message: `El dispositivo (${deviceSerial}) se encuentra fuera de línea. Sincronización omitida.`
+      }
+    }
+
+    // 2. Obtener los empleados activos del cliente
     const { data: empleados, error: empError } = await supabase
       .from('empleados')
       .select('id, nombre, apellido, device_userid, activo, cliente_id')
@@ -23,7 +71,7 @@ export const syncService = {
       return { total: 0, message: 'No hay colaboradores activos para sincronizar.' }
     }
 
-    // 2. Filtrar únicamente los que tienen device_userid numérico válido
+    // 3. Filtrar únicamente los que tienen device_userid numérico válido
     const validEmployees = empleados.filter((emp) => {
       const pin = emp.device_userid ? String(emp.device_userid).trim() : ''
       return pin && /^\d+$/.test(pin)
@@ -34,9 +82,12 @@ export const syncService = {
     }
 
     const assignmentUpserts = []
+    const commandInserts = []
+    const nowIso = new Date().toISOString()
 
     for (const emp of validEmployees) {
       const pin = String(emp.device_userid).trim()
+      const cleanName = sanitizeZkName(emp.nombre, emp.apellido)
 
       assignmentUpserts.push({
         cliente_id: clienteId,
@@ -45,11 +96,18 @@ export const syncService = {
         biometric_user_id: pin,
         activo: true,
         sync_status: 'PENDING',
-        last_attempt_at: new Date().toISOString()
+        last_attempt_at: nowIso
+      })
+
+      // Comando formal ZKTeco Push ADMS con tabuladores (\t)
+      commandInserts.push({
+        device_serial: deviceSerial,
+        command_string: `DATA UPDATE USERINFO PIN=${pin}\tName=${cleanName}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=0000000100000000`,
+        is_executed: false
       })
     }
 
-    // 3. Upsert en device_employee_assignments
+    // 4. Actualizar asignaciones
     const { error: assignErr } = await supabase
       .from('device_employee_assignments')
       .upsert(assignmentUpserts, {
@@ -61,15 +119,25 @@ export const syncService = {
       throw assignErr
     }
 
+    // 5. Encolar comandos hacia el biométrico
+    const { error: cmdErr } = await supabase
+      .from('device_commands')
+      .insert(commandInserts)
+
+    if (cmdErr) {
+      console.error('[syncService.syncAllEmployeesToDevice] Error insertando comandos:', cmdErr)
+      throw cmdErr
+    }
+
     return {
       success: true,
-      total: assignmentUpserts.length
+      total: commandInserts.length,
+      message: `Se encolaron ${commandInserts.length} colaboradores para el biométrico ${deviceSerial}.`
     }
   },
 
   /**
    * Sincroniza un único empleado hacia un dispositivo específico.
-   * Utilizado en el flujo de enrolamiento para habilitar inmediatamente al colaborador.
    */
   async syncSingleEmployeeToDevice({ clienteId, deviceId, deviceSerial, employeeId, pin }) {
     if (!clienteId || !deviceId || !deviceSerial || !employeeId || !pin) {
@@ -81,7 +149,30 @@ export const syncService = {
       throw new Error(`El PIN "${pin}" debe ser puramente numérico.`)
     }
 
-    // 1. Upsert en assignments con estado PENDING
+    // 1. Validar si el checador está online
+    const { isOnline } = await this.checkDeviceOnline(deviceId)
+    if (!isOnline) {
+      return {
+        success: false,
+        skipped: true,
+        message: `El dispositivo (${deviceSerial}) está fuera de línea. No se encoló la sincronización.`
+      }
+    }
+
+    // 2. Obtener datos del empleado para armar el comando
+    const { data: emp, error: empErr } = await supabase
+      .from('empleados')
+      .select('nombre, apellido')
+      .eq('id', employeeId)
+      .single()
+
+    if (empErr || !emp) {
+      throw new Error('No se encontró la información del colaborador a sincronizar.')
+    }
+
+    const cleanName = sanitizeZkName(emp.nombre, emp.apellido)
+
+    // 3. Upsert en assignments con estado PENDING
     const { error: assignErr } = await supabase
       .from('device_employee_assignments')
       .upsert({
@@ -98,6 +189,17 @@ export const syncService = {
 
     if (assignErr) throw assignErr
 
+    // 4. Insertar comando en la cola
+    const { error: cmdErr } = await supabase
+      .from('device_commands')
+      .insert({
+        device_serial: deviceSerial,
+        command_string: `DATA UPDATE USERINFO PIN=${cleanPin}\tName=${cleanName}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=0000000100000000`,
+        is_executed: false
+      })
+
+    if (cmdErr) throw cmdErr
+
     return {
       success: true
     }
@@ -105,14 +207,12 @@ export const syncService = {
 
   /**
    * Encola el comando de sincronización de fecha, hora y timezone física al ZKTeco.
-   * Sintaxis oficial ZKTeco ADMS: SET OPTIONS DateTime=<unix_seconds>,TimeZone=<offset_hours>
    */
   async syncDeviceTime({ deviceSerial, timezone = 'America/Cancun' }) {
     if (!deviceSerial) {
       throw new Error('Número de serie del biométrico requerido.')
     }
 
-    // Calcular offset numérico en horas según la zona IANA
     let tzOffset = -5
     try {
       const d = new Date()
