@@ -331,9 +331,13 @@ async getEmpleadoBiometricPin(empleadoId) {
   const biometricUserId =
     data.device_userid
       ? String(data.device_userid).trim()
-      : data.clave_empleado
-        ? String(data.clave_empleado).trim()
-        : null
+      : null
+
+  if (!biometricUserId || !/^\d+$/.test(biometricUserId)) {
+    throw new Error(
+      `El colaborador ${data.nombre || ''} no tiene un device_userid numérico asignado para ZKTeco. Valor actual: "${data.device_userid || ''}"`
+    )
+  }
 
   return {
     ...data,
@@ -341,7 +345,7 @@ async getEmpleadoBiometricPin(empleadoId) {
     nombreCompleto:
       `${data.nombre || ''} ${data.apellido || ''}`.trim(),
 
-    // ID que utiliza ZKTeco para identificar al empleado
+    // ID canónico que utiliza ZKTeco para identificar al empleado
     device_userid: biometricUserId,
 
     biometric_user_id: biometricUserId,
@@ -470,6 +474,34 @@ async getEmpleadoBiometricPin(empleadoId) {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
+    // ASEGURAR ASIGNACIÓN DEL COLABORADOR AL DISPOSITIVO
+    // ═══════════════════════════════════════════════════════════════════════
+
+    const { error: assignError } = await supabase
+      .from('device_employee_assignments')
+      .upsert(
+        {
+          cliente_id: clienteId,
+          device_id: device.id,
+          employee_id: empleadoId,
+          biometric_user_id: normalizedPin,
+          activo: true,
+          sync_status: 'SYNCED',
+          last_attempt_at: new Date().toISOString()
+        },
+        {
+          onConflict: 'device_id,biometric_user_id'
+        }
+      )
+
+    if (assignError) {
+      console.warn(
+        '[enrollmentService.requestEnrollment] Warning asegurando assignment:',
+        assignError
+      )
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     // COMANDO ZKTECO
     // ═══════════════════════════════════════════════════════════════════════
 
@@ -486,6 +518,7 @@ async getEmpleadoBiometricPin(empleadoId) {
           {
             cliente_id: clienteId,
             empleado_id: empleadoId,
+            device_id: device.id,
             tipo: 'huella',
             indice: fid,
             finger_key: fingerKey,

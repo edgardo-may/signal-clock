@@ -498,14 +498,14 @@ export function useFingerEnrollment(empleadoId, clienteId) {
       // ───────────────────────────────────────────────────────────────────
 
       const biometricPin =
+        empleadoData.device_userid ||
         empleadoData.biometric_user_id ||
         empleadoData.biometricUserId ||
-        empleadoData.biometricPin ||
-        empleadoData.clave_empleado
+        empleadoData.biometricPin
 
-      if (!biometricPin) {
+      if (!biometricPin || !/^\d+$/.test(String(biometricPin).trim())) {
         toast.error(
-          'El empleado no tiene un ID biométrico asignado.'
+          'El empleado no tiene un device_userid numérico asignado para ZKTeco.'
         )
 
         return

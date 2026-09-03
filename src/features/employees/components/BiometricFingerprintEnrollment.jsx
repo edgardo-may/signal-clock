@@ -287,8 +287,7 @@ export default function BiometricFingerprintEnrollment({
             disabled={
               !selectedFinger ||
               isEnrolling ||
-              !selectedDeviceSerial ||
-              currentState === "enrolled"
+              !selectedDeviceSerial
             }
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 dark:disabled:bg-slate-700 disabled:text-slate-400 dark:disabled:text-slate-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-sm disabled:shadow-none"
           >
@@ -296,6 +295,11 @@ export default function BiometricFingerprintEnrollment({
               <>
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                 Enrolando...
+              </>
+            ) : currentState === "enrolled" ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5" />
+                Re-enrolar
               </>
             ) : (
               <>
