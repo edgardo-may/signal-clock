@@ -525,7 +525,8 @@ async getEmpleadoBiometricPin(empleadoId) {
     // COMANDO ZKTECO
     // ═══════════════════════════════════════════════════════════════════════
 
-    const commandString = `ENROLL_FP PIN=${normalizedPin} FID=${fid} Retry=3 OverWrite=1`
+    const commandString =
+      `ENROLL_FP PIN=${normalizedPin}\tFID=${fid}\tRETRY=3\tOVERWRITE=1`
 
     // ═══════════════════════════════════════════════════════════════════════
     // CREAR TEMPLATE PENDING
