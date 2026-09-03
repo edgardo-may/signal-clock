@@ -9,7 +9,7 @@ function sanitizeZkName(nombre = '', apellido = '') {
   return full
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // Elimina acentos
-    .replace(/[^\w\s.-]/gi, '')     // Caracteres alfanuméricos seguros
+    .replace(/[^\w\s.-]/gi, '')      // Caracteres alfanuméricos seguros
     .slice(0, 24)
     .trim()
 }
@@ -44,7 +44,8 @@ export const syncService = {
   },
 
   /**
-   * Encola comandos de sincronización de todos los empleados activos hacia un dispositivo ZKTeco.
+   * Encola comandos de sincronización de todos los empleados activos hacia un dispositivo ZKTeco,
+   * incluyendo sus datos de usuario (USERINFO), huellas dactilares (FINGERTMP) y rostro (BIOPHOTO).
    * Si el dispositivo está OFFLINE, aborta la sincronización.
    */
   async syncAllEmployeesToDevice({ clienteId, deviceSerial, deviceId }) {
@@ -52,7 +53,7 @@ export const syncService = {
       throw new Error('Cliente, dispositivo y número de serie del checador son requeridos.')
     }
 
-    // 1. Validar si el checador está online con las columnas reales de la BD
+    // 1. Validar si el checador está online
     const { isOnline, diffSeconds } = await this.checkDeviceOnline(deviceId)
     if (!isOnline) {
       return {
@@ -84,6 +85,25 @@ export const syncService = {
       throw new Error('Ningún colaborador activo tiene un device_userid numérico asignado.')
     }
 
+    const employeeIds = validEmployees.map(e => e.id)
+
+    // 4. Obtener todas las plantillas biométricas (huellas y rostros) de estos colaboradores
+    const { data: templates, error: tmplError } = await supabase
+      .from('biometric_templates')
+      .select('empleado_id, tipo, indice, template_data')
+      .in('empleado_id', employeeIds)
+
+    if (tmplError) {
+      console.warn('[syncService.syncAllEmployeesToDevice] Error consultando biometric_templates:', tmplError)
+    }
+
+    // Agrupar templates por empleado_id
+    const templatesByEmp = (templates || []).reduce((acc, curr) => {
+      if (!acc[curr.empleado_id]) acc[curr.empleado_id] = []
+      acc[curr.empleado_id].push(curr)
+      return acc
+    }, {})
+
     const assignmentUpserts = []
     const commandInserts = []
     const nowIso = new Date().toISOString()
@@ -102,15 +122,41 @@ export const syncService = {
         last_attempt_at: nowIso
       })
 
-      // Comando oficial ZKTeco Push ADMS con tabuladores (\t)
+      // A) Comando oficial ZKTeco Push ADMS con tabuladores (\t)
       commandInserts.push({
         device_serial: deviceSerial,
         command_string: `DATA UPDATE USERINFO PIN=${pin}\tName=${cleanName}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=0000000100000000`,
         is_executed: false
       })
+
+      // B) Comandos de Biometría (Huella y Rostro)
+      const empTemplates = templatesByEmp[emp.id] || []
+      for (const tmpl of empTemplates) {
+        if (!tmpl.template_data) continue
+
+        const tipoBiometrico = (tmpl.tipo || '').toLowerCase().trim()
+
+        if (tipoBiometrico === 'huella' || tipoBiometrico === 'fingerprint') {
+          const fid = tmpl.indice ?? 0
+          const size = tmpl.template_data.length
+          commandInserts.push({
+            device_serial: deviceSerial,
+            command_string: `DATA UPDATE FINGERTMP PIN=${pin}\tFID=${fid}\tSize=${size}\tValid=1\tTMP=${tmpl.template_data}`,
+            is_executed: false
+          })
+        } else if (tipoBiometrico === 'rostro' || tipoBiometrico === 'face') {
+          // Visible Light Face para SpeedFace
+          const byteSize = Math.round((tmpl.template_data.length * 3) / 4)
+          commandInserts.push({
+            device_serial: deviceSerial,
+            command_string: `DATA UPDATE BIOPHOTO PIN=${pin}\tType=9\tSize=${byteSize}\tContent=${tmpl.template_data}`,
+            is_executed: false
+          })
+        }
+      }
     }
 
-    // 4. Upsert en device_employee_assignments
+    // 5. Upsert en device_employee_assignments
     const { error: assignErr } = await supabase
       .from('device_employee_assignments')
       .upsert(assignmentUpserts, {
@@ -122,25 +168,30 @@ export const syncService = {
       throw assignErr
     }
 
-    // 5. Inserción directa en device_commands
-    const { error: cmdErr } = await supabase
-      .from('device_commands')
-      .insert(commandInserts)
+    // 6. Inserción en lotes (chunks de 40) en device_commands para prevenir errores de payload
+    const CHUNK_SIZE = 40
+    for (let i = 0; i < commandInserts.length; i += CHUNK_SIZE) {
+      const chunk = commandInserts.slice(i, i + CHUNK_SIZE)
+      const { error: cmdErr } = await supabase
+        .from('device_commands')
+        .insert(chunk)
 
-    if (cmdErr) {
-      console.error('[syncService.syncAllEmployeesToDevice] Error en device_commands:', cmdErr)
-      throw cmdErr
+      if (cmdErr) {
+        console.error('[syncService.syncAllEmployeesToDevice] Error en device_commands:', cmdErr)
+        throw cmdErr
+      }
     }
 
     return {
       success: true,
-      total: commandInserts.length,
-      message: `Se encolaron ${commandInserts.length} colaboradores para el checador ${deviceSerial}.`
+      totalEmployees: validEmployees.length,
+      totalCommands: commandInserts.length,
+      message: `Se encolaron ${validEmployees.length} colaboradores y ${commandInserts.length} órdenes (datos, huellas y rostros) para el checador ${deviceSerial}.`
     }
   },
 
   /**
-   * Sincroniza un único empleado hacia un dispositivo específico.
+   * Sincroniza un único empleado hacia un dispositivo específico con sus huellas y rostro.
    */
   async syncSingleEmployeeToDevice({ clienteId, deviceId, deviceSerial, employeeId, pin }) {
     if (!clienteId || !deviceId || !deviceSerial || !employeeId || !pin) {
@@ -175,7 +226,13 @@ export const syncService = {
 
     const cleanName = sanitizeZkName(emp.nombre, emp.apellido)
 
-    // 3. Upsert en assignments
+    // 3. Obtener templates biométricos del colaborador (huellas y rostros)
+    const { data: empTemplates } = await supabase
+      .from('biometric_templates')
+      .select('tipo, indice, template_data')
+      .eq('empleado_id', employeeId)
+
+    // 4. Upsert en assignments
     const { error: assignErr } = await supabase
       .from('device_employee_assignments')
       .upsert({
@@ -192,19 +249,47 @@ export const syncService = {
 
     if (assignErr) throw assignErr
 
-    // 4. Inserción directa en device_commands
-    const { error: cmdErr } = await supabase
-      .from('device_commands')
-      .insert({
+    // 5. Preparar lote de comandos
+    const commandsToInsert = [
+      {
         device_serial: deviceSerial,
         command_string: `DATA UPDATE USERINFO PIN=${cleanPin}\tName=${cleanName}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=0000000100000000`,
         is_executed: false
-      })
+      }
+    ]
+
+    for (const tmpl of (empTemplates || [])) {
+      if (!tmpl.template_data) continue
+      const tipo = (tmpl.tipo || '').toLowerCase().trim()
+
+      if (tipo === 'huella' || tipo === 'fingerprint') {
+        const fid = tmpl.indice ?? 0
+        const size = tmpl.template_data.length
+        commandsToInsert.push({
+          device_serial: deviceSerial,
+          command_string: `DATA UPDATE FINGERTMP PIN=${cleanPin}\tFID=${fid}\tSize=${size}\tValid=1\tTMP=${tmpl.template_data}`,
+          is_executed: false
+        })
+      } else if (tipo === 'rostro' || tipo === 'face') {
+        const byteSize = Math.round((tmpl.template_data.length * 3) / 4)
+        commandsToInsert.push({
+          device_serial: deviceSerial,
+          command_string: `DATA UPDATE BIOPHOTO PIN=${cleanPin}\tType=9\tSize=${byteSize}\tContent=${tmpl.template_data}`,
+          is_executed: false
+        })
+      }
+    }
+
+    // 6. Inserción directa en device_commands
+    const { error: cmdErr } = await supabase
+      .from('device_commands')
+      .insert(commandsToInsert)
 
     if (cmdErr) throw cmdErr
 
     return {
-      success: true
+      success: true,
+      totalCommands: commandsToInsert.length
     }
   },
 
