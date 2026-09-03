@@ -213,10 +213,10 @@ export const syncService = {
       }
     }
 
-    // 2. Obtener nombre del colaborador
+    // 2. Obtener datos del colaborador
     const { data: emp, error: empErr } = await supabase
       .from('empleados')
-      .select('nombre, apellido')
+      .select('nombre, apellido, tarjeta')
       .eq('id', employeeId)
       .single()
 
@@ -225,6 +225,7 @@ export const syncService = {
     }
 
     const cleanName = sanitizeZkName(emp.nombre, emp.apellido)
+    const cleanCard = emp.tarjeta ? String(emp.tarjeta).trim() : ''
 
     // 3. Obtener templates biométricos del colaborador (huellas y rostros)
     const { data: empTemplates } = await supabase
@@ -253,7 +254,7 @@ export const syncService = {
     const commandsToInsert = [
       {
         device_serial: deviceSerial,
-        command_string: `DATA UPDATE USERINFO PIN=${cleanPin}\tName=${cleanName}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=0000000100000000`,
+        command_string: `DATA UPDATE USERINFO PIN=${cleanPin}\tName=${cleanName}\tPri=0\tPasswd=\tCard=${cleanCard}\tGrp=1\tTZ=0000000100000000`,
         is_executed: false
       }
     ]
@@ -290,6 +291,116 @@ export const syncService = {
     return {
       success: true,
       totalCommands: commandsToInsert.length
+    }
+  },
+
+  /**
+   * Da de baja a un colaborador en el hardware checador ZKTeco.
+   * Envía DATA DELETE USERINFO para remover al usuario y sus biométricos del terminal,
+   * conservando las plantillas intactas en la base de datos para futuras reactivaciones.
+   */
+  async handleEmployeeDeactivation({ clienteId, employeeId }) {
+    if (!clienteId || !employeeId) {
+      throw new Error('clienteId y employeeId son obligatorios.')
+    }
+
+    // 1. Obtener PIN del colaborador
+    const { data: emp, error: empErr } = await supabase
+      .from('empleados')
+      .select('device_userid, clave_empleado')
+      .eq('id', employeeId)
+      .single()
+
+    if (empErr || !emp) throw new Error('No se encontró el colaborador.')
+    const pin = emp.device_userid || emp.clave_empleado
+    if (!pin) return { success: false, reason: 'NO_PIN' }
+
+    // 2. Obtener dispositivos activos del tenant
+    const { data: devices, error: devErr } = await supabase
+      .from('devices')
+      .select('id, serial_number')
+      .eq('cliente_id', clienteId)
+      .eq('is_active', true)
+
+    if (devErr || !devices || devices.length === 0) {
+      return { success: false, reason: 'NO_ACTIVE_DEVICES' }
+    }
+
+    // 3. Encolar comando DATA DELETE USERINFO en cada dispositivo
+    const commands = devices.map(dev => ({
+      device_serial: dev.serial_number,
+      command_string: `DATA DELETE USERINFO PIN=${pin}`,
+      is_executed: false
+    }))
+
+    const { error: cmdErr } = await supabase
+      .from('device_commands')
+      .insert(commands)
+
+    if (cmdErr) {
+      console.error('[syncService.handleEmployeeDeactivation] Error encolando delete:', cmdErr)
+      throw cmdErr
+    }
+
+    // 4. Actualizar asignaciones a inactivo
+    const deviceIds = devices.map(d => d.id)
+    await supabase
+      .from('device_employee_assignments')
+      .update({ activo: false, sync_status: 'DELETED' })
+      .eq('employee_id', employeeId)
+      .in('device_id', deviceIds)
+
+    return {
+      success: true,
+      devicesNotified: devices.length
+    }
+  },
+
+  /**
+   * Reactiva a un colaborador en el hardware checador ZKTeco.
+   * Reenvía al checador sus datos, huellas y fotos faciales respaldadas en biometric_templates.
+   */
+  async handleEmployeeReactivation({ clienteId, employeeId }) {
+    if (!clienteId || !employeeId) {
+      throw new Error('clienteId y employeeId son obligatorios.')
+    }
+
+    // 1. Obtener dispositivos activos del tenant
+    const { data: devices, error: devErr } = await supabase
+      .from('devices')
+      .select('id, serial_number')
+      .eq('cliente_id', clienteId)
+      .eq('is_active', true)
+
+    if (devErr || !devices || devices.length === 0) {
+      return { success: false, reason: 'NO_ACTIVE_DEVICES' }
+    }
+
+    // 2. Obtener PIN del colaborador
+    const { data: emp, error: empErr } = await supabase
+      .from('empleados')
+      .select('device_userid, clave_empleado')
+      .eq('id', employeeId)
+      .single()
+
+    if (empErr || !emp) throw new Error('No se encontró el colaborador.')
+    const pin = emp.device_userid || emp.clave_empleado
+    if (!pin) return { success: false, reason: 'NO_PIN' }
+
+    // 3. Sincronizar hacia cada checador activo con huella y foto
+    for (const dev of devices) {
+      await this.syncSingleEmployeeToDevice({
+        clienteId,
+        deviceId: dev.id,
+        deviceSerial: dev.serial_number,
+        employeeId,
+        pin
+      })
+    }
+
+    return {
+      success: true,
+      devicesRestored: devices.length
     }
   },
 
