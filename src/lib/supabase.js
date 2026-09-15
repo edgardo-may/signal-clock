@@ -3,10 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 import toast from 'react-hot-toast'
 
 const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL
-const supabaseKey  = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseKey  = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
 
 if (!supabaseUrl || !supabaseKey) {
-  throw new Error('[Signum-Clock] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en .env.local')
+  throw new Error('[Signum-Clock] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_PUBLISHABLE_KEY en .env.local')
 }
 
 const rawSupabase = createClient(supabaseUrl, supabaseKey)

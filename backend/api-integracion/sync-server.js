@@ -9,8 +9,19 @@ const { testConnection } = require('./consolide-client')
 const { syncEmpleados } = require('./employee-sync-service')
 
 const SUPABASE_URL = process.env.SUPABASE_URL
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY
 const ALLOWED_ROLES = new Set(['admin', 'rh', 'superadmin'])
+const supabaseAuthOptions = {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
+}
+
+if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+  throw new Error('Faltan variables de entorno requeridas: SUPABASE_URL y/o SUPABASE_SECRET_KEY')
+}
 
 const app = express()
 app.use(cors({
@@ -26,7 +37,7 @@ async function verifySupabaseToken(authHeader) {
   }
 
   const token = authHeader.slice(7)
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, supabaseAuthOptions)
   const { data: { user }, error } = await supabase.auth.getUser(token)
 
   if (error || !user) {
