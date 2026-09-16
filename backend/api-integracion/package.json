@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "description": "API HTTP de integración Consolide y Supabase para Signum Clock",
-  "main": "sync-server.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node sync-server.js",
-    "dev": "node --watch sync-server.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0",

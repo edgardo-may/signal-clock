@@ -66,7 +66,7 @@ async function verifySupabaseToken(authHeader) {
 }
 
 function resolveClienteId({ clienteId, rol }, targetClienteId) {
-  return (rol === 'superadmin' || rol === 'admin') && targetClienteId
+  return rol === 'superadmin' && targetClienteId
     ? targetClienteId
     : clienteId
 }
