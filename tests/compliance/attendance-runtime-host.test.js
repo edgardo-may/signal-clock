@@ -187,8 +187,8 @@ test('read-only Supabase wrapper blocks DML, RPC, storage, functions and auth ca
 })
 
 test('runtime release identifiers are mandatory and graceful shutdown closes once', () => {
-  assert.throws(() => loadRuntimeConfig({ SUPABASE_URL: 'https://project.example', SUPABASE_SERVICE_ROLE_KEY: 's'.repeat(20), ATTENDANCE_RUNTIME_INTERNAL_TOKEN: TOKEN, RUNTIME_VERSION: 'v1' }), { code: 'ATTENDANCE_RUNTIME_CONFIG_MISSING' })
-  const configLoaded = loadRuntimeConfig({ SUPABASE_URL: 'https://project.example', SUPABASE_SERVICE_ROLE_KEY: 's'.repeat(20), ATTENDANCE_RUNTIME_INTERNAL_TOKEN: TOKEN, RUNTIME_VERSION: 'v1', BUILD_SHA: 'abcdef1' })
+  assert.throws(() => loadRuntimeConfig({ SUPABASE_URL: 'https://project.example', SUPABASE_SECRET_KEY: 's'.repeat(20), ATTENDANCE_RUNTIME_INTERNAL_TOKEN: TOKEN, RUNTIME_VERSION: 'v1' }), { code: 'ATTENDANCE_RUNTIME_CONFIG_MISSING' })
+  const configLoaded = loadRuntimeConfig({ SUPABASE_URL: 'https://project.example', SUPABASE_SECRET_KEY: 's'.repeat(20), ATTENDANCE_RUNTIME_INTERNAL_TOKEN: TOKEN, RUNTIME_VERSION: 'v1', BUILD_SHA: 'abcdef1' })
   assert.equal(configLoaded.buildSha, 'abcdef1')
   let closes = 0
   const exits = []
@@ -280,7 +280,7 @@ test('runtime package has no browser exposure and Phase59 remains read-only', ()
   const env = readFileSync(new URL('../../backend/attendance-runtime/.env.example', import.meta.url), 'utf8')
   const docker = readFileSync(new URL('../../backend/attendance-runtime/Dockerfile', import.meta.url), 'utf8')
   const phase59 = readFileSync(new URL('../../database/live-schema/59_revision_resolver_activation_precheck.sql', import.meta.url), 'utf8')
-  assert.match(env, /SUPABASE_SERVICE_ROLE_KEY=/)
+  assert.match(env, /SUPABASE_SECRET_KEY=/)
   assert.doesNotMatch(env, /VITE_|PUBLIC_/)
   assert.match(docker, /node:22\.18-alpine/)
   assert.doesNotMatch(docker, /zkteco-push-ta|frontend/i)

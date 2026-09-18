@@ -7,7 +7,7 @@ const { createRuntimeApp } = require('./app.js')
 
 function start(environment = process.env) {
   const config = loadRuntimeConfig(environment)
-  const client = createClient(config.supabaseUrl, config.serviceRoleKey, {
+  const client = createClient(config.supabaseUrl, config.secretKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
   const service = new AttendanceRuntimeService({ client })

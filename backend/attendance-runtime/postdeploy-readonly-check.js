@@ -80,7 +80,7 @@ async function runPostDeployReadOnlyCheck(environment = process.env, options = {
   const counters = { databaseWrites: 0, rpcWriteCalls: 0, storageWriteCalls: 0, indirectSupabaseCalls: 0 }
   const rawClient = options.createClient
     ? options.createClient()
-    : createClient(requireEnv(environment, 'SUPABASE_URL'), requireEnv(environment, 'SUPABASE_SERVICE_ROLE_KEY'), {
+    : createClient(requireEnv(environment, 'SUPABASE_URL'), requireEnv(environment, 'SUPABASE_SECRET_KEY'), {
       auth: { autoRefreshToken: false, persistSession: false },
     })
   const client = createReadOnlyClient(rawClient, counters)

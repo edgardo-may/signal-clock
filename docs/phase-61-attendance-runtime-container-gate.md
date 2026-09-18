@@ -57,7 +57,7 @@ $BuildSha = '<PACKAGE_SHA256_FROM_STAGED_ARTIFACT>'
 The runtime service account needs only Secret Manager access to the three runtime secrets. The caller service account receives only `roles/run.invoker` on this service. Do not grant browser users, anonymous principals, Cloud Run Admin, Editor, Owner, or database mutation roles.
 
 ```powershell
-gcloud run deploy $Service --project $ProjectId --region $Region --image $Image --service-account $RuntimeServiceAccount --no-allow-unauthenticated --ingress internal-and-cloud-load-balancing --port 8088 --min-instances 0 --max-instances 1 --cpu 1 --memory 512Mi --set-env-vars "NODE_ENV=production,ATTENDANCE_RUNTIME_PORT=8088,RUNTIME_VERSION=$RuntimeVersion,BUILD_SHA=$BuildSha" --set-secrets "SUPABASE_URL=<SUPABASE_URL_SECRET>:latest,SUPABASE_SERVICE_ROLE_KEY=<SUPABASE_SERVICE_ROLE_SECRET>:latest,ATTENDANCE_RUNTIME_INTERNAL_TOKEN=<INTERNAL_TOKEN_SECRET>:latest"
+gcloud run deploy $Service --project $ProjectId --region $Region --image $Image --service-account $RuntimeServiceAccount --no-allow-unauthenticated --ingress internal-and-cloud-load-balancing --port 8088 --min-instances 0 --max-instances 1 --cpu 1 --memory 512Mi --set-env-vars "NODE_ENV=production,ATTENDANCE_RUNTIME_PORT=8088,RUNTIME_VERSION=$RuntimeVersion,BUILD_SHA=$BuildSha" --set-secrets "SUPABASE_URL=<SUPABASE_URL_SECRET>:<VERSION>,SUPABASE_SECRET_KEY=<SUPABASE_SECRET_KEY_SECRET>:<VERSION>,ATTENDANCE_RUNTIME_INTERNAL_TOKEN=<INTERNAL_TOKEN_SECRET>:<VERSION>"
 gcloud run services add-iam-policy-binding $Service --project $ProjectId --region $Region --member "serviceAccount:$CallerServiceAccount" --role roles/run.invoker
 ```
 

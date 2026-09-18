@@ -41,7 +41,7 @@ There is no legacy live-schedule fallback in any active path. `PERSIST_CANARY` i
 
 ## Security and observability
 
-- The process uses `SUPABASE_SERVICE_ROLE_KEY` only from server environment/secret storage. It is absent from HTTP responses and frontend variables.
+- The process uses `SUPABASE_SECRET_KEY` only from server environment/secret storage. It is absent from HTTP responses and frontend variables.
 - Internal execution requires a constant-time checked Bearer token. Production target should additionally use private ingress and workload identity/IAM between the caller and Cloud Run.
 - Request JSON is capped at 4 KB and permits exactly `registro_id`, a UUID. No browser CORS policy is installed.
 - `/health` is non-sensitive liveness; `/ready` performs only a small tenant-feature `SELECT` to validate DB access.
@@ -62,13 +62,13 @@ backend/package.json + backend/package-lock.json
 
 It excludes the frontend, tests, documentation, scratch material, ADMS server and `zkteco-push-ta`.
 
-Required names are in [.env.example](/C:/Users/Edgar/signal-clock/backend/attendance-runtime/.env.example): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ATTENDANCE_RUNTIME_INTERNAL_TOKEN`, `ATTENDANCE_RUNTIME_PORT`, `RUNTIME_VERSION`, and `BUILD_SHA`. `/health` returns only the two release identifiers, never secrets.
+Required names are in [.env.example](/C:/Users/Edgar/signal-clock/backend/attendance-runtime/.env.example): `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ATTENDANCE_RUNTIME_INTERNAL_TOKEN`, `ATTENDANCE_RUNTIME_PORT`, `RUNTIME_VERSION`, and `BUILD_SHA`. `/health` returns only the two release identifiers, never secrets.
 
 ## Post-deploy read-only check
 
 [postdeploy-readonly-check.js](/C:/Users/Edgar/signal-clock/backend/attendance-runtime/postdeploy-readonly-check.js) checks the deployed health/readiness version plus direct read-only C revision resolution and hash parity. It never calls the internal execution endpoint, engine persistence, incidents or RPC.
 
-It requires `ATTENDANCE_RUNTIME_URL`, `ATTENDANCE_RUNTIME_EXPECTED_VERSION`, `ATTENDANCE_RUNTIME_EXPECTED_BUILD_SHA`, `ATTENDANCE_RUNTIME_EXPECTED_SHA256`, `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. `BUILD_SHA` must equal the package SHA calculated from the staged image source, not copied from a development machine.
+It requires `ATTENDANCE_RUNTIME_URL`, `ATTENDANCE_RUNTIME_EXPECTED_VERSION`, `ATTENDANCE_RUNTIME_EXPECTED_BUILD_SHA`, `ATTENDANCE_RUNTIME_EXPECTED_SHA256`, `SUPABASE_URL` and `SUPABASE_SECRET_KEY`. `BUILD_SHA` must equal the package SHA calculated from the staged image source, not copied from a development machine.
 
 ## Explicit non-actions
 

@@ -37,7 +37,7 @@ function loadRuntimeConfig(environment = process.env) {
   return Object.freeze({
     port: parsePort(environment.ATTENDANCE_RUNTIME_PORT),
     supabaseUrl,
-    serviceRoleKey: requireString(environment, 'SUPABASE_SERVICE_ROLE_KEY', { minimumLength: 20 }),
+    secretKey: requireString(environment, 'SUPABASE_SECRET_KEY', { minimumLength: 20 }),
     internalToken: requireString(environment, 'ATTENDANCE_RUNTIME_INTERNAL_TOKEN', { minimumLength: 32 }),
     runtimeVersion: requireString(environment, 'RUNTIME_VERSION'),
     buildSha: requireString(environment, 'BUILD_SHA', { minimumLength: 7 }),
