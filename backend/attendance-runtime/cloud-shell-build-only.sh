@@ -26,8 +26,11 @@ test -f backend/attendance-runtime/postdeploy-readonly-check.js
 test -f backend/attendance-runtime/verify-package-closure.js
 
 node backend/attendance-runtime/verify-package-closure.js
-build_sha="$(node -e \"require('./backend/attendance-runtime/postdeploy-readonly-check.js').runtimeSourceSha256().then(console.log)\")"
+npm ci --prefix backend --omit=dev --ignore-scripts --no-audit --no-fund
+build_sha=$(node -e "require('./backend/attendance-runtime/postdeploy-readonly-check.js').runtimeSourceSha256().then(console.log)")
 test -n "$build_sha"
+rm -rf backend/node_modules
+test -z "$(git status --porcelain)"
 
 gcloud projects describe "$project_id" --format='value(projectId)'
 gcloud builds submit --project "$project_id" --config backend/attendance-runtime/cloudbuild-build-only.yaml --substitutions="_RUNTIME_VERSION=attendance-runtime-v1,_BUILD_SHA=$build_sha" .
