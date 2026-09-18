@@ -20,10 +20,12 @@ test('STAB-002: AttendanceEngine preserves injected LaborRuleProvider', () => {
   assert.equal(result.ordinaryMinutes, 60)
 })
 
-test('STAB-003: persistence contract forwards scheduleAssignmentId', async () => {
+test('STAB-003: browser persistence contract rejects scheduleAssignmentId without an RPC call', async () => {
   let payload
-  await WorkdayPersistenceService.persistWorkday({ rpc: async (_name, args) => { payload = args.payload; return { data: { status: 'CREATED', workday_record_id: 'x', version: 1 }, error: null } } }, { clienteId: tenant, empleadoId: employee, operativeDate: '2026-09-01', timezone: 'America/Cancun', scheduleAssignmentId: 'assignment', workedMinutes: 0, breakMinutes: 0, effectiveMinutes: 0, lateMinutes: 0, earlyLeaveMinutes: 0, ordinaryMinutes: 0, overtimeMinutes: 0, workdayState: 'UNSCHEDULED', calculationVersion: 1, integrityHash: 'h', sourceLogIds: [], punchDispositions: [], incidents: [], warnings: [] })
-  assert.equal(payload.schedule_assignment_id, 'assignment')
+  const result = await WorkdayPersistenceService.persistWorkday({ rpc: async (_name, args) => { payload = args.payload } }, { clienteId: tenant, empleadoId: employee, operativeDate: '2026-09-01', timezone: 'America/Cancun', scheduleAssignmentId: 'assignment', workedMinutes: 0, breakMinutes: 0, effectiveMinutes: 0, lateMinutes: 0, earlyLeaveMinutes: 0, ordinaryMinutes: 0, overtimeMinutes: 0, workdayState: 'UNSCHEDULED', calculationVersion: 3, integrityHash: 'h', sourceLogIds: [], punchDispositions: [], incidents: [], warnings: [] })
+  assert.equal(result.status, 'ERROR')
+  assert.equal(result.error, 'WORKDAY_PERSISTENCE_SERVER_ONLY')
+  assert.equal(payload, undefined)
 })
 
 test('STAB-004: simulated suite uses finite query builders', () => {

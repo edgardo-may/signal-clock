@@ -31,6 +31,11 @@ function sha256Sync(str: string): string {
   return pureJsSha256Utf8(str)
 }
 
+/** Portable SHA-256 over an exact UTF-8 string, shared by immutable DB contracts. */
+export function sha256Utf8(value: string): string {
+  return sha256Sync(value)
+}
+
 /**
  * Implementación pura en JavaScript de SHA-256 (FIPS 180-4) con soporte UTF-8 completo.
  *
@@ -186,6 +191,7 @@ export interface CanonicalWorkdayPayload {
   status: string
   sourceLogIds: string[]
   incidentCodes: string[]
+  warningCodes?: string[]
   calculationVersion: number
 }
 
@@ -219,6 +225,7 @@ export class WorkdayIntegrityHasher {
       status: payload.status,
       sourceLogIds: [...payload.sourceLogIds].sort(),
       incidentCodes: [...payload.incidentCodes].sort(),
+      warningCodes: [...(payload.warningCodes || [])].sort(),
       calculationVersion: payload.calculationVersion,
     }
 

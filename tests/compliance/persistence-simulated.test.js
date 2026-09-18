@@ -3,46 +3,35 @@ import assert from 'node:assert/strict'
 import { WorkdayReprocessService } from '../../src/services/attendance/WorkdayReprocessService.ts'
 
 /**
- * Mock para simular el comportamiento de Reprocess Service y las lecturas a DB.
- * Para evitar dependencia de un ambiente local de Docker/Supabase en CI.
+ * These fixtures still exercise the historical reprocess entry point, but its
+ * browser-reachable persistence boundary is intentionally fail-closed. Phase
+ * 35.5C replaces prior mock-RPC write assertions with the current V3 contract:
+ * calculation can be requested, while persistence remains backend-only.
  */
-describe('FASE 2: Datos Simulados (TEST-001 a TEST-003)', () => {
-
+describe('FASE 2: Datos Simulados (V3 persistence boundary)', () => {
   const SIGNUM_TEST_COMPANY = 't-signum-test'
   const EMP_PUNTUAL = 'e-puntual'
   const EMP_RETARDO = 'e-retardo'
   const EMP_INCOMPLETO = 'e-incompleto'
+  let rpcCalls = 0
 
-  // Mock del Supabase client usado en el reprocess service
   const supabaseClient = {
     from: (table) => {
       const builder = {
         select: () => builder,
-        eq: (f, v) => {
-          if (table === 'empleados' && f === 'id' && v) {
-            builder._empId = v
-          }
-          if (table === 'attendance_logs' && f === 'biometric_user_id') {
-            builder._biomId = v
-          }
+        eq: (field, value) => {
+          if (table === 'empleados' && field === 'id') builder.employeeId = value
+          if (table === 'attendance_logs' && field === 'biometric_user_id') builder.biometricId = value
           return builder
         },
         lte: () => builder,
         gte: () => builder,
         limit: () => builder,
         single: async () => {
-          if (table === 'tenant_features') {
-            return { data: { state: 'ACTIVE' }, error: null }
-          }
-          if (table === 'clientes') {
-            return { data: { timezone: 'America/Mexico_City' }, error: null }
-          }
-          if (table === 'empleados') {
-            if (builder._empId) {
-              return { data: { hikvision_device_userid: builder._empId === EMP_PUNTUAL || builder._empId === EMP_RETARDO || builder._empId === EMP_INCOMPLETO ? builder._empId : 'biom-id' }, error: null }
-            }
-            return { error: 'Not found' }
-          }
+          if (table === 'tenant_features') return { data: { state: 'ACTIVE' }, error: null }
+          if (table === 'clientes') return { data: { timezone: 'America/Mexico_City' }, error: null }
+          if (table === 'empleados') return { data: { device_userid: builder.employeeId }, error: null }
+          return { data: null, error: null }
         },
         maybeSingle: async () => ({ data: null, error: null }),
         then: async (resolve) => {
@@ -55,97 +44,70 @@ describe('FASE 2: Datos Simulados (TEST-001 a TEST-003)', () => {
                   id: 'sch-test',
                   nombre: 'Turno Prueba',
                   tolerancia_minutos: 10,
-                  dias_config: {
-                    mar: { activo: true, entrada: '08:00', salida: '17:00' } // 2027-02-23 es martes
-                  }
-                }
+                  dias_config: { mar: { activo: true, entrada: '08:00', salida: '17:00' } },
+                },
               }],
-              error: null
+              error: null,
             })
             return
           }
           if (table === 'attendance_logs') {
-            let punches = []
-            if (builder._biomId === EMP_PUNTUAL) {
-              punches = [
+            const events = {
+              [EMP_PUNTUAL]: [
                 { id: 'l1', timestamp: '2027-02-23T14:00:00.000Z', in_out_state: 0 },
-                { id: 'l2', timestamp: '2027-02-23T23:00:00.000Z', in_out_state: 1 }
-              ]
-            } else if (builder._biomId === EMP_RETARDO) {
-              punches = [
+                { id: 'l2', timestamp: '2027-02-23T23:00:00.000Z', in_out_state: 1 },
+              ],
+              [EMP_RETARDO]: [
                 { id: 'l3', timestamp: '2027-02-23T14:20:00.000Z', in_out_state: 0 },
-                { id: 'l4', timestamp: '2027-02-23T23:00:00.000Z', in_out_state: 1 }
-              ]
-            } else if (builder._biomId === EMP_INCOMPLETO) {
-              punches = [
-                { id: 'l5', timestamp: '2027-02-23T14:00:00.000Z', in_out_state: 0 }
-              ]
+                { id: 'l4', timestamp: '2027-02-23T23:00:00.000Z', in_out_state: 1 },
+              ],
+              [EMP_INCOMPLETO]: [
+                { id: 'l5', timestamp: '2027-02-23T14:00:00.000Z', in_out_state: 0 },
+              ],
             }
-            resolve({ data: punches.map(p => ({ ...p, cliente_id: SIGNUM_TEST_COMPANY, numero_serie: 'DEV-1', verify_type: 1 })), error: null })
+            resolve({
+              data: (events[builder.biometricId] || []).map((event) => ({
+                ...event,
+                cliente_id: SIGNUM_TEST_COMPANY,
+                numero_serie: 'DEV-1',
+                verify_type: 1,
+              })),
+              error: null,
+            })
             return
           }
           resolve({ data: [], error: null })
-        }
+        },
       }
       return builder
     },
-    // Mock RPC (solo captura la llamada para asertar)
-    rpc: async (func, args) => {
-      if (func === 'upsert_workday_record') {
-        return { data: { status: 'CREATED', workday_record_id: 'rec-1', version: 1 }, error: null }
-      }
-    }
-  }
-  
-  // Para capturar los payloads enviados a upsert_workday_record
-  let lastPayload = null
-  const originalRpc = supabaseClient.rpc
-  supabaseClient.rpc = async (func, args) => {
-    lastPayload = args.payload
-    return originalRpc(func, args)
+    rpc: async () => {
+      rpcCalls += 1
+      throw new Error('The V3 browser boundary must not invoke RPC.')
+    },
   }
 
-  test('TEST-001: Jornada puntual simulada procesa y persiste exitosamente', async () => {
-    const res = await WorkdayReprocessService.processWorkday({
+  async function expectServerOnly(empleadoId) {
+    const result = await WorkdayReprocessService.processWorkday({
       supabaseClient,
       clienteId: SIGNUM_TEST_COMPANY,
-      empleadoId: EMP_PUNTUAL,
-      workdayDate: '2027-02-23'
+      empleadoId,
+      workdayDate: '2027-02-23',
     })
-    
-    assert.equal(res.status, 'CREATED')
-    assert.equal(lastPayload.workday_state, 'COMPLETE')
-    assert.equal(lastPayload.late_minutes, 0)
-    assert.equal(lastPayload.early_leave_minutes, 0)
-    assert.equal(lastPayload.incidents.length, 1)
-    assert.equal(lastPayload.incidents[0].code, 'OVERTIME_DETECTED')
+    assert.equal(result.status, 'ERROR')
+    assert.equal(result.error, 'WORKDAY_PERSISTENCE_SERVER_ONLY')
+    assert.equal(rpcCalls, 0)
+  }
+
+  test('TEST-001: a punctual simulated workday cannot persist through the browser boundary', async () => {
+    await expectServerOnly(EMP_PUNTUAL)
   })
 
-  test('TEST-002: Jornada con retardo detecta late_minutes y LATE incident', async () => {
-    const res = await WorkdayReprocessService.processWorkday({
-      supabaseClient,
-      clienteId: SIGNUM_TEST_COMPANY,
-      empleadoId: EMP_RETARDO,
-      workdayDate: '2027-02-23'
-    })
-    
-    assert.equal(res.status, 'CREATED')
-    assert.equal(lastPayload.workday_state, 'COMPLETE')
-    // Llegó 08:20 -> tolerancia 10min -> retardo total de 20min desde la programada (ATT-005)
-    assert.equal(lastPayload.late_minutes, 20)
-    assert.ok(lastPayload.incidents.some(i => i.code === 'LATE'))
+  test('TEST-002: a late simulated workday cannot persist through the browser boundary', async () => {
+    await expectServerOnly(EMP_RETARDO)
   })
 
-  test('TEST-003: Jornada incompleta genera MISSING_EXIT', async () => {
-    const res = await WorkdayReprocessService.processWorkday({
-      supabaseClient,
-      clienteId: SIGNUM_TEST_COMPANY,
-      empleadoId: EMP_INCOMPLETO,
-      workdayDate: '2027-02-23'
-    })
-    
-    assert.equal(res.status, 'CREATED')
-    assert.equal(lastPayload.workday_state, 'INCOMPLETE')
-    assert.ok(lastPayload.incidents.some(i => i.code === 'MISSING_EXIT'))
+  test('TEST-003: an incomplete simulated workday cannot create an incident write', async () => {
+    await expectServerOnly(EMP_INCOMPLETO)
   })
 })

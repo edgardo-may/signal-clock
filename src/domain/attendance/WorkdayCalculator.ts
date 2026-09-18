@@ -20,6 +20,7 @@ import type {
   ShiftType,
   LaborRuleThresholds,
   NormalizedPunch,
+  SupplementalAttendanceEvent,
 } from './AttendanceTypes.ts'
 import type { ShiftMatchResult } from './ShiftMatcher.ts'
 import { getLocalComponents } from './timezoneUtils.ts'
@@ -56,6 +57,53 @@ export interface CalculationMetrics {
   sourceLogIds: string[]
   devicesInvolved: string[]
   pairingIncidents: WorkdayIncident[]
+  supplementalEvents: SupplementalAttendanceEvent[]
+}
+
+/**
+ * Stable calculation evidence for a malformed but readable punch sequence.
+ * These are not HR incident records and must not trigger a write by themselves.
+ */
+export function pairingWarningCodes(metrics: CalculationMetrics): string[] {
+  const codes = new Set<string>(metrics.pairingIncidents.map((incident) => incident.code))
+  for (const event of metrics.supplementalEvents) {
+    if (event.reason === 'ADDITIONAL_ENTRY') codes.add('ADDITIONAL_ENTRY')
+    if (event.reason === 'ADDITIONAL_EXIT' || event.reason === 'EXIT_BEFORE_FIRST_IN') codes.add('ADDITIONAL_EXIT')
+  }
+  const order = ['CONSECUTIVE_ENTRY', 'CONSECUTIVE_EXIT', 'ADDITIONAL_ENTRY', 'ADDITIONAL_EXIT', 'PUNCH_SEQUENCE_AMBIGUOUS']
+  return order.filter((code) => codes.has(code))
+}
+
+export interface CanonicalAttendanceSelection {
+  firstIn?: NormalizedPunch
+  firstOut?: NormalizedPunch
+  supplementalEvents: SupplementalAttendanceEvent[]
+}
+
+/**
+ * Phase 35.4 policy: a workday is one canonical first ENTRY plus the first
+ * subsequent EXIT. Pairing remains analytics only; it cannot replace either.
+ */
+export function selectCanonicalAttendance(punches: readonly NormalizedPunch[]): CanonicalAttendanceSelection {
+  const firstIn = punches.find((punch) => punch.direction === 'ENTRY')
+  const firstOut = firstIn
+    ? punches.find((punch) => punch.direction === 'EXIT' && punch.epochMs > firstIn.epochMs)
+    : undefined
+  const supplementalEvents: SupplementalAttendanceEvent[] = punches
+    .filter((punch) => punch.id !== firstIn?.id && punch.id !== firstOut?.id)
+    .map((punch) => ({
+      logId: punch.id,
+      utcTimestamp: punch.utcTimestamp,
+      type: punch.inOutType,
+      reason: punch.direction === 'EXIT' && (!firstIn || punch.epochMs <= firstIn.epochMs)
+        ? 'EXIT_BEFORE_FIRST_IN'
+        : punch.direction === 'ENTRY'
+          ? 'ADDITIONAL_ENTRY'
+          : punch.direction === 'EXIT'
+            ? 'ADDITIONAL_EXIT'
+            : 'UNCLASSIFIED_EVENT',
+    }))
+  return { firstIn, firstOut, supplementalEvents }
 }
 
 /**
@@ -279,6 +327,7 @@ export class WorkdayCalculator {
         sourceLogIds: [],
         devicesInvolved: [],
         pairingIncidents: [],
+        supplementalEvents: [],
       }
     }
 
@@ -319,6 +368,10 @@ export class WorkdayCalculator {
       isEntry = distToStart <= distToEnd
     }
 
+    // Canonical attendance accepts an explicit normalized ENTRY only.
+    // UNKNOWN remains supplemental/unclassified evidence.
+    isEntry = singlePunch.direction === 'ENTRY'
+
     if (isEntry) {
       let lateMinutes = 0
       if (matchResult.scheduledStartUtc) {
@@ -346,23 +399,19 @@ export class WorkdayCalculator {
         sourceLogIds,
         devicesInvolved,
         pairingIncidents: [],
+        supplementalEvents: selectCanonicalAttendance([singlePunch]).supplementalEvents,
       }
     } else {
-      let earlyLeaveMinutes = 0
-      if (matchResult.scheduledEndUtc) {
-        const endMs = new Date(matchResult.scheduledEndUtc).getTime()
-        if (punchMs < endMs) {
-          earlyLeaveMinutes = Math.round((endMs - punchMs) / 60000)
-        }
-      }
+      // An EXIT without a canonical ENTRY is preserved as evidence only. It
+      // cannot become actualEnd or drive early-leave metrics.
       return {
         actualStart: undefined,
-        actualEnd: singlePunch.utcTimestamp,
+        actualEnd: undefined,
         workedMinutes: 0,
         breakMinutes: 0,
         effectiveMinutes: 0,
         lateMinutes: 0,
-        earlyLeaveMinutes,
+        earlyLeaveMinutes: 0,
         ordinaryMinutes: 0,
         overtimeMinutes: 0,
         nightShiftMinutes: 0,
@@ -372,6 +421,7 @@ export class WorkdayCalculator {
         sourceLogIds,
         devicesInvolved,
         pairingIncidents: [],
+        supplementalEvents: selectCanonicalAttendance([singlePunch]).supplementalEvents,
       }
     }
   }
@@ -397,9 +447,13 @@ export class WorkdayCalculator {
 
     const firstPunch = punches[0]
     const lastPunch = punches[punches.length - 1]
-    const actualStart = firstPunch.utcTimestamp
     const missingExit = pairing.orphanEntry !== undefined
     const missingEntry = pairing.orphanExit !== undefined && pairing.pairs.length === 0
+    // first_in / late are based on the first entry retained in a WORK
+    // segment. A discarded consecutive entry is observed evidence, not work.
+    const effectiveFirstPunch = pairing.pairs[0]?.entry || firstPunch
+    const effectiveLastPunch = pairing.pairs[pairing.pairs.length - 1]?.exit || lastPunch
+    const actualStart = effectiveFirstPunch.utcTimestamp
 
     // Construir segmentos de trabajo a partir de los pares apareados
     for (let i = 0; i < pairing.pairs.length; i++) {
@@ -445,7 +499,9 @@ export class WorkdayCalculator {
       }
     }
 
-    const workedMinutes = Math.round((lastPunch.epochMs - firstPunch.epochMs) / 60000)
+    // Contract 35.2: only valid WORK segments count as workedMinutes. The
+    // first-to-last elapsed span remains trace evidence, never this metric.
+    const workedMinutes = totalWorkMinutes
     const effectiveMinutes = Math.max(0, totalWorkMinutes - (pairing.pairs.length === 1 ? totalBreakMinutes : 0))
 
     // ATT-005: lateMinutes = minutos desde hora programada (scheduledStart), no desde fin de tolerancia.
@@ -456,16 +512,16 @@ export class WorkdayCalculator {
     if (matchResult.scheduledStartUtc) {
       const startMs = new Date(matchResult.scheduledStartUtc).getTime()
       const toleranceMs = matchResult.toleranceMinutes * 60000
-      if (firstPunch.epochMs > startMs + toleranceMs) {
-        lateMinutes = Math.round((firstPunch.epochMs - startMs) / 60000)
+      if (effectiveFirstPunch.epochMs > startMs + toleranceMs) {
+        lateMinutes = Math.round((effectiveFirstPunch.epochMs - startMs) / 60000)
       }
     }
 
     let earlyLeaveMinutes = 0
     if (matchResult.scheduledEndUtc && !missingExit) {
       const endMs = new Date(matchResult.scheduledEndUtc).getTime()
-      if (lastPunch.epochMs < endMs) {
-        earlyLeaveMinutes = Math.round((endMs - lastPunch.epochMs) / 60000)
+      if (effectiveLastPunch.epochMs < endMs) {
+        earlyLeaveMinutes = Math.round((endMs - effectiveLastPunch.epochMs) / 60000)
       }
     }
 
@@ -490,23 +546,75 @@ export class WorkdayCalculator {
       }
     }
 
+    // Pairing-derived values above are retained only for diagnostic pairing
+    // evidence. Mark them intentionally consumed before canonical metrics are
+    // derived below; no pairing result is authoritative for the workday.
+    void totalNocturnalMinutes
+    void missingEntry
+    void actualStart
+    void workedMinutes
+    void lateMinutes
+    void earlyLeaveMinutes
+    void ordinaryMinutes
+    void overtimeMinutes
+
+    const canonical = selectCanonicalAttendance(punches)
+    const canonicalFirstIn = canonical.firstIn
+    const canonicalFirstOut = canonical.firstOut
+    const canonicalMissingEntry = !canonicalFirstIn
+    const canonicalMissingExit = Boolean(canonicalFirstIn && !canonicalFirstOut)
+    const canonicalWorkedMinutes = canonicalFirstIn && canonicalFirstOut
+      ? Math.round((canonicalFirstOut.epochMs - canonicalFirstIn.epochMs) / 60000)
+      : 0
+    const canonicalSegments: WorkdaySegment[] = canonicalFirstIn && canonicalFirstOut ? [{
+      segmentType: 'WORK',
+      startPunch: canonicalFirstIn,
+      endPunch: canonicalFirstOut,
+      durationMinutes: canonicalWorkedMinutes,
+      isNocturnalMinutes: 0,
+    }] : []
+    let canonicalLateMinutes = 0
+    if (canonicalFirstIn && matchResult.scheduledStartUtc) {
+      const startMs = new Date(matchResult.scheduledStartUtc).getTime()
+      if (canonicalFirstIn.epochMs > startMs + matchResult.toleranceMinutes * 60000) {
+        canonicalLateMinutes = Math.round((canonicalFirstIn.epochMs - startMs) / 60000)
+      }
+    }
+    let canonicalEarlyLeaveMinutes = 0
+    if (canonicalFirstOut && matchResult.scheduledEndUtc) {
+      const endMs = new Date(matchResult.scheduledEndUtc).getTime()
+      if (canonicalFirstOut.epochMs < endMs) {
+        canonicalEarlyLeaveMinutes = Math.round((endMs - canonicalFirstOut.epochMs) / 60000)
+      }
+    }
+    const canonicalEffectiveMinutes = canonicalWorkedMinutes
+    const canonicalOrdinaryMinutes = isRestOrHoliday
+      ? 0
+      : Math.min(canonicalEffectiveMinutes, dailyOrdinaryThreshold)
+    const canonicalOvertimeMinutes = isRestOrHoliday
+      ? canonicalEffectiveMinutes
+      : Math.max(0, canonicalEffectiveMinutes - dailyOrdinaryThreshold)
+
     return {
-      actualStart,
-      actualEnd: missingExit ? undefined : lastPunch.utcTimestamp,
-      workedMinutes,
-      breakMinutes: totalBreakMinutes,
-      effectiveMinutes,
-      lateMinutes,
-      earlyLeaveMinutes,
-      ordinaryMinutes,
-      overtimeMinutes,
-      nightShiftMinutes: totalNocturnalMinutes,
-      missingEntry,
-      missingExit,
-      segments,
+      actualStart: canonicalFirstIn?.utcTimestamp,
+      actualEnd: canonicalFirstOut?.utcTimestamp,
+      workedMinutes: canonicalWorkedMinutes,
+      // Supplemental punches never infer a break. A canonical scheduled-break
+      // interval is not available in this calculation contract yet.
+      breakMinutes: 0,
+      effectiveMinutes: canonicalEffectiveMinutes,
+      lateMinutes: canonicalLateMinutes,
+      earlyLeaveMinutes: canonicalEarlyLeaveMinutes,
+      ordinaryMinutes: canonicalOrdinaryMinutes,
+      overtimeMinutes: canonicalOvertimeMinutes,
+      nightShiftMinutes: 0,
+      missingEntry: canonicalMissingEntry,
+      missingExit: canonicalMissingExit,
+      segments: canonicalSegments,
       sourceLogIds,
       devicesInvolved,
       pairingIncidents: pairing.pairingIncidents,
+      supplementalEvents: canonical.supplementalEvents,
     }
   }
 }

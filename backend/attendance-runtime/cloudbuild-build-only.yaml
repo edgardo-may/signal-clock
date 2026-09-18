@@ -1,0 +1,32 @@
+# Validation build only: no registry push, no Cloud Run resource, no deployment.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build-runtime-image
+    args:
+      - build
+      - --pull
+      - --no-cache
+      - --file=backend/attendance-runtime/Dockerfile
+      - --build-arg=RUNTIME_VERSION=${_RUNTIME_VERSION}
+      - --build-arg=BUILD_SHA=${_BUILD_SHA}
+      - --tag=signum-attendance-runtime:validation-$BUILD_ID
+      - .
+  - name: gcr.io/cloud-builders/docker
+    id: inspect-runtime-image
+    entrypoint: sh
+    args:
+      - -ceu
+      - |
+        image="signum-attendance-runtime:validation-$BUILD_ID"
+        expected_user="node"
+        expected_runtime_version="${_RUNTIME_VERSION}"
+        expected_build_sha="${_BUILD_SHA}"
+        actual_user="$(docker image inspect "$image" --format '{{.Config.User}}')"
+        test "$actual_user" = "$expected_user"
+        actual_env="$(docker image inspect "$image" --format '{{range .Config.Env}}{{println .}}{{end}}')"
+        printf '%s\n' "$actual_env" | grep -Fx 'NODE_ENV=production'
+        printf '%s\n' "$actual_env" | grep -Fx "RUNTIME_VERSION=$expected_runtime_version"
+        printf '%s\n' "$actual_env" | grep -Fx "BUILD_SHA=$expected_build_sha"
+        printf '%s\n' 'attendance_container_build_validation=PASS'
+options:
+  logging: CLOUD_LOGGING_ONLY

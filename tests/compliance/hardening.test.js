@@ -57,10 +57,11 @@ describe('HARD-001: ENTRY/EXIT explícitos válidos — pareado por dirección',
 
     const result = AttendanceEngine.process(TENANT_A, EMP_A, shift, rawPunches, { timezone: TZ_CDMX })
 
-    // 2 segmentos de trabajo: 08-13 = 300m, 14-18 = 240m
-    assert.equal(result.segments.filter(s => s.segmentType === 'WORK').length, 2, 'Debe haber 2 segmentos de trabajo')
-    assert.equal(result.segments.filter(s => s.segmentType === 'BREAK').length, 1, 'Debe haber 1 segmento de descanso')
-    assert.equal(result.workedMinutes, 600, 'Tiempo total de 08:00 a 18:00 = 600 min')
+    // Phase 35.4: 08:00 ENTRY + first later EXIT at 13:00 is canonical.
+    assert.equal(result.segments.filter(s => s.segmentType === 'WORK').length, 1, 'Solo existe el intervalo canónico')
+    assert.equal(result.segments.filter(s => s.segmentType === 'BREAK').length, 0, 'No se infiere BREAK de punches suplementarios')
+    assert.equal(result.workedMinutes, 300, 'El intervalo canónico es 08:00 a 13:00')
+    assert.equal(result.supplementalEvents.length, 2, 'ENTRY 14:00 y EXIT 18:00 son evidencia suplementaria')
     assert.equal(result.workdayState, 'COMPLETE', 'Jornada completa')
     assert.equal(result.missingExit, false, 'No falta salida')
     assert.equal(result.missingEntry, false, 'No falta entrada')
@@ -179,10 +180,10 @@ describe('HARD-004: Punches UNKNOWN → fallback posicional', () => {
 
     const result = AttendanceEngine.process(TENANT_A, EMP_A, shift, rawPunches, { timezone: TZ_CDMX })
 
-    // Fallback posicional: p1=entrada, p2=salida → 1 segmento de 540m
-    assert.equal(result.workedMinutes, 540, 'Fallback posicional: p1 entrada, p2 salida → 540m')
-    assert.equal(result.workdayState, 'COMPLETE', 'Jornada completa via fallback posicional')
-    assert.equal(result.missingExit, false)
+    // UNKNOWN is diagnostic evidence only; canonical attendance requires ENTRY.
+    assert.equal(result.workedMinutes, 0)
+    assert.equal(result.workdayState, 'INCOMPLETE')
+    assert.equal(result.missingEntry, true)
 
     // Sin incidencias de ambigüedad
     const ambiguous = result.incidents.filter(i =>
@@ -228,8 +229,8 @@ describe('HARD-006: LATE + EARLY_LEAVE simultáneos → workdayState y incidents
     const shift = { operativeDate: date, startTime: '08:00', endTime: '17:00', toleranceMinutes: 10 }
 
     const rawPunches = [
-      { id: 'p1', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '08:15:00', TZ_CDMX) },
-      { id: 'p2', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '16:30:00', TZ_CDMX) },
+      { id: 'p1', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '08:15:00', TZ_CDMX), inOutState: 0 },
+      { id: 'p2', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '16:30:00', TZ_CDMX), inOutState: 1 },
     ]
 
     const result = AttendanceEngine.process(TENANT_A, EMP_A, shift, rawPunches, { timezone: TZ_CDMX })
@@ -274,7 +275,7 @@ describe('HARD-006: LATE + EARLY_LEAVE simultáneos → workdayState y incidents
 
     // Solo entrada, sin salida
     const rawPunches = [
-      { id: 'p1', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '08:00:00', TZ_CDMX) },
+      { id: 'p1', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '08:00:00', TZ_CDMX), inOutState: 0 },
     ]
 
     const result = AttendanceEngine.process(TENANT_A, EMP_A, shift, rawPunches, { timezone: TZ_CDMX })
@@ -526,8 +527,8 @@ describe('HARD-010: SHA-256 fallback con caracteres Unicode', () => {
     }
 
     const rawPunches = [
-      { id: 'p1', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '08:00:00', TZ_CDMX) },
-      { id: 'p2', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '17:00:00', TZ_CDMX) },
+      { id: 'p1', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '08:00:00', TZ_CDMX), inOutState: 0 },
+      { id: 'p2', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '17:00:00', TZ_CDMX), inOutState: 1 },
     ]
 
     const result = AttendanceEngine.process(TENANT_A, EMP_A, shift, rawPunches, { timezone: TZ_CDMX })
@@ -568,13 +569,13 @@ describe('HARD-011: Turnos cercanos con ventanas explícitas (ATT-008)', () => {
     }
 
     const punches1 = [
-      { id: 's1-in',  clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '06:00:00', TZ_CDMX) },
-      { id: 's1-out', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '14:00:00', TZ_CDMX) },
+      { id: 's1-in',  clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '06:00:00', TZ_CDMX), inOutState: 0 },
+      { id: 's1-out', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '14:00:00', TZ_CDMX), inOutState: 1 },
     ]
 
     const punches2 = [
-      { id: 's2-in',  clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '14:10:00', TZ_CDMX) },
-      { id: 's2-out', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '22:00:00', TZ_CDMX) },
+      { id: 's2-in',  clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '14:10:00', TZ_CDMX), inOutState: 0 },
+      { id: 's2-out', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(date, '22:00:00', TZ_CDMX), inOutState: 1 },
     ]
 
     const result1 = AttendanceEngine.process(TENANT_A, EMP_A, shift1, punches1, { timezone: TZ_CDMX })

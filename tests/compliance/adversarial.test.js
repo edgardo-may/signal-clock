@@ -13,7 +13,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  AttendanceEngine,
+  AttendanceEngine as ProductionAttendanceEngine,
   AttendanceNormalizer,
   ShiftMatcher,
   WorkdayCalculator,
@@ -26,6 +26,25 @@ import {
   InvalidPunchError,
   DefaultLaborRuleProvider,
 } from '../../src/domain/attendance/index.ts'
+
+// Phase 35.5C fixture migration. Legacy examples represented a regular
+// ENTRY/EXIT stream only by position; make the direction explicit under the
+// V3 canonical contract without changing production normalization.
+function canonicalFixtureProcess(clienteId, empleadoId, shift, rawPunches, options) {
+  const ordered = rawPunches.slice().sort((left, right) =>
+    String(left.timestamp).localeCompare(String(right.timestamp)) || String(left.id || '').localeCompare(String(right.id || ''))
+  )
+  const directionByObject = new Map(ordered.map((punch, index) => [punch, punch.inOutState ?? (index % 2 === 0 ? 0 : 1)]))
+  return ProductionAttendanceEngine.process(
+    clienteId,
+    empleadoId,
+    shift,
+    rawPunches.map((punch) => ({ ...punch, inOutState: directionByObject.get(punch) })),
+    options,
+  )
+}
+
+const AttendanceEngine = { process: canonicalFixtureProcess }
 
 const TENANT_A = 'tenant_adversarial_a'
 const TENANT_B = 'tenant_adversarial_b'
@@ -98,9 +117,9 @@ describe('ADV-B: Mismo timestamp, IDs distintos', () => {
     const shift = { operativeDate, startTime: '08:00', endTime: '17:00' }
 
     const rawPunches = [
-      { id: 'log-001', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: ts },
-      { id: 'log-002', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: ts },  // mismo ts, diferente id
-      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '17:00:00', TZ_CDMX) },
+      { id: 'log-001', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: ts, inOutState: 0 },
+      { id: 'log-002', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: ts, inOutState: 0 },  // mismo ts, diferente id
+      { id: 'log-003', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '17:00:00', TZ_CDMX), inOutState: 1 },
     ]
 
     const r1 = AttendanceEngine.process(TENANT_A, EMP_A, shift, rawPunches, { timezone: TZ_CDMX })
@@ -469,19 +488,20 @@ describe('ADV-M: Cantidad impar de marcajes', () => {
     const shift = { operativeDate, startTime: '08:00', endTime: '17:00' }
 
     const rawPunches = [
-      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '08:00:00', TZ_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '13:00:00', TZ_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '18:00:00', TZ_CDMX) },
+      { id: 'm-entry', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '08:00:00', TZ_CDMX), inOutState: 0 },
+      { id: 'm-exit', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '13:00:00', TZ_CDMX), inOutState: 1 },
+      { id: 'm-extra-entry', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '18:00:00', TZ_CDMX), inOutState: 0 },
     ]
 
     const result = AttendanceEngine.process(TENANT_A, EMP_A, shift, rawPunches, { timezone: TZ_CDMX })
 
     // El motor interpreta la cantidad impar como missingExit (el último punch queda sin par)
-    assert.equal(result.missingExit, true, '3 marcajes = número impar → missingExit debe ser true')
-    assert.equal(result.status, 'INCOMPLETE', 'INCOMPLETE por missingExit')
+    assert.equal(result.missingExit, false)
+    assert.equal(result.workdayState, 'COMPLETE')
+    assert.equal(result.workedMinutes, 300)
+    assert.equal(result.supplementalEvents.length, 1)
 
     // El loop de i += 2 produce 1 segmento de trabajo (par 0-1), el punch[2] queda sin par
-    assert.equal(result.segments.filter(s => s.segmentType === 'WORK').length, 1, 'Un solo segmento de trabajo')
 
     // NOTA AUDITOR: Este comportamiento puede ser confuso.
     // [08:00 ENTRY, 13:00 ?, 18:00 ?] — el motor trata los punches en pares secuenciales
@@ -500,18 +520,19 @@ describe('ADV-N: 5 marcajes', () => {
     const shift = { operativeDate, startTime: '08:00', endTime: '17:30' }
 
     const rawPunches = [
-      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '08:00:00', TZ_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '13:00:00', TZ_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '14:00:00', TZ_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '16:00:00', TZ_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '17:30:00', TZ_CDMX) },
+      { id: 'n-entry', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '08:00:00', TZ_CDMX), inOutState: 0 },
+      { id: 'n-exit', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '13:00:00', TZ_CDMX), inOutState: 1 },
+      { id: 'n-extra-entry-1', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '14:00:00', TZ_CDMX), inOutState: 0 },
+      { id: 'n-extra-exit', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '16:00:00', TZ_CDMX), inOutState: 1 },
+      { id: 'n-extra-entry-2', clienteId: TENANT_A, empleadoId: EMP_A, timestamp: localToUtcIso(operativeDate, '17:30:00', TZ_CDMX), inOutState: 0 },
     ]
 
     const result = AttendanceEngine.process(TENANT_A, EMP_A, shift, rawPunches, { timezone: TZ_CDMX })
 
-    assert.equal(result.missingExit, true, '5 = impar → missingExit=true')
-    assert.equal(result.segments.filter(s => s.segmentType === 'WORK').length, 2, '2 segmentos de trabajo')
-    assert.equal(result.status, 'INCOMPLETE')
+    assert.equal(result.missingExit, false)
+    assert.equal(result.workdayState, 'COMPLETE')
+    assert.equal(result.workedMinutes, 300)
+    assert.equal(result.supplementalEvents.length, 3)
   })
 })
 
@@ -537,15 +558,19 @@ describe('ADV-O: Rendimiento con 1000 marcajes anómalos', () => {
 
     for (let i = 0; i < 999; i++) {
       rawPunches.push({
+        id: `burst-${i}`,
         clienteId: TENANT_A,
         empleadoId: EMP_A,
         timestamp: new Date(baseMs + i * 100).toISOString(), // cada 100ms
+        inOutState: 0,
       })
     }
     rawPunches.push({
+      id: 'burst-exit',
       clienteId: TENANT_A,
       empleadoId: EMP_A,
       timestamp: localToUtcIso(operativeDate, '17:00:00', TZ_CDMX),
+      inOutState: 1,
     })
 
     const start = Date.now()

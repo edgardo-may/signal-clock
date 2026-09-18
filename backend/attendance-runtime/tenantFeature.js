@@ -1,0 +1,28 @@
+'use strict'
+
+const FEATURE_KEY = 'REVISION_SCHEDULE_RESOLVER'
+const SUPPORTED_MODES = new Set(['OFF', 'SHADOW', 'ACTIVE'])
+
+class TenantFeatureError extends Error {
+  constructor(message, code) {
+    super(message)
+    this.name = 'TenantFeatureError'
+    this.code = code
+  }
+}
+
+async function loadRevisionResolverFeature(client, tenantId) {
+  const response = await client.from('tenant_features')
+    .select('cliente_id,feature_key,mode,enabled')
+    .eq('cliente_id', tenantId)
+    .eq('feature_key', FEATURE_KEY)
+    .maybeSingle()
+  if (response.error) throw new TenantFeatureError('No se pudo leer el feature flag del tenant.', 'FEATURE_READ_FAILED')
+  if (!response.data || response.data.enabled !== true) return { mode: 'OFF', source: 'ABSENT_OR_DISABLED' }
+  if (!SUPPORTED_MODES.has(response.data.mode)) {
+    throw new TenantFeatureError('El feature flag tiene un modo no soportado.', 'FEATURE_MODE_UNSUPPORTED')
+  }
+  return { mode: response.data.mode, source: 'TENANT_FEATURE' }
+}
+
+module.exports = { FEATURE_KEY, TenantFeatureError, loadRevisionResolverFeature }

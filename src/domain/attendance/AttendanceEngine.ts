@@ -36,7 +36,7 @@ import type {
 import { assertValidTimezone } from './timezoneUtils.ts'
 import { AttendanceNormalizer } from './AttendanceNormalizer.ts'
 import { ShiftMatcher } from './ShiftMatcher.ts'
-import { WorkdayCalculator, DefaultLaborRuleProvider } from './WorkdayCalculator.ts'
+import { WorkdayCalculator, DefaultLaborRuleProvider, pairingWarningCodes } from './WorkdayCalculator.ts'
 import { IncidentDetector } from './IncidentDetector.ts'
 import { WorkdayIntegrityHasher } from './WorkdayIntegrityHasher.ts'
 
@@ -49,7 +49,7 @@ export class AttendanceEngine {
       operativeDate: options?.operativeDate || '',
       deduplication: options?.deduplication || { minSecondsBetweenPunches: 60, mode: 'KEEP_FIRST' },
       laborRuleProvider: options?.laborRuleProvider || new DefaultLaborRuleProvider(),
-      calculationVersion: options?.calculationVersion || 1,
+      calculationVersion: options?.calculationVersion || 3,
       defaultToleranceMinutes: options?.defaultToleranceMinutes || 10,
       autoDeductScheduledBreakIfNoPunches: options?.autoDeductScheduledBreakIfNoPunches ?? false,
     }
@@ -169,6 +169,7 @@ export class AttendanceEngine {
       status: evalResult.status,
       sourceLogIds: metrics.sourceLogIds,
       incidentCodes: evalResult.incidents.map((i) => i.code),
+      warningCodes: pairingWarningCodes(metrics),
       calculationVersion,
     })
 
@@ -202,6 +203,7 @@ export class AttendanceEngine {
       segments: metrics.segments,
       sourceLogIds: metrics.sourceLogIds,
       punchDispositions,                       // ATT-004: Trazabilidad completa
+      supplementalEvents: metrics.supplementalEvents,
       devicesInvolved: metrics.devicesInvolved,
       warnings: evalResult.warnings,
       incidents: evalResult.incidents,

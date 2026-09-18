@@ -9,7 +9,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  AttendanceEngine,
+  AttendanceEngine as ProductionAttendanceEngine,
   AttendanceNormalizer,
   ShiftMatcher,
   WorkdayCalculator,
@@ -20,6 +20,26 @@ import {
   TenantMismatchError,
   InvalidTimezoneError,
 } from '../../src/domain/attendance/index.ts'
+
+// Phase 35.5C fixture migration: historical examples encoded ENTRY/EXIT only
+// by pair position. The production contract requires normalized direction, so
+// this test-only adapter makes that formerly implicit fixture evidence explicit
+// before calling the unchanged engine. Deliberate UNKNOWN tests live elsewhere.
+function canonicalFixtureProcess(clienteId, empleadoId, shift, rawPunches, options) {
+  const ordered = rawPunches.slice().sort((left, right) =>
+    String(left.timestamp).localeCompare(String(right.timestamp)) || String(left.id || '').localeCompare(String(right.id || ''))
+  )
+  const directionByObject = new Map(ordered.map((punch, index) => [punch, punch.inOutState ?? (index % 2 === 0 ? 0 : 1)]))
+  return ProductionAttendanceEngine.process(
+    clienteId,
+    empleadoId,
+    shift,
+    rawPunches.map((punch) => ({ ...punch, inOutState: directionByObject.get(punch) })),
+    options,
+  )
+}
+
+const AttendanceEngine = { process: canonicalFixtureProcess }
 
 describe('Attendance Engine - Suite de Cumplimiento Laboral 2027', () => {
   const TENANT_A = 'tenant_signum_test_company_001'
@@ -210,22 +230,22 @@ describe('Attendance Engine - Suite de Cumplimiento Laboral 2027', () => {
     }
 
     const rawPunches = [
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:00', TIMEZONE_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '13:00:00', TIMEZONE_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '14:00:00', TIMEZONE_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '18:00:00', TIMEZONE_CDMX) },
+      { id: 'f-entry', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:00', TIMEZONE_CDMX), inOutState: 0 },
+      { id: 'f-exit', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '13:00:00', TIMEZONE_CDMX), inOutState: 1 },
+      { id: 'f-extra-entry', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '14:00:00', TIMEZONE_CDMX), inOutState: 0 },
+      { id: 'f-extra-exit', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '18:00:00', TIMEZONE_CDMX), inOutState: 1 },
     ]
 
     const result = AttendanceEngine.process(TENANT_A, EMP_001, shift, rawPunches, {
       timezone: TIMEZONE_CDMX,
     })
 
-    assert.equal(result.status, 'PRESENT')
-    assert.equal(result.workedMinutes, 600) // 10 horas totales (08:00 a 18:00)
-    assert.equal(result.breakMinutes, 60) // 1 hora de comida (13:00 a 14:00)
-    assert.equal(result.effectiveMinutes, 540) // 9 horas efectivas
-    assert.equal(result.segments.filter((s) => s.segmentType === 'WORK').length, 2)
-    assert.equal(result.segments.filter((s) => s.segmentType === 'BREAK').length, 1)
+    assert.equal(result.workdayState, 'COMPLETE')
+    assert.equal(result.status, 'EARLY_LEAVE')
+    assert.equal(result.workedMinutes, 300)
+    assert.equal(result.breakMinutes, 0)
+    assert.equal(result.earlyLeaveMinutes, 300)
+    assert.equal(result.supplementalEvents.length, 2)
   })
 
   // ─────────────────────────────────────────────────────────────
@@ -275,20 +295,23 @@ describe('Attendance Engine - Suite de Cumplimiento Laboral 2027', () => {
     }
 
     const rawPunches = [
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '20:00:00', TIMEZONE_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(nextDate, '00:30:00', TIMEZONE_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(nextDate, '01:00:00', TIMEZONE_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(nextDate, '04:00:00', TIMEZONE_CDMX) },
+      { id: 'h-entry', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '20:00:00', TIMEZONE_CDMX), inOutState: 0 },
+      { id: 'h-exit', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(nextDate, '00:30:00', TIMEZONE_CDMX), inOutState: 1 },
+      { id: 'h-extra-entry', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(nextDate, '01:00:00', TIMEZONE_CDMX), inOutState: 0 },
+      { id: 'h-extra-exit', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(nextDate, '04:00:00', TIMEZONE_CDMX), inOutState: 1 },
     ]
 
     const result = AttendanceEngine.process(TENANT_A, EMP_001, shift, rawPunches, {
       timezone: TIMEZONE_CDMX,
     })
 
-    assert.equal(result.status, 'PRESENT')
+    assert.equal(result.status, 'EARLY_LEAVE')
     assert.equal(result.operativeDate, '2027-01-15')
-    assert.equal(result.breakMinutes, 30)
-    assert.equal(result.effectiveMinutes, 450) // 8h - 30m = 7h 30m
+    assert.equal(result.workdayState, 'COMPLETE')
+    assert.equal(result.workedMinutes, 270)
+    assert.equal(result.breakMinutes, 0)
+    assert.equal(result.earlyLeaveMinutes, 210)
+    assert.equal(result.supplementalEvents.length, 2)
   })
 
   // ─────────────────────────────────────────────────────────────
@@ -299,9 +322,9 @@ describe('Attendance Engine - Suite de Cumplimiento Laboral 2027', () => {
     const shift = { operativeDate, startTime: '08:00', endTime: '17:00' }
 
     const rawPunches = [
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:00', TIMEZONE_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:00', TIMEZONE_CDMX) }, // Duplicado
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '17:00:00', TIMEZONE_CDMX) },
+      { id: 'i-entry-1', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:00', TIMEZONE_CDMX), inOutState: 0 },
+      { id: 'i-entry-2', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:00', TIMEZONE_CDMX), inOutState: 0 }, // Duplicado
+      { id: 'i-exit', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '17:00:00', TIMEZONE_CDMX), inOutState: 1 },
     ]
 
     const result = AttendanceEngine.process(TENANT_A, EMP_001, shift, rawPunches, {
@@ -321,9 +344,9 @@ describe('Attendance Engine - Suite de Cumplimiento Laboral 2027', () => {
     const shift = { operativeDate, startTime: '08:00', endTime: '17:00' }
 
     const rawPunches = [
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:01', TIMEZONE_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:05', TIMEZONE_CDMX) }, // 4 seg después
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '17:00:00', TIMEZONE_CDMX) },
+      { id: 'j-entry-1', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:01', TIMEZONE_CDMX), inOutState: 0 },
+      { id: 'j-entry-2', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:05', TIMEZONE_CDMX), inOutState: 0 }, // 4 seg después
+      { id: 'j-exit', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '17:00:00', TIMEZONE_CDMX), inOutState: 1 },
     ]
 
     const result = AttendanceEngine.process(TENANT_A, EMP_001, shift, rawPunches, {
@@ -344,21 +367,24 @@ describe('Attendance Engine - Suite de Cumplimiento Laboral 2027', () => {
     const shift = { operativeDate, startTime: '08:00', endTime: '18:00' }
 
     const rawPunches = [
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:00', TIMEZONE_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '10:00:00', TIMEZONE_CDMX) }, // 120m
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '10:15:00', TIMEZONE_CDMX) }, // 15m break
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '13:00:00', TIMEZONE_CDMX) }, // 165m
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '14:00:00', TIMEZONE_CDMX) }, // 60m break
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '18:00:00', TIMEZONE_CDMX) }, // 240m
+      { id: 'k-entry', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:00', TIMEZONE_CDMX), inOutState: 0 },
+      { id: 'k-exit', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '10:00:00', TIMEZONE_CDMX), inOutState: 1 },
+      { id: 'k-extra-entry-1', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '10:15:00', TIMEZONE_CDMX), inOutState: 0 },
+      { id: 'k-extra-exit-1', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '13:00:00', TIMEZONE_CDMX), inOutState: 1 },
+      { id: 'k-extra-entry-2', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '14:00:00', TIMEZONE_CDMX), inOutState: 0 },
+      { id: 'k-extra-exit-2', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '18:00:00', TIMEZONE_CDMX), inOutState: 1 },
     ]
 
     const result = AttendanceEngine.process(TENANT_A, EMP_001, shift, rawPunches, {
       timezone: TIMEZONE_CDMX,
     })
 
-    assert.equal(result.status, 'PRESENT')
-    assert.equal(result.breakMinutes, 75) // 15m + 60m
-    assert.equal(result.effectiveMinutes, 525) // 120 + 165 + 240 = 525m
+    assert.equal(result.workdayState, 'COMPLETE')
+    assert.equal(result.status, 'EARLY_LEAVE')
+    assert.equal(result.workedMinutes, 120)
+    assert.equal(result.breakMinutes, 0)
+    assert.equal(result.earlyLeaveMinutes, 480)
+    assert.equal(result.supplementalEvents.length, 4)
   })
 
   // ─────────────────────────────────────────────────────────────
@@ -374,9 +400,9 @@ describe('Attendance Engine - Suite de Cumplimiento Laboral 2027', () => {
     }
 
     const rawPunches = [
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '03:00:00', TIMEZONE_CDMX) }, // Fuera
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:00', TIMEZONE_CDMX) },
-      { clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '17:00:00', TIMEZONE_CDMX) },
+      { id: 'l-outside-entry', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '03:00:00', TIMEZONE_CDMX), inOutState: 0 }, // Fuera
+      { id: 'l-entry', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '08:00:00', TIMEZONE_CDMX), inOutState: 0 },
+      { id: 'l-exit', clienteId: TENANT_A, empleadoId: EMP_001, timestamp: localToUtcIso(operativeDate, '17:00:00', TIMEZONE_CDMX), inOutState: 1 },
     ]
 
     const result = AttendanceEngine.process(TENANT_A, EMP_001, shift, rawPunches, {
@@ -637,7 +663,7 @@ describe('Attendance Engine - Suite de Cumplimiento Laboral 2027', () => {
     assert.equal(result.missingEntry, true)
     assert.equal(result.missingExit, false)
     assert.equal(result.actualStart, undefined)
-    assert.ok(result.actualEnd)
+    assert.equal(result.actualEnd, undefined)
     assert.ok(result.incidents.some((i) => i.code === 'MISSING_ENTRY'))
   })
 

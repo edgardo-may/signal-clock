@@ -40,7 +40,10 @@ export interface RawAttendancePunch {
   source?: PunchSource
   deviceSerial?: string
   verifyType?: number // 0=pw, 1=fp, 2=card, 15=face, etc.
-  inOutState?: number // 0=in, 1=out, 2=break_out, 3=break_in
+  // Los adaptadores de fuentes pueden conservar el valor textual del origen
+  // (por ejemplo, registro_asistencia.tipo_verificacion). AttendanceNormalizer
+  // lo normaliza a InOutType sin depender de nombres SQL.
+  inOutState?: number | string // 0=in, 1=out, 2=break_out, 3=break_in; o valor textual
   rawPayload?: string
   status?: string
 }
@@ -74,6 +77,14 @@ export interface NormalizedPunch {
  * IGNORED:        Punch válido pero descartado por otra razón (ej: sin turno asignado).
  */
 export type PunchDispositionCode = 'USED' | 'DUPLICATE' | 'OUT_OF_WINDOW' | 'INVALID' | 'IGNORED'
+
+/** Event retained as evidence but excluded from canonical first-in/first-out metrics. */
+export interface SupplementalAttendanceEvent {
+  logId: string
+  utcTimestamp: string
+  type: InOutType
+  reason: 'EXIT_BEFORE_FIRST_IN' | 'ADDITIONAL_ENTRY' | 'ADDITIONAL_EXIT' | 'UNCLASSIFIED_EVENT'
+}
 
 export interface PunchDispositionRecord {
   logId: string
@@ -260,12 +271,12 @@ export interface WorkdayCalculationResult {
   scheduledEnd?: string // ISO UTC o string formateado
   scheduledMinutes: number
 
-  actualStart?: string // ISO UTC del primer marcaje válido
-  actualEnd?: string // ISO UTC del último marcaje válido
+  actualStart?: string // ISO UTC de la primera ENTRY canónica
+  actualEnd?: string // ISO UTC de la primera EXIT posterior canónica
 
-  workedMinutes: number // Minutos reales transcurridos (epochMs), NO de reloj local
-  breakMinutes: number // Minutos computados de comida/descanso
-  effectiveMinutes: number // Minutos efectivos (workedMinutes - breakMinutes)
+  workedMinutes: number // Intervalo canónico firstIn -> firstOut, en minutos UTC
+  breakMinutes: number // Sólo descansos del contrato formal del horario; nunca inferidos de supplementalEvents
+  effectiveMinutes: number // Minutos efectivos tras descansos canónicos aplicables
 
   lateMinutes: number
   // Nota (ATT-005): lateMinutes = (actualStart - scheduledStart) en minutos.
@@ -307,6 +318,8 @@ export interface WorkdayCalculationResult {
    * Ningún punch desaparece silenciosamente.
    */
   punchDispositions: PunchDispositionRecord[]
+
+  supplementalEvents: SupplementalAttendanceEvent[]
 
   devicesInvolved: string[]
 

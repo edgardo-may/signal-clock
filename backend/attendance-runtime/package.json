@@ -1,0 +1,13 @@
+{
+  "name": "signum-attendance-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Server-only read-only attendance calculation runtime",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

@@ -1,0 +1,21 @@
+# Dockerfile-specific ignore file. The build context is repository root.
+**
+!backend/
+!backend/package.json
+!backend/package-lock.json
+!backend/services/
+!backend/services/attendance/
+!backend/services/attendance/AttendanceEngineOrchestrator.js
+!backend/services/attendance/WorkdayPersistenceContract.js
+!backend/attendance-runtime/
+!backend/attendance-runtime/server.js
+!backend/attendance-runtime/app.js
+!backend/attendance-runtime/config.js
+!backend/attendance-runtime/AttendanceRuntimeService.js
+!backend/attendance-runtime/readOnlySupabase.js
+!backend/attendance-runtime/tenantFeature.js
+!backend/attendance-runtime/postdeploy-readonly-check.js
+!src/
+!src/domain/
+!src/domain/attendance/
+!src/domain/attendance/**
