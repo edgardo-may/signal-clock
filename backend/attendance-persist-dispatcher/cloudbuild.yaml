@@ -1,0 +1,7 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build','--pull','--no-cache','--file=backend/attendance-persist-dispatcher/Dockerfile','--tag=${_IMAGE_URI}:${_IMAGE_TAG}','.']
+  - name: gcr.io/cloud-builders/docker
+    args: ['push','${_IMAGE_URI}:${_IMAGE_TAG}']
+options:
+  logging: CLOUD_LOGGING_ONLY

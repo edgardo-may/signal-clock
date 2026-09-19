@@ -31,7 +31,7 @@ class AttendanceRuntimeService {
   }
 
   async _loadTrustedRegistro(registroId) {
-    const response = await this.client.from('registro_asistencia').select('id,cliente_id,empleado_id,dispositivo_id,verificado_at').eq('id', registroId).maybeSingle()
+    const response = await this.client.from('registro_asistencia').select('id,cliente_id,empleado_id,dispositivo_id,verificado_at,source_event_id,es_manual').eq('id', registroId).maybeSingle()
     if (response.error) throw new AttendanceRuntimeError('No se pudo leer registro_asistencia.', 'RUNTIME_REGISTRO_READ_FAILED', response.error)
     if (!response.data || !response.data.cliente_id || !response.data.empleado_id || !response.data.dispositivo_id) throw new AttendanceRuntimeError('registro_asistencia no tiene identidad completa.', 'RUNTIME_REGISTRO_INVALID')
     return response.data
@@ -45,7 +45,8 @@ class AttendanceRuntimeService {
       let persistenceService = null
       if (requestedPersistenceMode === PERSISTENCE_MODE) {
         let authorization
-        try { authorization = await this.persistAuthorizationLoader(this.client, { tenantId: trusted.cliente_id, registroId, employeeId: trusted.empleado_id }) } catch (error) { throw new AttendanceRuntimeError('La persistencia no esta autorizada.', error.code || 'PERSIST_AUTHORIZATION_DENIED', error) }
+        if (trusted.es_manual === true || !trusted.source_event_id) throw new AttendanceRuntimeError('La persistencia requiere una checada fisica canonica.', 'PERSIST_SOURCE_EVENT_REQUIRED')
+        try { authorization = await this.persistAuthorizationLoader(this.client, { tenantId: trusted.cliente_id, registroId, employeeId: trusted.empleado_id, sourceEventId: trusted.source_event_id }) } catch (error) { throw new AttendanceRuntimeError('La persistencia no esta autorizada.', error.code || 'PERSIST_AUTHORIZATION_DENIED', error) }
         const service = this.persistenceServiceFactory(this.rawClient)
         persistenceService = { [PERSISTENCE_SERVICE_BRAND]: true, persist: async (record) => { assertPersistRecordAuthorized(record, authorization); operation.persistenceCalls += 1; operation.rpcWriteCalls += 1; const persisted = await service.persist(record); operation.databaseWrites = persisted.persistenceResult === 'INSERTED' ? 1 : 0; return persisted } }
       }
