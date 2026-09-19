@@ -26,6 +26,14 @@ function parsePort(value) {
   return port
 }
 
+function parseRuntimeCapability(value) {
+  const capability = value || 'SHADOW_ONLY'
+  if (!['SHADOW_ONLY', 'ACTIVE_CAPABLE'].includes(capability)) {
+    throw new AttendanceRuntimeConfigError('ATTENDANCE_RUNTIME_CAPABILITY es invalida.', 'ATTENDANCE_RUNTIME_CAPABILITY_INVALID')
+  }
+  return capability
+}
+
 function loadRuntimeConfig(environment = process.env) {
   const supabaseUrl = requireString(environment, 'SUPABASE_URL')
   try {
@@ -41,6 +49,7 @@ function loadRuntimeConfig(environment = process.env) {
     internalToken: requireString(environment, 'ATTENDANCE_RUNTIME_INTERNAL_TOKEN', { minimumLength: 32 }),
     runtimeVersion: requireString(environment, 'RUNTIME_VERSION'),
     buildSha: requireString(environment, 'BUILD_SHA', { minimumLength: 7 }),
+    runtimeCapability: parseRuntimeCapability(environment.ATTENDANCE_RUNTIME_CAPABILITY),
   })
 }
 
@@ -54,5 +63,6 @@ function isAuthorizedInternalRequest(value, expectedToken) {
 module.exports = {
   AttendanceRuntimeConfigError,
   loadRuntimeConfig,
+  parseRuntimeCapability,
   isAuthorizedInternalRequest,
 }

@@ -5,7 +5,7 @@ import test from 'node:test'
 import * as domain from '../../src/domain/attendance/index.ts'
 
 const require = createRequire(import.meta.url)
-const { AttendanceRuntimeService, AttendanceRuntimeError, ENGINE_VERSION, CALCULATION_VERSION } = require('../../backend/attendance-runtime/AttendanceRuntimeService.js')
+const { AttendanceRuntimeService, AttendanceRuntimeError, ENGINE_VERSION, CALCULATION_VERSION, RUNTIME_EXECUTION_MODE, RUNTIME_CAPABILITY } = require('../../backend/attendance-runtime/AttendanceRuntimeService.js')
 const { createRuntimeApp } = require('../../backend/attendance-runtime/app.js')
 const { runPostDeployReadOnlyCheck, runtimeSourceSha256, TARGET } = require('../../backend/attendance-runtime/postdeploy-readonly-check.js')
 const { FEATURE_KEY } = require('../../backend/attendance-runtime/tenantFeature.js')
@@ -68,7 +68,7 @@ function rows(mode = 'SHADOW') {
   }
 }
 
-function engineResult({ kind = 'SCHEDULED', code, revisionId = TARGET.revisionId } = {}) {
+function engineResult({ kind = 'SCHEDULED', code, revisionId = TARGET.revisionId, executionMode = 'SHADOW', persistenceMode = 'READ_ONLY' } = {}) {
   if (code) {
     const error = new Error(code)
     error.code = code
@@ -76,6 +76,8 @@ function engineResult({ kind = 'SCHEDULED', code, revisionId = TARGET.revisionId
   }
   return {
     registroId: REGISTRO,
+    executionMode,
+    persistenceMode,
     operativeDate: '2026-09-14',
     scheduleResolution: kind === 'UNSCHEDULED' ? { kind } : {
       kind, scheduleAssignmentId: TARGET.assignmentId, scheduleRevisionId: revisionId,
@@ -85,17 +87,17 @@ function engineResult({ kind = 'SCHEDULED', code, revisionId = TARGET.revisionId
   }
 }
 
-function runtime({ mode = 'SHADOW', run = async () => engineResult(), logger = { info() {}, error() {} } } = {}) {
+function runtime({ mode = 'SHADOW', run = async (_input, engineModes) => engineResult(engineModes), logger = { info() {}, error() {} } } = {}) {
   let calls = 0
   const service = new AttendanceRuntimeService({
-    client: memoryClient(rows(mode)), logger,
-    orchestratorFactory: () => ({ run: async (input) => { calls += 1; return run(input) } }),
+    client: memoryClient(rows(mode)), logger, runtimeCapability: 'ACTIVE_CAPABLE',
+    orchestratorFactory: (engineModes) => ({ run: async (input) => { calls += 1; return run(input, engineModes) } }),
   })
   return { service, calls: () => calls }
 }
 
 function config() {
-  return { runtimeVersion: 'test-runtime-v1', buildSha: 'test-build-sha', internalToken: TOKEN }
+  return { runtimeVersion: 'test-runtime-v1', buildSha: 'test-build-sha', internalToken: TOKEN, runtimeCapability: 'ACTIVE_CAPABLE' }
 }
 
 async function withApp(app, callback) {
@@ -115,7 +117,7 @@ test('health is public but non-sensitive, readiness performs only a database rea
   await withApp(app, async (url) => {
     const health = await (await fetch(`${url}/health`)).json()
     const ready = await (await fetch(`${url}/ready`)).json()
-    assert.deepEqual(health, { status: 'ok', runtime_version: 'test-runtime-v1', build_sha: 'test-build-sha', engine_version: ENGINE_VERSION, calculation_version: 3, execution_mode: 'SHADOW_ONLY' })
+    assert.deepEqual(health, { status: 'ok', runtime_version: 'test-runtime-v1', build_sha: 'test-build-sha', engine_version: ENGINE_VERSION, calculation_version: 3, execution_mode: RUNTIME_EXECUTION_MODE, runtime_capability: RUNTIME_CAPABILITY, resolution_modes: ['SHADOW', 'ACTIVE'] })
     assert.equal(ready.database, 'reachable')
     assert.doesNotMatch(JSON.stringify(health), /SUPABASE|service_role|token/i)
   })
@@ -131,8 +133,8 @@ test('readiness reports DB unavailable without writing', async () => {
   })
 })
 
-test('OFF is skipped, while SHADOW and ACTIVE resolve revision only with zero writes', async () => {
-  for (const mode of ['OFF', 'SHADOW', 'ACTIVE']) {
+test('SHADOW and ACTIVE are separate revision-only paths with zero writes', async () => {
+  for (const mode of ['OFF', 'SHADOW']) {
     const { service, calls } = runtime({ mode })
     const result = await service.executeShadow({ registroId: REGISTRO })
     if (mode === 'OFF') {
@@ -148,6 +150,16 @@ test('OFF is skipped, while SHADOW and ACTIVE resolve revision only with zero wr
     assert.equal(result.rpcWriteCalls, 0)
     assert.equal(result.incidentWriteCalls, 0)
   }
+  const active = runtime({ mode: 'ACTIVE' })
+  const activeResult = await active.service.executeActive({ registroId: REGISTRO })
+  assert.equal(activeResult.resolution_mode, 'ACTIVE')
+  assert.equal(activeResult.schedule_revision_id, TARGET.revisionId)
+  assert.equal(active.calls(), 1)
+  assert.equal(activeResult.databaseWrites, 0)
+  assert.equal(activeResult.rpcWriteCalls, 0)
+  await assert.rejects(() => active.service.executeShadow({ registroId: REGISTRO }), { code: 'RUNTIME_RESOLUTION_MODE_MISMATCH' })
+  const shadow = runtime({ mode: 'SHADOW' })
+  await assert.rejects(() => shadow.service.executeActive({ registroId: REGISTRO }), { code: 'RUNTIME_RESOLUTION_MODE_MISMATCH' })
 })
 
 test('unsupported feature mode, revision corruption and tenant mismatch fail closed', async () => {
@@ -190,6 +202,9 @@ test('runtime release identifiers are mandatory and graceful shutdown closes onc
   assert.throws(() => loadRuntimeConfig({ SUPABASE_URL: 'https://project.example', SUPABASE_SECRET_KEY: 's'.repeat(20), ATTENDANCE_RUNTIME_INTERNAL_TOKEN: TOKEN, RUNTIME_VERSION: 'v1' }), { code: 'ATTENDANCE_RUNTIME_CONFIG_MISSING' })
   const configLoaded = loadRuntimeConfig({ SUPABASE_URL: 'https://project.example', SUPABASE_SECRET_KEY: 's'.repeat(20), ATTENDANCE_RUNTIME_INTERNAL_TOKEN: TOKEN, RUNTIME_VERSION: 'v1', BUILD_SHA: 'abcdef1' })
   assert.equal(configLoaded.buildSha, 'abcdef1')
+  assert.equal(configLoaded.runtimeCapability, 'SHADOW_ONLY')
+  assert.equal(loadRuntimeConfig({ SUPABASE_URL: 'https://project.example', SUPABASE_SECRET_KEY: 's'.repeat(20), ATTENDANCE_RUNTIME_INTERNAL_TOKEN: TOKEN, RUNTIME_VERSION: 'v1', BUILD_SHA: 'abcdef1', ATTENDANCE_RUNTIME_CAPABILITY: 'ACTIVE_CAPABLE' }).runtimeCapability, 'ACTIVE_CAPABLE')
+  assert.throws(() => loadRuntimeConfig({ SUPABASE_URL: 'https://project.example', SUPABASE_SECRET_KEY: 's'.repeat(20), ATTENDANCE_RUNTIME_INTERNAL_TOKEN: TOKEN, RUNTIME_VERSION: 'v1', BUILD_SHA: 'abcdef1', ATTENDANCE_RUNTIME_CAPABILITY: 'invalid' }), { code: 'ATTENDANCE_RUNTIME_CAPABILITY_INVALID' })
   let closes = 0
   const exits = []
   const shutdown = installGracefulShutdown({ close(callback) { closes += 1; callback() } }, { runtimeVersion: 'v1', buildSha: 'abcdef1', exit: (code) => exits.push(code), logger: { info() {} } })
@@ -251,6 +266,89 @@ test('internal endpoint rejects unauthorised and malformed requests and never re
   })
 })
 
+test('ACTIVE endpoint is separate, requires ACTIVE feature, and remains read-only', async () => {
+  const active = runtime({ mode: 'ACTIVE' })
+  const activeApp = createRuntimeApp({ service: active.service, config: config(), readinessProbe: async () => {} })
+  await withApp(activeApp, async (url) => {
+    const shadow = await fetch(`${url}/internal/attendance/shadow`, { method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ registro_id: REGISTRO }) })
+    assert.equal(shadow.status, 422)
+    assert.equal((await shadow.json()).error_code, 'RUNTIME_RESOLUTION_MODE_MISMATCH')
+    active.service.executeShadow = async () => { throw new Error('shadow-only path must not be called') }
+    const response = await fetch(`${url}/internal/attendance/active`, { method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ registro_id: REGISTRO }) })
+    assert.equal(response.status, 200)
+    const result = await response.json()
+    assert.equal(result.resolution_mode, 'ACTIVE')
+    assert.equal(result.execution_mode, 'ACTIVE')
+    assert.equal(result.runtime_capability, 'ACTIVE_CAPABLE')
+    assert.equal(result.assignment_id, TARGET.assignmentId)
+    assert.equal(result.schedule_revision_id, TARGET.revisionId)
+    assert.equal(result.revision_version, 1)
+    assert.equal(result.revision_integrity_hash, TARGET.integrityHash)
+    assert.equal(result.databaseWrites, 0)
+    assert.equal(result.persistenceCalls, 0)
+    assert.equal(result.rpcWriteCalls, 0)
+  })
+})
+
+test('same revision calculation is deterministic across explicit SHADOW and ACTIVE execution boundaries', async () => {
+  const shadow = runtime({ mode: 'SHADOW' })
+  const active = runtime({ mode: 'ACTIVE' })
+  const [shadowResult, activeResult] = await Promise.all([
+    shadow.service.executeShadow({ registroId: REGISTRO }),
+    active.service.executeActive({ registroId: REGISTRO }),
+  ])
+  assert.equal(shadowResult.resolution_mode, 'SHADOW')
+  assert.equal(shadowResult.execution_mode, 'SHADOW')
+  assert.equal(activeResult.resolution_mode, 'ACTIVE')
+  assert.equal(activeResult.execution_mode, 'ACTIVE')
+  assert.notEqual(activeResult.execution_mode, 'SHADOW')
+  for (const field of ['tenant_id', 'employee_id', 'operative_date', 'assignment_id', 'schedule_revision_id', 'revision_version', 'revision_integrity_hash', 'engine_version', 'calculation_version']) {
+    assert.deepEqual(activeResult[field], shadowResult[field], field)
+  }
+  for (const result of [shadowResult, activeResult]) {
+    assert.equal(result.databaseWrites, 0)
+    assert.equal(result.persistenceCalls, 0)
+    assert.equal(result.rpcWriteCalls, 0)
+  }
+})
+
+test('ACTIVE passes an explicit ACTIVE plus READ_ONLY contract to the engine factory', async () => {
+  const requested = []
+  const service = new AttendanceRuntimeService({
+    client: memoryClient(rows('ACTIVE')), logger: { info() {}, error() {} }, runtimeCapability: 'ACTIVE_CAPABLE',
+    orchestratorFactory: (engineModes) => {
+      requested.push(engineModes)
+      return { run: async () => engineResult(engineModes) }
+    },
+  })
+  const result = await service.executeActive({ registroId: REGISTRO })
+  assert.deepEqual(requested, [{ executionMode: 'ACTIVE', persistenceMode: 'READ_ONLY' }])
+  assert.equal(result.execution_mode, 'ACTIVE')
+  assert.equal(result.resolution_mode, 'ACTIVE')
+})
+
+test('SHADOW_ONLY capability neither registers nor permits the ACTIVE route', async () => {
+  const service = new AttendanceRuntimeService({ client: memoryClient(rows('ACTIVE')), logger: { info() {}, error() {} } })
+  const app = createRuntimeApp({ service, config: { ...config(), runtimeCapability: 'SHADOW_ONLY' }, readinessProbe: async () => {} })
+  await withApp(app, async (url) => {
+    const health = await (await fetch(`${url}/health`)).json()
+    assert.equal(health.runtime_capability, 'SHADOW_ONLY')
+    assert.equal(health.execution_mode, 'SHADOW_ONLY_READ_ONLY')
+    assert.deepEqual(health.resolution_modes, ['SHADOW'])
+    const response = await fetch(`${url}/internal/attendance/active`, { method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ registro_id: REGISTRO }) })
+    assert.equal(response.status, 404)
+  })
+  await assert.rejects(() => service.executeActive({ registroId: REGISTRO }), { code: 'RUNTIME_ACTIVE_CAPABILITY_DISABLED' })
+})
+
+test('ACTIVE runtime has no live-schedule query or fallback path', () => {
+  const orchestrator = readFileSync(new URL('../../backend/services/attendance/AttendanceEngineOrchestrator.js', import.meta.url), 'utf8')
+  const scheduleContext = orchestrator.slice(orchestrator.indexOf('async loadScheduleContext'), orchestrator.indexOf('async loadAttendanceEvents'))
+  assert.doesNotMatch(scheduleContext, /from\('horarios'\)/)
+  assert.match(scheduleContext, /schedule_revisions/)
+  assert.match(scheduleContext, /missing row remains observable/)
+})
+
 test('runtime postdeploy check is read-only and validates runtime, feature, C revision and hash', async () => {
   const configSnapshot = snapshot()
   const integrityHash = domain.computeScheduleRevisionIntegrityHash(configSnapshot)
@@ -267,7 +365,7 @@ test('runtime postdeploy check is read-only and validates runtime, feature, C re
   }, {
     createClient: () => memoryClient(data), target,
     fetch: async (url) => ({ ok: true, json: async () => url.endsWith('/health')
-      ? { status: 'ok', runtime_version: 'test-runtime-v1', build_sha: 'test-build-sha', execution_mode: 'SHADOW_ONLY' }
+      ? { status: 'ok', runtime_version: 'test-runtime-v1', build_sha: 'test-build-sha', execution_mode: RUNTIME_EXECUTION_MODE, runtime_capability: 'ACTIVE_CAPABLE', resolution_modes: ['SHADOW', 'ACTIVE'] }
       : { status: 'ok', database: 'reachable' } }),
   })
   assert.equal(report.postcheck_pass, true, JSON.stringify(report))

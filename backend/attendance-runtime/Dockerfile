@@ -12,10 +12,12 @@ COPY backend/attendance-runtime/AttendanceRuntimeService.js backend/attendance-r
 COPY backend/attendance-runtime/postdeploy-readonly-check.js ./attendance-runtime/
 COPY src/domain/attendance /app/src/domain/attendance
 
-ARG RUNTIME_VERSION=attendance-runtime-v1
+ARG RUNTIME_VERSION=unbuilt
 ARG BUILD_SHA=unbuilt
+ARG ATTENDANCE_RUNTIME_CAPABILITY=SHADOW_ONLY
 ENV NODE_ENV=production \
     ATTENDANCE_RUNTIME_PORT=8088 \
+    ATTENDANCE_RUNTIME_CAPABILITY=$ATTENDANCE_RUNTIME_CAPABILITY \
     RUNTIME_VERSION=$RUNTIME_VERSION \
     BUILD_SHA=$BUILD_SHA
 RUN chown -R node:node /app

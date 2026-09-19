@@ -112,9 +112,10 @@ function orchestrator(data = fixture(), options = {}) {
   }
 }
 
-test('1. default backend configuration is SHADOW', () => {
+test('1. default backend configuration is SHADOW execution with READ_ONLY persistence', () => {
   assert.equal(DEFAULT_MODE, 'SHADOW')
-  assert.equal(orchestrator().instance.mode, 'SHADOW')
+  assert.equal(orchestrator().instance.executionMode, 'SHADOW')
+  assert.equal(orchestrator().instance.persistenceMode, 'READ_ONLY')
 })
 
 test('2. normal entry resolves an incomplete workday without writes', async () => {
@@ -179,7 +180,8 @@ test('9. no applicable schedule uses the explicit UNSCHEDULED contract', async (
 test('10. SHADOW never calls PersistenceService', async () => {
   let calls = 0
   const result = await orchestrator(fixture(), { persistenceService: { persist: async () => { calls++ } } }).instance.run({ registroId: 'out' })
-  assert.equal(result.mode, 'SHADOW')
+  assert.equal(result.executionMode, 'SHADOW')
+  assert.equal(result.persistenceMode, 'READ_ONLY')
   assert.equal(calls, 0)
 })
 
@@ -233,7 +235,8 @@ test('16. structured log excludes raw payload and includes required calculation 
   await instance.run({ registroId: 'out' })
   assert.equal(logs.length, 1)
   assert.equal(logs[0].registroId, 'out')
-  assert.equal(logs[0].mode, 'SHADOW')
+  assert.equal(logs[0].execution_mode, 'SHADOW')
+  assert.equal(logs[0].persistence_mode, 'READ_ONLY')
   assert.equal(Object.hasOwn(logs[0], 'raw_payload'), false)
   assert.equal(Object.hasOwn(logs[0], 'templates'), false)
   assert.deepEqual({

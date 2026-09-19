@@ -2,16 +2,19 @@
 
 const express = require('express')
 const { isAuthorizedInternalRequest } = require('./config.js')
-const { AttendanceRuntimeError, ENGINE_VERSION, CALCULATION_VERSION } = require('./AttendanceRuntimeService.js')
+const { AttendanceRuntimeError, ENGINE_VERSION, CALCULATION_VERSION, RUNTIME_EXECUTION_MODE, RUNTIME_CAPABILITY } = require('./AttendanceRuntimeService.js')
 
 function publicRuntimeStatus(config) {
+  const activeCapable = config.runtimeCapability === RUNTIME_CAPABILITY
   return {
     status: 'ok',
     runtime_version: config.runtimeVersion,
     build_sha: config.buildSha,
     engine_version: ENGINE_VERSION,
     calculation_version: CALCULATION_VERSION,
-    execution_mode: 'SHADOW_ONLY',
+    execution_mode: activeCapable ? RUNTIME_EXECUTION_MODE : 'SHADOW_ONLY_READ_ONLY',
+    runtime_capability: config.runtimeCapability,
+    resolution_modes: activeCapable ? ['SHADOW', 'ACTIVE'] : ['SHADOW'],
   }
 }
 
@@ -36,22 +39,29 @@ function createRuntimeApp({ service, config, readinessProbe } = {}) {
     }
   })
 
-  app.post('/internal/attendance/shadow', async (request, response) => {
-    if (!isAuthorizedInternalRequest(request.get('authorization'), config.internalToken)) {
-      return response.status(401).json({ error_code: 'RUNTIME_UNAUTHORIZED' })
+  function internalResolutionRoute(execute) {
+    return async (request, response) => {
+      if (!isAuthorizedInternalRequest(request.get('authorization'), config.internalToken)) {
+        return response.status(401).json({ error_code: 'RUNTIME_UNAUTHORIZED' })
+      }
+      if (!request.body || Object.keys(request.body).some((key) => key !== 'registro_id')) {
+        return response.status(400).json({ error_code: 'RUNTIME_INPUT_INVALID' })
+      }
+      try {
+        const result = await execute({ registroId: request.body.registro_id })
+        return response.status(200).json(result)
+      } catch (error) {
+        const code = typeof error?.code === 'string' ? error.code : 'ATTENDANCE_RUNTIME_ERROR'
+        const status = error instanceof AttendanceRuntimeError && code === 'RUNTIME_INPUT_INVALID' ? 400 : 422
+        return response.status(status).json({ error_code: code })
+      }
     }
-    if (!request.body || Object.keys(request.body).some((key) => key !== 'registro_id')) {
-      return response.status(400).json({ error_code: 'RUNTIME_INPUT_INVALID' })
-    }
-    try {
-      const result = await service.executeShadow({ registroId: request.body.registro_id })
-      return response.status(200).json(result)
-    } catch (error) {
-      const code = typeof error?.code === 'string' ? error.code : 'ATTENDANCE_RUNTIME_ERROR'
-      const status = error instanceof AttendanceRuntimeError && code === 'RUNTIME_INPUT_INVALID' ? 400 : 422
-      return response.status(status).json({ error_code: code })
-    }
-  })
+  }
+
+  app.post('/internal/attendance/shadow', internalResolutionRoute((input) => service.executeShadow(input)))
+  if (config.runtimeCapability === RUNTIME_CAPABILITY) {
+    app.post('/internal/attendance/active', internalResolutionRoute((input) => service.executeActive(input)))
+  }
 
   app.use((_request, response) => response.status(404).json({ error_code: 'RUNTIME_ROUTE_NOT_FOUND' }))
   app.use((error, _request, response, _next) => {

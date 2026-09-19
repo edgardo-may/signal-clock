@@ -2,7 +2,7 @@
 
 const { createClient } = require('@supabase/supabase-js')
 const { loadRuntimeConfig } = require('./config.js')
-const { AttendanceRuntimeService } = require('./AttendanceRuntimeService.js')
+const { AttendanceRuntimeService, RUNTIME_EXECUTION_MODE } = require('./AttendanceRuntimeService.js')
 const { createRuntimeApp } = require('./app.js')
 
 function start(environment = process.env) {
@@ -10,14 +10,15 @@ function start(environment = process.env) {
   const client = createClient(config.supabaseUrl, config.secretKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
-  const service = new AttendanceRuntimeService({ client })
+  const service = new AttendanceRuntimeService({ client, runtimeCapability: config.runtimeCapability })
   const app = createRuntimeApp({ service, config })
   const server = app.listen(config.port, () => {
     console.info('attendance_runtime_started', {
       runtime_version: config.runtimeVersion,
       build_sha: config.buildSha,
       port: config.port,
-      execution_mode: 'SHADOW_ONLY',
+      execution_mode: config.runtimeCapability === 'ACTIVE_CAPABLE' ? RUNTIME_EXECUTION_MODE : 'SHADOW_ONLY_READ_ONLY',
+      runtime_capability: config.runtimeCapability,
     })
   })
   installGracefulShutdown(server, { runtimeVersion: config.runtimeVersion, buildSha: config.buildSha })

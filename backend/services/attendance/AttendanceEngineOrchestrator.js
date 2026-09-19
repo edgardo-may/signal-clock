@@ -10,8 +10,14 @@
 
 const { isApprovedWorkdayPersistenceService } = require('./WorkdayPersistenceContract.js')
 
-const DEFAULT_MODE = 'SHADOW'
-const PERSIST_MODE = 'PERSIST'
+const DEFAULT_EXECUTION_MODE = 'SHADOW'
+const ACTIVE_EXECUTION_MODE = 'ACTIVE'
+const READ_ONLY_PERSISTENCE_MODE = 'READ_ONLY'
+const PERSISTENCE_MODE = 'PERSIST'
+// Legacy aliases preserve explicit existing canary tooling. New runtime code
+// must use executionMode and persistenceMode, never the ambiguous mode field.
+const DEFAULT_MODE = DEFAULT_EXECUTION_MODE
+const PERSIST_MODE = PERSISTENCE_MODE
 
 class AttendanceOrchestratorError extends Error {
   constructor(message, code = 'ATTENDANCE_ORCHESTRATOR_ERROR', cause) {
@@ -93,7 +99,7 @@ function toDispositions(normalization, match) {
   ))
 }
 
-function structuredLog(result, mode, persistenceResult) {
+function structuredLog(result, executionMode, persistenceMode, persistenceResult) {
   const resolution = result.scheduleResolution || null
   return {
     registroId: result.registroId,
@@ -110,7 +116,8 @@ function structuredLog(result, mode, persistenceResult) {
     lateMinutes: result.workdayRecord.late_minutes,
     earlyLeaveMinutes: result.workdayRecord.early_leave_minutes,
     integrityHash: result.workdayRecord.integrity_hash,
-    mode,
+    execution_mode: executionMode,
+    persistence_mode: persistenceMode,
     // Stable, secret-free revision-resolution audit fields. These contain no
     // snapshot configuration and are suitable for structured log indexing.
     tenant_id: result.workdayRecord.cliente_id,
@@ -268,18 +275,29 @@ async function defaultDomainLoader() {
 
 class AttendanceEngineOrchestrator {
   /**
-   * @param {{repository: object, mode?: 'SHADOW'|'PERSIST', persistenceService?: object, domain?: object, domainLoader?: () => Promise<object>, logger?: object, calculationVersion?: number, traceCollector?: (trace: object) => void}} options
+   * @param {{repository: object, executionMode?: 'SHADOW'|'ACTIVE', persistenceMode?: 'READ_ONLY'|'PERSIST', mode?: 'SHADOW'|'PERSIST', persistenceService?: object, domain?: object, domainLoader?: () => Promise<object>, logger?: object, calculationVersion?: number, traceCollector?: (trace: object) => void}} options
    */
   constructor(options = {}) {
     if (!options.repository) {
       throw new AttendanceOrchestratorError('Se requiere un repositorio de asistencia backend.', 'REPOSITORY_REQUIRED')
     }
     this.repository = options.repository
-    this.mode = options.mode || DEFAULT_MODE
-    if (this.mode !== DEFAULT_MODE && this.mode !== PERSIST_MODE) {
-      throw new AttendanceOrchestratorError('El modo de engine backend es inválido.', 'MODE_INVALID')
+    if (options.mode !== undefined && (options.executionMode !== undefined || options.persistenceMode !== undefined)) {
+      throw new AttendanceOrchestratorError('mode legado no puede mezclarse con executionMode/persistenceMode.', 'MODE_CONFIGURATION_AMBIGUOUS')
     }
-    if (this.mode === PERSIST_MODE && !isApprovedWorkdayPersistenceService(options.persistenceService)) {
+    const legacyMode = options.mode
+    if (legacyMode !== undefined && legacyMode !== DEFAULT_MODE && legacyMode !== PERSIST_MODE) {
+      throw new AttendanceOrchestratorError('El mode legado de engine backend es invalido.', 'MODE_INVALID')
+    }
+    this.executionMode = legacyMode === undefined ? (options.executionMode || DEFAULT_EXECUTION_MODE) : DEFAULT_EXECUTION_MODE
+    this.persistenceMode = legacyMode === undefined ? (options.persistenceMode || READ_ONLY_PERSISTENCE_MODE) : (legacyMode === PERSIST_MODE ? PERSISTENCE_MODE : READ_ONLY_PERSISTENCE_MODE)
+    if (![DEFAULT_EXECUTION_MODE, ACTIVE_EXECUTION_MODE].includes(this.executionMode)) {
+      throw new AttendanceOrchestratorError('executionMode de engine backend es invalido.', 'EXECUTION_MODE_INVALID')
+    }
+    if (![READ_ONLY_PERSISTENCE_MODE, PERSISTENCE_MODE].includes(this.persistenceMode)) {
+      throw new AttendanceOrchestratorError('persistenceMode de engine backend es invalido.', 'PERSISTENCE_MODE_INVALID')
+    }
+    if (this.persistenceMode === PERSISTENCE_MODE && !isApprovedWorkdayPersistenceService(options.persistenceService)) {
       throw new AttendanceOrchestratorError('PERSIST requiere WorkdayPersistenceService backend.', 'PERSISTENCE_SERVICE_REQUIRED')
     }
     this.persistenceService = options.persistenceService || null
@@ -374,8 +392,8 @@ class AttendanceEngineOrchestrator {
   }
 
   /**
-   * Explicit-only execution. `mode` is intentionally not accepted here: mode
-   * belongs to backend construction/configuration, never a client request.
+   * Explicit-only execution. executionMode and persistenceMode belong to
+   * backend construction/configuration, never a client request.
    */
   async run({ registroId, registro } = {}) {
     if ((registroId && registro) || (!registroId && !registro)) {
@@ -529,14 +547,15 @@ class AttendanceEngineOrchestrator {
         calculation, selection.kind === 'SCHEDULED' ? selection.resolution.scheduleId : null, sourceRegistro.id
       )
       const result = {
-        registroId: sourceRegistro.id, deviceId: sourceRegistro.dispositivo_id, mode: this.mode,
+        registroId: sourceRegistro.id, deviceId: sourceRegistro.dispositivo_id,
+        executionMode: this.executionMode, persistenceMode: this.persistenceMode,
         eventWindow, eventCount: events.length, normalizedEventCount: normalization.accepted.length,
         calculationWarnings: calculation.warnings || [], operativeDate: selection.operativeDate,
         scheduleResolution: selection.kind === 'SCHEDULED' ? selection.resolution : { kind: 'UNSCHEDULED' },
         calculation, workdayRecord,
       }
 
-      if (this.mode === PERSIST_MODE) {
+      if (this.persistenceMode === PERSISTENCE_MODE) {
         let persistence
         try {
           persistence = await this.persistenceService.persist(workdayRecord)
@@ -546,13 +565,14 @@ class AttendanceEngineOrchestrator {
         result.persistenceResult = persistence.persistenceResult
         result.workdayId = persistence.workdayId
       }
-      this.logger?.info?.('attendance_engine_orchestrator', structuredLog(result, this.mode, result.persistenceResult))
+      this.logger?.info?.('attendance_engine_orchestrator', structuredLog(result, this.executionMode, this.persistenceMode, result.persistenceResult))
       return result
     } catch (error) {
       const domainCode = safeErrorCode(error, 'ATTENDANCE_ORCHESTRATOR_ERROR')
       this.logger?.error?.('attendance_engine_orchestrator_failed', {
         registroId: registroId || registro?.id || null,
-        mode: this.mode,
+        execution_mode: this.executionMode,
+        persistence_mode: this.persistenceMode,
         ...resolutionTelemetry,
         error_code: revisionObservabilityErrorCode(domainCode),
         domain_error_code: domainCode,
@@ -566,6 +586,10 @@ module.exports = {
   AttendanceEngineOrchestrator,
   AttendanceOrchestratorError,
   SupabaseAttendanceReadRepository,
+  DEFAULT_EXECUTION_MODE,
+  ACTIVE_EXECUTION_MODE,
+  READ_ONLY_PERSISTENCE_MODE,
+  PERSISTENCE_MODE,
   DEFAULT_MODE,
   PERSIST_MODE,
   calculateState,

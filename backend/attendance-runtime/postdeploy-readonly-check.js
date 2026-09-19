@@ -5,6 +5,7 @@ const { readFile, readdir } = require('node:fs/promises')
 const path = require('node:path')
 const { createClient } = require('@supabase/supabase-js')
 const { createReadOnlyClient } = require('./readOnlySupabase.js')
+const { RUNTIME_EXECUTION_MODE } = require('./AttendanceRuntimeService.js')
 
 const TARGET = Object.freeze({
   tenantId: '69095bd5-fee5-4237-a1a4-186dd88310ff',
@@ -44,6 +45,8 @@ async function runtimeSourceSha256() {
     'backend/attendance-runtime/readOnlySupabase.js',
     'backend/attendance-runtime/config.js',
     'backend/attendance-runtime/tenantFeature.js',
+    'backend/attendance-runtime/Dockerfile',
+    'backend/attendance-runtime/Dockerfile.dockerignore',
     'backend/services/attendance/AttendanceEngineOrchestrator.js',
     'backend/services/attendance/WorkdayPersistenceContract.js',
   ]
@@ -105,7 +108,9 @@ async function runPostDeployReadOnlyCheck(environment = process.env, options = {
     ])
     report.runtime_version = health.runtime_version || null
     report.runtime_build_sha = health.build_sha || null
-    report.runtime_health = health.status === 'ok' && health.execution_mode === 'SHADOW_ONLY'
+    report.runtime_health = health.status === 'ok' && health.execution_mode === RUNTIME_EXECUTION_MODE
+    report.runtime_active_capable = health.runtime_capability === 'ACTIVE_CAPABLE' && health.execution_mode === RUNTIME_EXECUTION_MODE &&
+      Array.isArray(health.resolution_modes) && health.resolution_modes.includes('SHADOW') && health.resolution_modes.includes('ACTIVE')
     report.runtime_ready = ready.status === 'ok' && ready.database === 'reachable'
     report.runtime_version_match = report.runtime_version === expectedVersion
     report.runtime_build_sha_match = report.runtime_build_sha === expectedBuildSha
@@ -145,7 +150,7 @@ async function runPostDeployReadOnlyCheck(environment = process.env, options = {
     report.rpcWriteCalls = counters.rpcWriteCalls
     report.storageWriteCalls = counters.storageWriteCalls
     report.indirectSupabaseCalls = counters.indirectSupabaseCalls
-    report.postcheck_pass = report.runtime_health && report.runtime_ready && report.runtime_version_match
+    report.postcheck_pass = report.runtime_health && report.runtime_active_capable && report.runtime_ready && report.runtime_version_match
       && report.runtime_build_sha_match && report.runtime_source_sha_match && report.tenant_feature_supported && report.revision_resolver_available
       && report.c_resolves_from_revision && report.hash_correct
       && report.databaseWrites === 0 && report.persistenceCalls === 0 && report.rpcWriteCalls === 0
