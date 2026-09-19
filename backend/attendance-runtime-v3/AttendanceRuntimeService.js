@@ -2,6 +2,7 @@
 
 const { AttendanceEngineOrchestrator, SupabaseAttendanceReadRepository, READ_ONLY_PERSISTENCE_MODE, PERSISTENCE_MODE } = require('../services/attendance/AttendanceEngineOrchestrator.js')
 const { WorkdayPersistenceService } = require('../services/attendance/WorkdayPersistenceService.js')
+const { PERSISTENCE_SERVICE_BRAND } = require('../services/attendance/WorkdayPersistenceContract.js')
 const { createReadOnlyClient } = require('./readOnlySupabase.js')
 const { loadRevisionResolverFeature } = require('./tenantFeature.js')
 const { loadPersistAuthorization, assertPersistRecordAuthorized } = require('./tenantPersistence.js')
@@ -46,7 +47,7 @@ class AttendanceRuntimeService {
         let authorization
         try { authorization = await this.persistAuthorizationLoader(this.client, { tenantId: trusted.cliente_id, registroId, employeeId: trusted.empleado_id }) } catch (error) { throw new AttendanceRuntimeError('La persistencia no esta autorizada.', error.code || 'PERSIST_AUTHORIZATION_DENIED', error) }
         const service = this.persistenceServiceFactory(this.rawClient)
-        persistenceService = { persist: async (record) => { assertPersistRecordAuthorized(record, authorization); operation.persistenceCalls += 1; operation.rpcWriteCalls += 1; const persisted = await service.persist(record); operation.databaseWrites = persisted.persistenceResult === 'INSERTED' ? 1 : 0; return persisted } }
+        persistenceService = { [PERSISTENCE_SERVICE_BRAND]: true, persist: async (record) => { assertPersistRecordAuthorized(record, authorization); operation.persistenceCalls += 1; operation.rpcWriteCalls += 1; const persisted = await service.persist(record); operation.databaseWrites = persisted.persistenceResult === 'INSERTED' ? 1 : 0; return persisted } }
       }
       const engineResult = await this.orchestratorFactory({ executionMode: 'ACTIVE', persistenceMode: requestedPersistenceMode, persistenceService }).run({ registroId })
       if (engineResult.executionMode !== 'ACTIVE' || engineResult.persistenceMode !== requestedPersistenceMode || engineResult.calculation.calculationVersion !== CALCULATION_VERSION) throw new AttendanceRuntimeError('El engine no respeto el contrato solicitado.', 'RUNTIME_ENGINE_MODE_MISMATCH')
