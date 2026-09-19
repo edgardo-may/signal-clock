@@ -1,0 +1,9 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build-runtime-v3
+    args: ['build','--pull','--no-cache','--file=backend/attendance-runtime-v3/Dockerfile','--build-arg=RUNTIME_VERSION=${_RUNTIME_VERSION}','--build-arg=BUILD_SHA=${_BUILD_SHA}','--build-arg=ATTENDANCE_RUNTIME_CAPABILITY=ACTIVE_PERSIST_CAPABLE','--tag=${_IMAGE_URI}:${_IMAGE_TAG}','.']
+  - name: gcr.io/cloud-builders/docker
+    id: push-runtime-v3
+    args: ['push','${_IMAGE_URI}:${_IMAGE_TAG}']
+options:
+  logging: CLOUD_LOGGING_ONLY

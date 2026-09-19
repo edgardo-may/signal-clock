@@ -1,0 +1,6 @@
+'use strict'
+const { createHash } = require('node:crypto'); const { readFile, readdir } = require('node:fs/promises'); const path = require('node:path')
+async function files(directory) { const entries = await readdir(directory, { withFileTypes: true }); return (await Promise.all(entries.sort((a, b) => a.name.localeCompare(b.name)).map((entry) => entry.isDirectory() ? files(path.join(directory, entry.name)) : [path.join(directory, entry.name)]))).flat() }
+async function runtimeSourceSha256() { const root = path.resolve(__dirname, '..', '..'); const relative = ['backend/package.json','backend/package-lock.json','backend/services/attendance/AttendanceEngineOrchestrator.js','backend/services/attendance/WorkdayPersistenceContract.js','backend/services/attendance/WorkdayPersistenceService.js', ...(await files(path.join(root, 'backend/attendance-runtime-v3'))).map((file) => path.relative(root, file).replaceAll('\\', '/')), ...(await files(path.join(root, 'src/domain/attendance'))).map((file) => path.relative(root, file).replaceAll('\\', '/'))]; const hash = createHash('sha256'); for (const file of relative.sort()) { hash.update(file); hash.update('\0'); hash.update(await readFile(path.join(root, file))); hash.update('\0') } return hash.digest('hex') }
+if (require.main === module) runtimeSourceSha256().then(console.log)
+module.exports = { runtimeSourceSha256 }

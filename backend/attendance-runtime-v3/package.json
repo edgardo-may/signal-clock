@@ -1,0 +1,7 @@
+{
+  "name": "signum-attendance-runtime-v3",
+  "private": true,
+  "version": "1.0.0",
+  "main": "server.js",
+  "engines": { "node": ">=22.18.0" }
+}

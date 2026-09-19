@@ -47,7 +47,7 @@ export class WorkdayReprocessService {
     // 2. Obtener Empleado y Configuración Timezone
     const { data: empData, error: empError } = await supabaseClient
       .from('empleados')
-      .select('hikvision_device_userid')
+      .select('device_userid')
       .eq('id', empleadoId)
       .eq('cliente_id', clienteId)
       .single()
@@ -56,7 +56,7 @@ export class WorkdayReprocessService {
       return { status: 'ERROR', error: 'Empleado no encontrado' }
     }
 
-    const biometricUserId = empData.hikvision_device_userid
+    const biometricUserId = empData.device_userid
     const timezone = tenantData.timezone || 'America/Mexico_City'
 
     // 3. Leer Horario (Schedule Assignment) con detección de ambigüedad (P2-017)
