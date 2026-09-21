@@ -33,7 +33,7 @@ BEGIN
   SELECT r.source_event_id INTO v_source FROM public.registro_asistencia r WHERE r.id=p_registro_id AND r.cliente_id=p_cliente_id AND r.empleado_id=p_empleado_id FOR KEY SHARE;
   IF v_source IS NULL OR NOT EXISTS(SELECT 1 FROM public.attendance_source_events e WHERE e.id=v_source AND e.cliente_id=p_cliente_id AND e.employee_id=p_empleado_id AND e.source_type='ZKTECO' AND e.processing_status='PROCESSED') THEN RAISE EXCEPTION 'PERSIST_SOURCE_EVENT_DENIED' USING ERRCODE='P0001'; END IF;
   IF NOT EXISTS(SELECT 1 FROM public.tenant_features f WHERE f.cliente_id=p_cliente_id AND f.feature_key='WORKDAY_PERSIST_ACTIVE' AND f.mode='PERSIST_ACTIVE' AND f.enabled AND f.canary_registro_id IS NULL AND f.canary_empleado_id IS NULL AND f.canary_schedule_id IS NULL AND f.canary_workday_date IS NULL) THEN RAISE EXCEPTION 'PERSIST_AUTHORIZATION_DENIED' USING ERRCODE='P0001'; END IF;
-  SELECT count(*),min(eh.schedule_revision_id) INTO v_assignments,v_revision FROM public.empleados_horarios eh WHERE eh.cliente_id=p_cliente_id AND eh.empleado_id=p_empleado_id AND eh.horario_id=p_schedule_id AND eh.activo AND eh.fecha_inicio<=p_workday_date AND (eh.fecha_fin IS NULL OR eh.fecha_fin>=p_workday_date);
+  SELECT count(*),(array_agg(eh.schedule_revision_id))[1] INTO v_assignments,v_revision FROM public.empleados_horarios eh WHERE eh.cliente_id=p_cliente_id AND eh.empleado_id=p_empleado_id AND eh.horario_id=p_schedule_id AND eh.activo AND eh.fecha_inicio<=p_workday_date AND (eh.fecha_fin IS NULL OR eh.fecha_fin>=p_workday_date);
   IF v_assignments<>1 OR v_revision IS NULL OR NOT EXISTS(SELECT 1 FROM public.schedule_revisions sr WHERE sr.id=v_revision AND sr.cliente_id=p_cliente_id AND sr.horario_id=p_schedule_id AND public.schedule_revision_calculation_hash(sr.config_snapshot)=sr.integrity_hash) THEN RAISE EXCEPTION 'PERSIST_REVISION_RESOLUTION_DENIED' USING ERRCODE='P0001'; END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended(p_cliente_id::text||':'||p_empleado_id::text||':'||p_workday_date::text,0));
   SELECT * INTO v_existing FROM public.workday_records w WHERE w.cliente_id=p_cliente_id AND w.empleado_id=p_empleado_id AND w.workday_date=p_workday_date FOR UPDATE;
@@ -54,5 +54,5 @@ BEGIN
 END $fn$;
 REVOKE ALL ON FUNCTION public.upsert_workday_record(uuid,uuid,date,uuid,text,timestamptz,timestamptz,integer,integer,integer,integer,integer,text,text,integer,uuid,timestamptz,integer) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.upsert_workday_record(uuid,uuid,date,uuid,text,timestamptz,timestamptz,integer,integer,integer,integer,integer,text,text,integer,uuid,timestamptz,integer) TO service_role;
-REVOKE EXECUTE ON FUNCTION public.upsert_workday_record(uuid,uuid,date,uuid,text,timestamptz,timestamptz,integer,integer,integer,integer,integer,text,text,integer,uuid) FROM service_role;
+REVOKE ALL ON FUNCTION public.upsert_workday_record(uuid,uuid,date,uuid,text,timestamptz,timestamptz,integer,integer,integer,integer,integer,text,text,integer,uuid) FROM PUBLIC,anon,authenticated,service_role;
 COMMIT;
