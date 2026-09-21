@@ -52,7 +52,7 @@ class AttendanceRuntimeService {
       }
       const engineResult = await this.orchestratorFactory({ executionMode: 'ACTIVE', persistenceMode: requestedPersistenceMode, persistenceService }).run({ registroId })
       if (engineResult.executionMode !== 'ACTIVE' || engineResult.persistenceMode !== requestedPersistenceMode || engineResult.calculation.calculationVersion !== CALCULATION_VERSION) throw new AttendanceRuntimeError('El engine no respeto el contrato solicitado.', 'RUNTIME_ENGINE_MODE_MISMATCH')
-      if (requestedPersistenceMode === PERSISTENCE_MODE && !['INSERTED', 'UNCHANGED'].includes(engineResult.persistenceResult)) throw new AttendanceRuntimeError('Resultado de persistencia invalido.', 'PERSISTENCE_RESULT_INVALID')
+      if (requestedPersistenceMode === PERSISTENCE_MODE && !['INSERTED', 'UPDATED', 'UNCHANGED', 'STALE'].includes(engineResult.persistenceResult)) throw new AttendanceRuntimeError('Resultado de persistencia invalido.', 'PERSISTENCE_RESULT_INVALID')
       const result = summarize(engineResult, feature.mode, Date.now() - startedAt, operation, false); this.logger?.info?.('attendance_runtime_v3', result); return result
     } catch (error) { this.logger?.error?.('attendance_runtime_v3_failed', { registro_id: registroId, execution_mode: 'ACTIVE', persistence_mode: requestedPersistenceMode, error_code: safeErrorCode(error), duration_ms: Date.now() - startedAt, ...operation }); throw error }
   }

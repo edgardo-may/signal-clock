@@ -25,7 +25,7 @@ function engineResult(overrides = {}) {
     workday_date: ID.operative_date, schedule_id: ID.schedule_id, timezone: ID.timezone,
     first_in: '2026-09-09T14:00:00.000Z', last_out: '2026-09-09T23:00:00.000Z',
     worked_minutes: 540, break_minutes: 0, overtime_minutes: 0, late_minutes: 0, early_leave_minutes: 0,
-    status: 'COMPLETE', calculation_version: 3, integrity_hash: 'a'.repeat(64),
+    status: 'COMPLETE', calculation_version: 3, integrity_hash: 'a'.repeat(64), source_observed_at: '2026-09-09T23:00:00.000Z', source_event_count: 1,
   }
   return {
     registroId: ID.registro_id, operativeDate: ID.operative_date,
@@ -66,7 +66,7 @@ test('65.1 fresh manifest contains the complete V3 snapshot and deterministic SH
   const result = await manifest()
   assert.deepEqual(result.identity, ID)
   assert.deepEqual(result.source.runtime, EXPECTED_RUNTIME)
-  assert.deepEqual(Object.keys(result.snapshot).sort(), ['break_minutes', 'calculation_version', 'early_leave_minutes', 'first_in', 'integrity_hash', 'last_out', 'late_minutes', 'overtime_minutes', 'status', 'worked_minutes'])
+  assert.deepEqual(Object.keys(result.snapshot).sort(), ['break_minutes', 'calculation_version', 'early_leave_minutes', 'first_in', 'integrity_hash', 'last_out', 'late_minutes', 'overtime_minutes', 'source_event_count', 'source_observed_at', 'status', 'worked_minutes'])
   assert.match(result.manifest_sha256, /^[0-9a-f]{64}$/)
   assert.equal(contract.assertManifest(result, result.manifest_sha256), result.manifest_sha256)
   assert.deepEqual(result.counters, { databaseWrites: 0, persistenceCalls: 0, rpcWriteCalls: 0, storageWriteCalls: 0, indirectSupabaseCalls: 0, incidentWriteCalls: 0 })
@@ -174,12 +174,12 @@ test('65.7 exact existing snapshot replays only as UNCHANGED; changed snapshot i
   await assert.rejects(() => runWith(fresh, { expected: 'UNCHANGED', existing: changed, rpcResult: 'UNCHANGED' }), { code: 'PERSIST_CANARY_EXISTING_SNAPSHOT_CONFLICT' })
 })
 
-test('65.8 authorization mismatch, RPC fingerprint mismatch, and UPDATED are denied', async () => {
+test('65.8 authorization mismatch, RPC fingerprint mismatch, and an unexpected UPDATED canary result are denied', async () => {
   const fresh = await manifest()
   await assert.rejects(() => runWith(fresh, { authorization: false }), { code: 'PERSIST_CANARY_AUTHORIZATION_DENIED' })
   const env = runnerEnvironment(fresh.manifest_sha256)
   assert.throws(() => runner.assertRunnerPrecheck({ ...precheck(), rpc_fingerprint: 'd'.repeat(32) }, runner.readRunnerConfig(env)), { code: 'PERSIST_CANARY_PRECHECK_DENIED' })
-  await assert.rejects(() => runWith(fresh, { rpcResult: 'UPDATED' }), /persistence_result no permitido/)
+  await assert.rejects(() => runWith(fresh, { rpcResult: 'UPDATED' }), { code: 'PERSIST_CANARY_RPC_RESULT_DENIED' })
 })
 
 test('65.9 new SQL phases are strictly sequenced, current C only, and historical 36-45 remain untouched', async () => {

@@ -34,6 +34,8 @@ function workdayRecord(overrides = {}) {
     status: 'COMPLETE',
     integrity_hash: 'hash-a',
     calculation_version: 3,
+    source_observed_at: '2026-09-04T22:00:00.000Z',
+    source_event_count: 2,
     ...overrides,
   }
 }
@@ -73,12 +75,10 @@ test('1. valid adapter output accepts INSERTED', async () => {
   assert.equal(mock.calls[0].params.p_integrity_hash, 'hash-a')
 })
 
-test('2. V3 adapter rejects UPDATED from the RPC boundary', async () => {
+test('2. evolved V3 adapter accepts UPDATED from the RPC boundary', async () => {
   const mock = rpcClient({ data: [rpcRow('UPDATED', { integrity_hash: 'hash-b' })], error: null })
-  await assert.rejects(
-    () => new WorkdayPersistenceService(mock.client).persist(workdayRecord({ integrity_hash: 'hash-b' })),
-    (error) => error instanceof WorkdayPersistenceError && error.code === 'WORKDAY_PERSISTENCE_RESPONSE_INVALID'
-  )
+  const result = await new WorkdayPersistenceService(mock.client).persist(workdayRecord({ integrity_hash: 'hash-b' }))
+  assert.equal(result.persistenceResult, 'UPDATED')
   assert.equal(mock.calls.length, 1)
 })
 
@@ -144,12 +144,10 @@ test('9. logical identity excludes schedule_id', () => {
   assert.equal(Object.hasOwn(first, 'schedule_id'), false)
 })
 
-test('10. a changed snapshot is rejected by the V3 boundary without legacy fallback', async () => {
+test('10. a changed snapshot may return UPDATED without a legacy fallback', async () => {
   const mock = rpcClient({ data: [rpcRow('UPDATED')], error: null })
-  await assert.rejects(
-    () => new WorkdayPersistenceService(mock.client).persist(workdayRecord({ schedule_id: 'schedule-b' })),
-    (error) => error instanceof WorkdayPersistenceError && error.code === 'WORKDAY_PERSISTENCE_RESPONSE_INVALID'
-  )
+  const result = await new WorkdayPersistenceService(mock.client).persist(workdayRecord({ schedule_id: 'schedule-b' }))
+  assert.equal(result.persistenceResult, 'UPDATED')
   assert.equal(mock.calls.length, 1)
   assert.equal(mock.calls[0].name, 'upsert_workday_record')
 })
@@ -220,5 +218,7 @@ test('14. V3 payload maps every canonical field without legacy aliases', () => {
     p_status: 'COMPLETE',
     p_integrity_hash: 'hash-a',
     p_calculation_version: 3,
+    p_source_observed_at: '2026-09-04T22:00:00.000Z',
+    p_source_event_count: 2,
   })
 })

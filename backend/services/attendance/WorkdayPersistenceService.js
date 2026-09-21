@@ -11,7 +11,7 @@ const { PERSISTENCE_SERVICE_BRAND } = require('./WorkdayPersistenceContract.js')
  * from being imported by the browser bundle.
  */
 
-const ALLOWED_PERSISTENCE_RESULTS = new Set(['INSERTED', 'UNCHANGED'])
+const ALLOWED_PERSISTENCE_RESULTS = new Set(['INSERTED', 'UPDATED', 'UNCHANGED', 'STALE'])
 const ALLOWED_WORKDAY_STATES = new Set([
   'COMPLETE',
   'INCOMPLETE',
@@ -84,6 +84,10 @@ function toUpsertWorkdayRpcParams(record) {
   assertNonBlank(record.timezone, 'timezone')
   assertNonBlank(record.schedule_id, 'schedule_id')
   assertNonBlank(record.integrity_hash, 'integrity_hash')
+  assertNullableTimestamp(record.source_observed_at, 'source_observed_at')
+  if (!record.source_observed_at || !Number.isInteger(record.source_event_count) || record.source_event_count < 1) {
+    throw new WorkdayPersistenceError('La evidencia monotona de fuentes es obligatoria.', 'WORKDAY_PERSISTENCE_INPUT_INVALID')
+  }
   if (record.calculation_version !== 3) {
     throw new WorkdayPersistenceError(
       'calculation_version debe ser exactamente 3.',
@@ -130,6 +134,8 @@ function toUpsertWorkdayRpcParams(record) {
     p_status: record.status,
     p_integrity_hash: record.integrity_hash,
     p_calculation_version: record.calculation_version,
+    p_source_observed_at: record.source_observed_at,
+    p_source_event_count: record.source_event_count,
   }
 }
 
@@ -179,9 +185,10 @@ class WorkdayPersistenceService {
 
     if (!response || response.error) {
       const message = response?.error?.message || String(response?.error || 'error RPC desconocido')
+      const policyCode = /^PERSIST_[A-Z_]+$/.test(message) ? message : 'WORKDAY_PERSISTENCE_RPC_ERROR'
       throw new WorkdayPersistenceError(
         'La RPC de persistencia devolvió error: ' + message,
-        'WORKDAY_PERSISTENCE_RPC_ERROR',
+        policyCode,
         response?.error
       )
     }

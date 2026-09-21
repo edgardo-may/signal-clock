@@ -546,6 +546,14 @@ class AttendanceEngineOrchestrator {
       const workdayRecord = domain.toWorkdayRecordWriteModel(
         calculation, selection.kind === 'SCHEDULED' ? selection.resolution.scheduleId : null, sourceRegistro.id
       )
+      // The worker transport clock is never a persistence authority.  These
+      // values are derived from the canonical, tenant-scoped registros that
+      // produced this calculation and let the database reject a stale subset.
+      const sourceEventsById = new Map(events.map((event) => [event.id, event]))
+      const sourceObservedAt = [...sourceEventsById.values()].map((event) => event.verificado_at).sort().at(-1)
+      if (!sourceObservedAt) throw new AttendanceOrchestratorError('La evidencia de fuentes esta vacia.', 'SOURCE_EVIDENCE_REQUIRED')
+      workdayRecord.source_observed_at = sourceObservedAt
+      workdayRecord.source_event_count = sourceEventsById.size
       const result = {
         registroId: sourceRegistro.id, deviceId: sourceRegistro.dispositivo_id,
         executionMode: this.executionMode, persistenceMode: this.persistenceMode,
@@ -560,7 +568,7 @@ class AttendanceEngineOrchestrator {
         try {
           persistence = await this.persistenceService.persist(workdayRecord)
         } catch (error) {
-          throw new AttendanceOrchestratorError('La persistencia RPC falló; no existe fallback de escritura.', 'PERSISTENCE_FAILED', error)
+          throw new AttendanceOrchestratorError('La persistencia RPC falló; no existe fallback de escritura.', safeErrorCode(error, 'PERSISTENCE_FAILED'), error)
         }
         result.persistenceResult = persistence.persistenceResult
         result.workdayId = persistence.workdayId

@@ -108,6 +108,8 @@ function snapshotFromRecord(record) {
     status: record.status,
     calculation_version: record.calculation_version,
     integrity_hash: record.integrity_hash,
+    source_observed_at: record.source_observed_at,
+    source_event_count: record.source_event_count,
   }
 }
 
