@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "node --test tests/compliance/attendance-engine.test.js",
     "test:dbreal": "node --test tests/compliance/db-real.test.js",
+    "test:dbreal:workday-evolution": "node --test tests/compliance/dbreal-workday-evolution.test.js",
     "test:dbreal:preflight": "node scripts/dbreal-preflight.mjs",
     "db:baseline:generate": "node scripts/generate-current-schema-baseline.mjs",
     "db:baseline:bootstrap": "node scripts/bootstrap-test-db.mjs",
