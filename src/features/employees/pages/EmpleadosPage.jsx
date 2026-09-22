@@ -11,7 +11,7 @@ import { useCurrentTenant } from '../../../shared/hooks/useCurrentTenant'
 import { usePagination } from '../../../shared/hooks/usePagination'
 import TenantSelector from '../../../shared/components/Layout/TenantSelector'
 import PaginationControl from '../../../shared/components/ui/PaginationControl'
-import { syncService } from '../../features/biometrics/services/syncService'
+import { syncService } from '../../biometrics/services/syncService'
 import { useAuth } from '../../auth/hooks/useAuth'
 import {
   Users, UserPlus, Search, Filter, Eye, Edit3, Trash2,
