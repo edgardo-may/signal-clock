@@ -21,5 +21,5 @@ test('postchecks require production-shaped UNCHANGED and preserve fingerprints',
 
 test('v3 runtime has a dedicated write boundary and no mutable schedule fallback', async () => {
   const [service, persistence, docker] = await Promise.all(['backend/attendance-runtime-v3/AttendanceRuntimeService.js','backend/attendance-runtime-v3/tenantPersistence.js','backend/attendance-runtime-v3/Dockerfile'].map((file) => readFile(new URL(file, root), 'utf8')))
-  assert.match(service, /ACTIVE_PERSIST_CAPABLE/); assert.match(service, /persistenceMode: requestedPersistenceMode/); assert.match(service, /assertPersistRecordAuthorized/); assert.doesNotMatch(service, /from\('horarios'\)/); assert.match(persistence, /WORKDAY_PERSIST_CANARY/); assert.match(docker, /WorkdayPersistenceService/)
+  assert.match(service, /ACTIVE_PERSIST_CAPABLE/); assert.match(service, /persistenceMode: requestedPersistenceMode/); assert.match(service, /assertPersistRecordAuthorized/); assert.doesNotMatch(service, /from\('horarios'\)/); assert.match(persistence, /const PERSIST_FEATURE_KEY = 'WORKDAY_PERSIST_ACTIVE'/); assert.match(persistence, /const PERSIST_FEATURE_MODE = 'PERSIST_ACTIVE'/); assert.doesNotMatch(persistence, /WORKDAY_PERSIST_CANARY/); assert.match(docker, /WorkdayPersistenceService/)
 })

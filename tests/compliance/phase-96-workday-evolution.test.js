@@ -56,5 +56,10 @@ test('Phase 97 is the real SQL contract: locks, immutable revision, atomic UPDAT
   assert.match(sql, /'INSERTED'/); assert.match(sql, /'UPDATED'/); assert.match(sql, /'UNCHANGED'/); assert.match(sql, /'STALE'/)
   assert.match(sql, /UPDATE public\.workday_records SET/); assert.match(sql, /INSERT INTO public\.workday_record_history/)
   assert.match(sql, /PERSIST_SNAPSHOT_CONFLICT/); assert.match(sql, /schedule_revisions/)
-  assert.doesNotMatch(sql, /public\.horarios/); assert.match(sql, /REVOKE EXECUTE[\s\S]*FROM service_role/)
+  assert.doesNotMatch(sql, /public\.horarios/)
+  const legacy = 'public.upsert_workday_record(uuid,uuid,date,uuid,text,timestamptz,timestamptz,integer,integer,integer,integer,integer,text,text,integer,uuid)'
+  const evolved = legacy.slice(0, -1) + ',timestamptz,integer)'
+  assert.ok(sql.includes('REVOKE ALL ON FUNCTION ' + legacy + ' FROM PUBLIC,anon,authenticated,service_role;'))
+  assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION ' + evolved + ' TO service_role;'))
+  assert.ok(sql.includes('REVOKE ALL ON FUNCTION ' + evolved + ' FROM PUBLIC,anon,authenticated;'))
 })
