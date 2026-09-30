@@ -10,12 +10,14 @@ import {
   enableFixturePersistGate,
   evolutionPayload,
   prepareWorkdayEvolutionDbreal,
+  prepareInstalledHistoryHotfixDbreal,
   workdayEvolutionDbrealConfig,
   workdayState,
 } from "../helpers/workdayEvolutionDbreal.js";
 
 const config = workdayEvolutionDbrealConfig();
-const options = config.ready ? {} : { skip: config.skipReason };
+const installedHotfix = process.env.HISTORY_HOTFIX_INSTALLED_CONTRACT === 'true';
+const options = (installedHotfix ? Boolean(process.env.PHASE2_AUDIT_DATABASE_URL) : config.ready) ? {} : { skip: config.skipReason };
 let context;
 let initial;
 let evolved;
@@ -28,14 +30,16 @@ async function expectRuntimeError(operation, code) {
 }
 
 before(async () => {
-  context = await prepareWorkdayEvolutionDbreal();
+  context = installedHotfix
+    ? await prepareInstalledHistoryHotfixDbreal(process.env.PHASE2_AUDIT_DATABASE_URL)
+    : await prepareWorkdayEvolutionDbreal();
 }, options);
 after(async () => {
   await closeWorkdayEvolutionDbreal(context);
 }, options);
 
 test(
-  "DBWE-001 applies Phase 96, Phase 97, and Phase 98 only to the guarded isolated database",
+  installedHotfix ? "DBWE-001 validates installed 97 + history hotfix and Phase 98 on localhost" : "DBWE-001 applies Phase 96, Phase 97, and Phase 98 only to the guarded isolated database",
   options,
   () => {
     assert.equal(context.precheck.pass, true);

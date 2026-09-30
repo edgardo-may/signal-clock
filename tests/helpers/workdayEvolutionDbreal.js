@@ -536,6 +536,39 @@ export async function prepareWorkdayEvolutionDbreal() {
   }
 }
 
+/** Regression on the already-installed local 97 + history hotfix contract.
+ * Uses real PostgreSQL service_role sessions, including independent concurrent
+ * RPC transactions. Does not reapply historical migrations or require API keys.
+ */
+export async function prepareInstalledHistoryHotfixDbreal(dbUrl) {
+  const target = new URL(dbUrl);
+  if (!['127.0.0.1', 'localhost'].includes(target.hostname) || target.port !== '54322')
+    throw new Error('DBREAL_LOCAL_HISTORY_HOTFIX_TARGET_REQUIRED');
+  const config = { dbUrl, ready: true };
+  const client = await postgresAdminClient(config);
+  try {
+    await assertPersistGateClosed(client);
+    await client.query("SELECT set_config('request.jwt.claim.role','service_role',false)");
+    await client.query(await readFile(new URL('../../database/live-schema/109_history_uniqueness_postcheck.sql', import.meta.url), 'utf8'));
+    const postcheck = await runPhaseAndRequirePass(client, 'postcheck');
+    const fixture = await createWorkdayEvolutionFixture(client);
+    await enableFixturePersistGate(client, fixture.tenantA.id);
+    const service = { rpc: async (name, params) => {
+      if (name !== 'upsert_workday_record') throw new Error('DBREAL_RPC_NOT_ALLOWED');
+      const rpc = await postgresAdminClient(config);
+      try {
+        await rpc.query('SET ROLE service_role');
+        await rpc.query("SELECT set_config('request.jwt.claim.role','service_role',false)");
+        const keys = Object.keys(params);
+        const placeholders = keys.map((key, i) => `${key} => $${i + 1}`);
+        return { data: (await rpc.query(`SELECT * FROM public.upsert_workday_record(${placeholders.join(',')})`, keys.map(key => params[key]))).rows, error: null };
+      } catch (error) { return { data: null, error }; }
+      finally { await rpc.end(); }
+    } };
+    return { client, config, fixture, service, precheck: { pass: true, phase: '109_history_uniqueness_postcheck' }, postcheck };
+  } catch (error) { await client.end(); throw error; }
+}
+
 export async function closeWorkdayEvolutionDbreal(context) {
   if (!context?.client) return;
   try {
