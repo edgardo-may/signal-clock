@@ -3,6 +3,7 @@ WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY backend/services/attendance/AttendanceEngineOrchestrator.js backend/services/attendance/WorkdayPersistenceContract.js backend/services/attendance/WorkdayPersistenceService.js ./services/attendance/
+COPY backend/services/attendance/CalculationEngineRegistry.js backend/services/attendance/WorkdayRevisionManifests.js ./services/attendance/
 COPY backend/attendance-runtime-v3 ./attendance-runtime-v3/
 COPY src/domain/attendance /app/src/domain/attendance
 ARG RUNTIME_VERSION=attendance-runtime-v3
