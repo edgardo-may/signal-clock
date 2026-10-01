@@ -6,6 +6,7 @@ const { PERSISTENCE_SERVICE_BRAND } = require('../services/attendance/WorkdayPer
 const { createReadOnlyClient } = require('./readOnlySupabase.js')
 const { loadRevisionResolverFeature } = require('./tenantFeature.js')
 const { loadPersistAuthorization, assertPersistRecordAuthorized } = require('./tenantPersistence.js')
+const { parseRuntimeCapability } = require('./config.js')
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const ENGINE_VERSION = 'ATTENDANCE_ENGINE_V3'; const CALCULATION_VERSION = 3
@@ -21,8 +22,9 @@ function summarize(engineResult, featureMode, durationMs, operation, deduplicate
 }
 
 class AttendanceRuntimeService {
-  constructor({ client, logger = console, orchestratorFactory, featureLoader = loadRevisionResolverFeature, persistAuthorizationLoader = loadPersistAuthorization, persistenceServiceFactory } = {}) {
+  constructor({ client, logger = console, orchestratorFactory, featureLoader = loadRevisionResolverFeature, persistAuthorizationLoader = loadPersistAuthorization, persistenceServiceFactory, runtimeCapability = RUNTIME_CAPABILITY } = {}) {
     if (!client) throw new AttendanceRuntimeError('Se requiere cliente backend.', 'RUNTIME_CLIENT_REQUIRED')
+    this.runtimeCapability = parseRuntimeCapability(runtimeCapability)
     this.rawClient = client; this.readCounters = { databaseWrites: 0, rpcWriteCalls: 0, indirectSupabaseCalls: 0 }; this.client = createReadOnlyClient(client, this.readCounters)
     this.logger = logger; this.featureLoader = featureLoader; this.persistAuthorizationLoader = persistAuthorizationLoader
     this.persistenceServiceFactory = persistenceServiceFactory || ((rawClient) => new WorkdayPersistenceService(rawClient))
@@ -53,7 +55,9 @@ class AttendanceRuntimeService {
       const engineResult = await this.orchestratorFactory({ executionMode: 'ACTIVE', persistenceMode: requestedPersistenceMode, persistenceService }).run({ registroId })
       if (engineResult.executionMode !== 'ACTIVE' || engineResult.persistenceMode !== requestedPersistenceMode || engineResult.calculation.calculationVersion !== CALCULATION_VERSION) throw new AttendanceRuntimeError('El engine no respeto el contrato solicitado.', 'RUNTIME_ENGINE_MODE_MISMATCH')
       if (requestedPersistenceMode === PERSISTENCE_MODE && !['INSERTED', 'UPDATED', 'UNCHANGED', 'STALE'].includes(engineResult.persistenceResult)) throw new AttendanceRuntimeError('Resultado de persistencia invalido.', 'PERSISTENCE_RESULT_INVALID')
-      const result = summarize(engineResult, feature.mode, Date.now() - startedAt, operation, false); this.logger?.info?.('attendance_runtime_v3', result); return result
+      // runtime_capability is the existing dispatcher wire contract. Deployment
+      // capability is reported separately; both modes support ordinary v3 PERSIST.
+      const result = { ...summarize(engineResult, feature.mode, Date.now() - startedAt, operation, false), runtime_deployment_capability: this.runtimeCapability }; this.logger?.info?.('attendance_runtime_v3', result); return result
     } catch (error) { this.logger?.error?.('attendance_runtime_v3_failed', { registro_id: registroId, execution_mode: 'ACTIVE', persistence_mode: requestedPersistenceMode, error_code: safeErrorCode(error), duration_ms: Date.now() - startedAt, ...operation }); throw error }
   }
   async _deduplicated(registroId, persistenceMode) { assertRegistroId(registroId); const key = `${persistenceMode}:${registroId}`; const prior = this.inFlight.get(key); if (prior) return { ...(await prior), deduplicated: true }; const execution = this._execute(registroId, persistenceMode); this.inFlight.set(key, execution); try { return await execution } finally { this.inFlight.delete(key) } }

@@ -13,9 +13,8 @@ function requireString(environment, name, { minimumLength = 1 } = {}) {
 }
 
 function parseRuntimeCapability(value) {
-  const capability = value || 'SHADOW_ONLY'
-  if (!['SHADOW_ONLY', 'ACTIVE_CAPABLE', 'ACTIVE_PERSIST_CAPABLE'].includes(capability)) throw new AttendanceRuntimeConfigError('ATTENDANCE_RUNTIME_CAPABILITY es invalida.', 'ATTENDANCE_RUNTIME_CAPABILITY_INVALID')
-  return capability
+  if (!['ACTIVE_PERSIST_CAPABLE', 'REVISION_AWARE_V3_ONLY'].includes(value)) throw new AttendanceRuntimeConfigError('RUNTIME_PERSIST_CAPABILITY_REQUIRED: ATTENDANCE_RUNTIME_CAPABILITY es invalida o falta.', 'ATTENDANCE_RUNTIME_CAPABILITY_INVALID')
+  return value
 }
 
 function loadRuntimeConfig(environment = process.env) {
