@@ -1,6 +1,7 @@
 'use strict'
 
 const ALLOWED_RESULTS = new Set(['INSERTED', 'UPDATED', 'UNCHANGED', 'STALE'])
+const VERSION_TERMINAL_DENIALS = new Set(['PERSIST_CALCULATION_VERSION_MISMATCH', 'CALCULATION_VERSION_UNAVAILABLE'])
 const TERMINAL_DENIALS = new Set(['PERSIST_AUTHORIZATION_DENIED', 'PERSIST_SOURCE_EVENT_REQUIRED', 'PERSIST_SOURCE_EVENT_DENIED', 'PERSIST_LEGACY_SNAPSHOT_UNVERSIONED', 'PERSIST_SNAPSHOT_CONFLICT', 'RUNTIME_RESOLUTION_MODE_MISMATCH', 'REVISION_MISSING', 'REVISION_HASH_MISMATCH', 'MULTIPLE_APPLICABLE_ASSIGNMENTS', 'TENANT_MISMATCH', 'PERSISTENCE_RESULT_INVALID'])
 
 class DispatcherError extends Error { constructor(message, code = 'PERSIST_DISPATCHER_ERROR') { super(message); this.code = code } }
@@ -45,15 +46,15 @@ class AttendancePersistDispatcher {
       const response = await this.fetch(`${this.config.runtimeUrl}/internal/attendance/persist`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${this.config.internalToken}`, 'X-Serverless-Authorization': `Bearer ${identityToken}` }, body: JSON.stringify({ registro_id: row.registro_id }) })
       let body = null; try { body = await response.json() } catch {}
       if (!response.ok) {
-        const errorCode = runtimeErrorCode(body); await this.acknowledge(row, TERMINAL_DENIALS.has(errorCode) ? 'DENIED' : 'RETRY', { errorCode });
-        return { outbox_id: row.outbox_id, status: TERMINAL_DENIALS.has(errorCode) ? 'DENIED' : 'RETRY', error_code: errorCode }
+        const errorCode = runtimeErrorCode(body); const terminal = TERMINAL_DENIALS.has(errorCode) || VERSION_TERMINAL_DENIALS.has(errorCode); await this.acknowledge(row, terminal ? 'DENIED' : 'RETRY', { errorCode });
+        return { outbox_id: row.outbox_id, status: terminal ? 'DENIED' : 'RETRY', error_code: errorCode }
       }
       const result = validateRuntimeResult(row, body)
       await this.acknowledge(row, 'SUCCEEDED', { runtimeResult: result.persistence_result, workdayId: result.workday_id })
       const event = { registro_id: result.registro_id, tenant_id: result.tenant_id, employee_id: result.employee_id, operative_date: result.operative_date, assignment_id: result.assignment_id, schedule_revision_id: result.schedule_revision_id, execution_mode: result.execution_mode, persistence_mode: result.persistence_mode, persistence_result: result.persistence_result, workday_id: result.workday_id, databaseWrites: result.databaseWrites, persistenceCalls: result.persistenceCalls, rpcWriteCalls: result.rpcWriteCalls, duration_ms: Date.now() - startedAt, error_code: null }
       this.logger?.info?.('attendance_persist_dispatch', event); return { outbox_id: row.outbox_id, status: 'SUCCEEDED', ...event }
     } catch (error) {
-      const errorCode = safeErrorCode(error); await this.acknowledge(row, 'RETRY', { errorCode }); this.logger?.error?.('attendance_persist_dispatch_failed', { registro_id: row.registro_id, tenant_id: row.cliente_id, employee_id: row.empleado_id, duration_ms: Date.now() - startedAt, error_code: errorCode }); return { outbox_id: row.outbox_id, status: 'RETRY', error_code: errorCode }
+      const errorCode = safeErrorCode(error); const status = VERSION_TERMINAL_DENIALS.has(errorCode) ? 'DENIED' : 'RETRY'; await this.acknowledge(row, status, { errorCode }); this.logger?.error?.('attendance_persist_dispatch_failed', { registro_id: row.registro_id, tenant_id: row.cliente_id, employee_id: row.empleado_id, duration_ms: Date.now() - startedAt, error_code: errorCode }); return { outbox_id: row.outbox_id, status, error_code: errorCode }
     }
   }
   async runOnce() { const rows = await this.claim(); const outcomes = []; for (const row of rows) outcomes.push(await this.process(row)); return outcomes }

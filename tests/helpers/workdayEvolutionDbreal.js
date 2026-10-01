@@ -451,6 +451,12 @@ export async function assertFunctionPrivileges(client) {
 
 export async function cleanupWorkdayEvolutionFixture(client, fixture) {
   if (!fixture) return;
+  // Includes rows created indirectly by attendance triggers, while the owning
+  // tenant/employee still exist. IDs come only from this UUID-generated fixture.
+  await client.query(
+    `DELETE FROM public.incidencias WHERE cliente_id IN ($1,$2)`,
+    [fixture.tenantA.id, fixture.tenantB.id],
+  );
   await disableFixturePersistGate(client, fixture.tenantA.id);
   await client.query(
     `DELETE FROM public.attendance_persist_outbox WHERE cliente_id IN ($1,$2)`,

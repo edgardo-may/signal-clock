@@ -88,7 +88,7 @@ function toUpsertWorkdayRpcParams(record) {
   if (!record.source_observed_at || !Number.isInteger(record.source_event_count) || record.source_event_count < 1) {
     throw new WorkdayPersistenceError('La evidencia monotona de fuentes es obligatoria.', 'WORKDAY_PERSISTENCE_INPUT_INVALID')
   }
-  if (record.calculation_version !== 3) {
+  if (!Number.isInteger(record.calculation_version) || record.calculation_version < 1 || (record.calculation_version !== 3 && !record.evidence_manifest)) {
     throw new WorkdayPersistenceError(
       'calculation_version debe ser exactamente 3.',
       'WORKDAY_PERSISTENCE_VERSION_INVALID'
@@ -136,6 +136,9 @@ function toUpsertWorkdayRpcParams(record) {
     p_calculation_version: record.calculation_version,
     p_source_observed_at: record.source_observed_at,
     p_source_event_count: record.source_event_count,
+    ...(record.evidence_manifest && record.context_manifest ? {
+      p_evidence_manifest: record.evidence_manifest, p_context_manifest: record.context_manifest,
+    } : {}),
   }
 }
 
@@ -186,11 +189,13 @@ class WorkdayPersistenceService {
     if (!response || response.error) {
       const message = response?.error?.message || String(response?.error || 'error RPC desconocido')
       const policyCode = /^PERSIST_[A-Z_]+$/.test(message) ? message : 'WORKDAY_PERSISTENCE_RPC_ERROR'
-      throw new WorkdayPersistenceError(
+      const failure = new WorkdayPersistenceError(
         'La RPC de persistencia devolvió error: ' + message,
         policyCode,
         response?.error
       )
+      try { Object.assign(failure, JSON.parse(response?.error?.details || "{}")) } catch {}
+      throw failure
     }
 
     const row = singleRpcRow(response.data)

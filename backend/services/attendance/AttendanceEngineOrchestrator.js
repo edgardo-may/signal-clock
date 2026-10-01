@@ -9,6 +9,8 @@
  */
 
 const { isApprovedWorkdayPersistenceService } = require('./WorkdayPersistenceContract.js')
+const { getCalculationEngine } = require('./CalculationEngineRegistry.js')
+const { evidenceManifest, contextManifest } = require('./WorkdayRevisionManifests.js')
 
 const DEFAULT_EXECUTION_MODE = 'SHADOW'
 const ACTIVE_EXECUTION_MODE = 'ACTIVE'
@@ -162,6 +164,12 @@ class SupabaseAttendanceReadRepository {
     )
   }
 
+  async loadCurrentWorkday({ clienteId, empleadoId, workdayDate }) {
+    return this._single(this.client.from('workday_records')
+      .select('current_revision_id,calculation_version')
+      .eq('cliente_id', clienteId).eq('empleado_id', empleadoId).eq('workday_date', workdayDate), 'current workday')
+  }
+
   async getAttendanceById(registroId) {
     return this._single(
       this.client.from('registro_asistencia')
@@ -305,6 +313,7 @@ class AttendanceEngineOrchestrator {
     this.domainLoader = options.domainLoader || defaultDomainLoader
     this.logger = options.logger || console
     this.calculationVersion = options.calculationVersion || 3
+    this.engineResolver = options.engineResolver || getCalculationEngine
     // Optional diagnostic observer. It is called only with computation-local
     // data and has no authority to alter events, matching, metrics, or writes.
     this.traceCollector = typeof options.traceCollector === 'function' ? options.traceCollector : null
@@ -439,6 +448,11 @@ class AttendanceEngineOrchestrator {
       const anchorEvent = domain.RegistroAttendanceAdapter.fromRegistro(sourceRegistro, device)
       const scheduleContext = await this.repository.loadScheduleContext({ clienteId: tenant, empleadoId: employeeId })
       const selection = await this._selectWorkday(domain, anchorEvent, scheduleContext)
+      const currentWorkday = typeof this.repository.loadCurrentWorkday === 'function'
+        ? await this.repository.loadCurrentWorkday({ clienteId: tenant, empleadoId: employeeId, workdayDate: selection.operativeDate })
+        : null
+      const targetVersion = currentWorkday?.current_revision_id ? currentWorkday.calculation_version : (currentWorkday ? 3 : this.calculationVersion)
+      const engine = this.engineResolver(targetVersion)
       resolutionTelemetry.operative_date = selection.operativeDate
       if (selection.kind === 'SCHEDULED') {
         resolutionTelemetry.assignment_id = selection.resolution.scheduleAssignmentId
@@ -493,8 +507,8 @@ class AttendanceEngineOrchestrator {
         normalization.accepted,
         anchorEvent.timezone
       )
-      const metrics = domain.WorkdayCalculator.calculate(match, anchorEvent.timezone, {
-        timezone: anchorEvent.timezone, operativeDate: selection.operativeDate, calculationVersion: this.calculationVersion,
+      const metrics = engine.calculate(domain, match, anchorEvent.timezone, {
+        timezone: anchorEvent.timezone, operativeDate: selection.operativeDate, calculationVersion: targetVersion,
       })
       addNightMinutes(domain, metrics, anchorEvent.timezone)
       const workdayState = calculateState(metrics, selection.kind === 'UNSCHEDULED')
@@ -509,7 +523,7 @@ class AttendanceEngineOrchestrator {
         ordinaryMinutes: metrics.ordinaryMinutes, overtimeMinutes: metrics.overtimeMinutes,
         status: workdayState, sourceLogIds: metrics.sourceLogIds,
         // Warnings are integrity-protected evidence, not HR incident records.
-        incidentCodes: [], warningCodes: calculationWarnings, calculationVersion: this.calculationVersion,
+        incidentCodes: [], warningCodes: calculationWarnings, calculationVersion: targetVersion,
       })
       const calculation = {
         clienteId: tenant, empleadoId: employeeId, operativeDate: selection.operativeDate, timezone: anchorEvent.timezone,
@@ -522,7 +536,7 @@ class AttendanceEngineOrchestrator {
         workdayState, missingEntry: metrics.missingEntry, missingExit: metrics.missingExit,
         segments: metrics.segments, sourceLogIds: metrics.sourceLogIds, punchDispositions: toDispositions(normalization, match),
         devicesInvolved: metrics.devicesInvolved, supplementalEvents: metrics.supplementalEvents,
-        warnings: calculationWarnings, incidents: [], calculationVersion: this.calculationVersion, integrityHash,
+        warnings: calculationWarnings, incidents: [], calculationVersion: targetVersion, integrityHash,
       }
       if (this.traceCollector) {
         // pairPunches is a public, pure method and this second invocation only
@@ -554,6 +568,8 @@ class AttendanceEngineOrchestrator {
       if (!sourceObservedAt) throw new AttendanceOrchestratorError('La evidencia de fuentes esta vacia.', 'SOURCE_EVIDENCE_REQUIRED')
       workdayRecord.source_observed_at = sourceObservedAt
       workdayRecord.source_event_count = sourceEventsById.size
+      workdayRecord.evidence_manifest = evidenceManifest(domain, [...sourceEventsById.values()], tenant, employeeId, selection.operativeDate)
+      workdayRecord.context_manifest = contextManifest(selection, match, anchorEvent.timezone, targetVersion, eventWindow)
       const result = {
         registroId: sourceRegistro.id, deviceId: sourceRegistro.dispositivo_id,
         executionMode: this.executionMode, persistenceMode: this.persistenceMode,
