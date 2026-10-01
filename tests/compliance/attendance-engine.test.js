@@ -241,10 +241,10 @@ describe('Attendance Engine - Suite de Cumplimiento Laboral 2027', () => {
     })
 
     assert.equal(result.workdayState, 'COMPLETE')
-    assert.equal(result.status, 'EARLY_LEAVE')
-    assert.equal(result.workedMinutes, 300)
+    assert.equal(result.status, 'PRESENT')
+    assert.equal(result.workedMinutes, 540)
     assert.equal(result.breakMinutes, 0)
-    assert.equal(result.earlyLeaveMinutes, 300)
+    assert.equal(result.earlyLeaveMinutes, 0)
     assert.equal(result.supplementalEvents.length, 2)
   })
 
@@ -305,12 +305,12 @@ describe('Attendance Engine - Suite de Cumplimiento Laboral 2027', () => {
       timezone: TIMEZONE_CDMX,
     })
 
-    assert.equal(result.status, 'EARLY_LEAVE')
+    assert.equal(result.status, 'PRESENT')
     assert.equal(result.operativeDate, '2027-01-15')
     assert.equal(result.workdayState, 'COMPLETE')
-    assert.equal(result.workedMinutes, 270)
+    assert.equal(result.workedMinutes, 450)
     assert.equal(result.breakMinutes, 0)
-    assert.equal(result.earlyLeaveMinutes, 210)
+    assert.equal(result.earlyLeaveMinutes, 0)
     assert.equal(result.supplementalEvents.length, 2)
   })
 
@@ -380,10 +380,10 @@ describe('Attendance Engine - Suite de Cumplimiento Laboral 2027', () => {
     })
 
     assert.equal(result.workdayState, 'COMPLETE')
-    assert.equal(result.status, 'EARLY_LEAVE')
-    assert.equal(result.workedMinutes, 120)
+    assert.equal(result.status, 'PRESENT')
+    assert.equal(result.workedMinutes, 525)
     assert.equal(result.breakMinutes, 0)
-    assert.equal(result.earlyLeaveMinutes, 480)
+    assert.equal(result.earlyLeaveMinutes, 0)
     assert.equal(result.supplementalEvents.length, 4)
   })
 

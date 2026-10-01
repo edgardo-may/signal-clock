@@ -58,10 +58,10 @@ describe('HARD-001: ENTRY/EXIT explícitos válidos — pareado por dirección',
     const result = AttendanceEngine.process(TENANT_A, EMP_A, shift, rawPunches, { timezone: TZ_CDMX })
 
     // Phase 35.4: 08:00 ENTRY + first later EXIT at 13:00 is canonical.
-    assert.equal(result.segments.filter(s => s.segmentType === 'WORK').length, 1, 'Solo existe el intervalo canónico')
+    assert.equal(result.segments.filter(s => s.segmentType === 'WORK').length, 2, 'Se conservan ambos intervalos canónicos')
     assert.equal(result.segments.filter(s => s.segmentType === 'BREAK').length, 0, 'No se infiere BREAK de punches suplementarios')
-    assert.equal(result.workedMinutes, 300, 'El intervalo canónico es 08:00 a 13:00')
-    assert.equal(result.supplementalEvents.length, 2, 'ENTRY 14:00 y EXIT 18:00 son evidencia suplementaria')
+    assert.equal(result.workedMinutes, 540, 'Se suman 08:00-13:00 y 14:00-18:00')
+    assert.equal(result.supplementalEvents.length, 2, 'Los punches siguen disponibles como evidencia suplementaria')
     assert.equal(result.workdayState, 'COMPLETE', 'Jornada completa')
     assert.equal(result.missingExit, false, 'No falta salida')
     assert.equal(result.missingEntry, false, 'No falta entrada')
@@ -119,12 +119,14 @@ describe('HARD-002: Dos ENTRY consecutivos → CONSECUTIVE_ENTRY', () => {
     const consEntry = result.incidents.find(i => i.code === 'CONSECUTIVE_ENTRY')
     assert.ok(consEntry, 'Debe generarse incidencia CONSECUTIVE_ENTRY')
     assert.ok(consEntry.metadata?.discardedPunchId, 'La incidencia debe incluir el ID del punch descartado')
-    assert.equal(consEntry.metadata.discardedPunchId, 'p1', 'El primer ENTRY (p1) debe ser descartado')
+    assert.equal(consEntry.metadata.discardedPunchId, 'p2', 'La segunda ENTRY queda fuera del pairing')
+    assert.equal(consEntry.metadata.retainedPunchId, 'p1')
 
-    // Con la estrategia "descartar primer ENTRY y conservar el último":
-    // p2 (08:00→13:00 ambiguo, se descarta p1 conserva p2) + p3 EXIT → 1 par
+    // Phase B: conservar primera ENTRY abierta; p1 + p3 forman el par.
     assert.equal(result.segments.filter(s => s.segmentType === 'WORK').length, 1,
-      'Debe haber 1 segmento de trabajo (p2 ENTRY → p3 EXIT)')
+      'Debe haber 1 segmento de trabajo (p1 ENTRY → p3 EXIT)')
+    assert.equal(result.segments[0].startPunch.id, 'p1')
+    assert.equal(result.workedMinutes, 600)
   })
 })
 
