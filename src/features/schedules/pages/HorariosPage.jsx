@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from '../../../lib/supabase';
 import Sidebar from '../../../shared/components/Layout/Sidebar';
 import Header from '../../../shared/components/Layout/Header';
-import toast, { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 import { useConfirm } from '../../../shared/hooks/useConfirm';
 import { useCurrentTenant } from '../../../shared/hooks/useCurrentTenant';
 import TenantSelector from '../../../shared/components/Layout/TenantSelector';
@@ -843,7 +843,6 @@ export default function Horarios() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]  text-slate-900 dark:text-white ">
-      <Toaster position="top-right" containerStyle={{ top: 20, right: 20 }} />
       {ConfirmDialogNode}
 
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />

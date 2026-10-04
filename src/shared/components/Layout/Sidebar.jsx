@@ -16,7 +16,6 @@ import {
   CalendarDays,
   CalendarHeart,
   ClipboardCheck,
-  Camera,
   UserCog,
   FileText,
   Building2,
@@ -27,6 +26,8 @@ import {
   RefreshCw,
   Fingerprint,
   ShieldCheck,
+  Coffee,
+  UserCheck,
 } from 'lucide-react'
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
@@ -72,6 +73,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
         name: 'MENÚ PRINCIPAL',
         items: [
           { label: 'Dashboard',           to: '/',                icon: LayoutDashboard, permission: PERMISSION.DASHBOARD },
+          { label: 'Portal Colaborador',  to: '/portal-colaborador', icon: UserCheck },
           { label: 'Empleados',           to: '/empleados',       icon: Users, permission: PERMISSION.EMPLOYEES },
           { label: 'Integraciones',       to: '/sincronizacion',  icon: RefreshCw, permission: PERMISSION.SYNCHRONIZATION },
           { label: 'Enrolamiento',        to: '/enrolamiento',    icon: Fingerprint, permission: PERMISSION.ENROLLMENT },
@@ -80,7 +82,6 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
           { label: 'Días Festivos',       to: '/festivos',        icon: CalendarHeart, permission: PERMISSION.HOLIDAYS },
           { label: 'Incidencias',         to: '/incidencias',     icon: FileText, permission: PERMISSION.ATTENDANCE_MANAGE },
           { label: 'Checadas Manuales',   to: '/checadas-manuales', icon: ClipboardCheck, permission: PERMISSION.ATTENDANCE_MANAGE },
-          { label: 'Kiosco Checador Web', to: '/kiosko',          icon: Camera, permission: PERMISSION.ATTENDANCE_MANAGE },
           {
             label: 'Biométricos',
             to: '/biometricos',
@@ -125,7 +126,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
         name: 'SOPORTE & REPORTES',
         items: [
           {
-            label: 'Reportes Biomédicos',
+            label: 'Reportes Biométricos',
             to: '/visor-asistencias',
             icon: FileSpreadsheet,
             isParent: true,
@@ -136,6 +137,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
               { label: 'Matriz de Checadas', to: '/matriz-checadas', icon: CalendarDays },
               { label: 'Historial de Eventos', to: '/historial-eventos', icon: Activity },
               { label: 'Tarjeta de Fichaje', to: '/tarjeta-fichaje', icon: ClipboardCheck },
+              { label: 'Reporte de Descansos', to: '/reporte-descansos', icon: Coffee },
             ]
           },
           { label: 'Reportes de Nómina', to: '/reportes', icon: FileSpreadsheet, permission: PERMISSION.REPORTS },

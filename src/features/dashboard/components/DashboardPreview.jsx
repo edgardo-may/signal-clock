@@ -12,7 +12,7 @@ import {
   FileText, Activity, TrendingUp, Bell, Search, Building2,
   ChevronDown, Menu, X, ArrowUpRight, ArrowDownRight, Fingerprint,
   ScanFace, CreditCard, Hash, Shuffle, MapPin, Settings, Shield,
-  User, ChevronLeft, ChevronRight,
+  User, ChevronLeft, ChevronRight, Globe,
 } from 'lucide-react'
 // Iconos oficiales de Lucide Animated (https://lucide-animated.com/)
 import {
@@ -57,7 +57,6 @@ const MENU_GROUPS = [
       { label: 'Checadas Manuales',   icon: ClipboardCheck                  },
       { label: 'Biométricos',         icon: Cpu                             },
       { label: 'Usuarios & Accesos',  icon: UserCog                         },
-      { label: 'Kiosco Checador',     icon: Camera                          },
     ],
   },
   {
@@ -91,6 +90,7 @@ const METODO_CONFIG = {
   tarjeta:   { icon: CreditCardIcon,  bg: '#FEF3C7', txt: '#92400E', label: 'Tarjeta'   },
   pin:       { icon: Hash,            bg: '#F8FAFC', txt: '#475569', label: 'PIN'        },
   combinado: { icon: Shuffle,         bg: '#EDE9FE', txt: '#5B21B6', label: 'Combinado' },
+  web:       { icon: Globe,           bg: '#E0F2FE', txt: '#0284C7', label: 'Web'       },
 }
 
 const TABLE_ROWS = [
@@ -626,7 +626,8 @@ function RealtimeTable() {
           <tbody>
             {rows.map((row, i) => {
               const tipoCfg  = TIPO_BADGE[row.tipo]   ?? { label: row.tipo,   bg: '#F3F4F6', txt: '#374151', dot: '#9CA3AF' }
-              const metodoCfg = METODO_CONFIG[row.metodo] ?? { icon: Activity, label: row.metodo, bg: '#F3F4F6', txt: '#374151' }
+              const normMetodo = typeof row.metodo === 'string' ? row.metodo.toLowerCase() : row.metodo
+              const metodoCfg = METODO_CONFIG[normMetodo] ?? { icon: normMetodo === 'web' ? Globe : Activity, label: row.metodo, bg: '#F3F4F6', txt: '#374151' }
               const MetIcon  = metodoCfg.icon
               const initials = row.name.split(' ').map(n => n[0]).join('').slice(0, 2)
 

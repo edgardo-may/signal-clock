@@ -163,6 +163,9 @@ export async function signOut({ broadcast = true } = {}) {
   } catch {
     // Aunque falle la llamada al servidor, limpiamos estado local
   }
+  try {
+    localStorage.removeItem('sc_colaborador_session')
+  } catch {}
 
   // Notificar a otras pestañas del mismo navegador
   if (broadcast) {
@@ -210,3 +213,98 @@ export function subscribeToAuthBroadcast({ onLogout, onLogin }) {
   channel.addEventListener('message', handler)
   return () => channel.removeEventListener('message', handler)
 }
+
+/**
+ * resetPassword — Solicita a Supabase el envío del correo para recuperación de contraseña.
+ *
+ * @param {string} email
+ * @returns {Promise<{ error: Error|null }>}
+ */
+export async function resetPassword(email) {
+  const cleanEmail = String(email || '').trim().toLowerCase()
+  if (!cleanEmail) {
+    return { error: new Error('Ingresa tu correo electrónico.') }
+  }
+
+  try {
+    const redirectTo = `${window.location.origin}/reset-password`
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo,
+    })
+    if (error) throw error
+    return { error: null }
+  } catch (err) {
+    return { error: err }
+  }
+}
+
+/**
+ * updatePassword — Establece una nueva contraseña para el usuario autenticado (flujo de recuperación).
+ *
+ * @param {string} newPassword
+ * @returns {Promise<{ data: object|null, error: Error|null }>}
+ */
+export async function updatePassword(newPassword) {
+  try {
+    const { data, error } = await supabase.auth.updateUser({
+      password: String(newPassword),
+    })
+    if (error) throw error
+    return { data, error: null }
+  } catch (err) {
+    return { data: null, error: err }
+  }
+}
+
+/**
+ * buildCollaboratorEmail — Genera la dirección virtual interna para autenticación Supabase del colaborador.
+ * @param {string} claveEmpleado 
+ * @param {string} clienteId 
+ * @returns {string}
+ */
+export function buildCollaboratorEmail(claveEmpleado, clienteId) {
+  const cleanClave = String(claveEmpleado || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+  const cleanTenant = String(clienteId || '')
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, '')
+    .slice(0, 8)
+  return `${cleanClave}.${cleanTenant}@colaborador.signumclock.com`
+}
+
+/**
+ * signInCollaborator — Inicio de sesión exclusivo para colaboradores.
+ * Valida mediante clave de colaborador (usuario), contraseña asignada por RH y empresa.
+ *
+ * @param {{ empresaId: string, claveEmpleado: string, password: string }} credentials
+ * @returns {Promise<{ data: object|null, profile: object|null, error: Error|null }>}
+ */
+export async function signInCollaborator({ empresaId, claveEmpleado, password }) {
+  if (!empresaId) {
+    return { data: null, profile: null, error: new Error('Selecciona tu empresa.') }
+  }
+  if (!claveEmpleado || !String(claveEmpleado).trim()) {
+    return { data: null, profile: null, error: new Error('Ingresa tu número de colaborador.') }
+  }
+  if (!password) {
+    return { data: null, profile: null, error: new Error('Ingresa tu contraseña de acceso.') }
+  }
+
+  const virtualEmail = buildCollaboratorEmail(claveEmpleado, empresaId)
+  const result = await signIn(virtualEmail, password)
+
+  if (result.error) {
+    const errorMsg = 'Número de colaborador o contraseña incorrectos para la empresa seleccionada.'
+    return { data: null, profile: null, error: new Error(errorMsg) }
+  }
+
+  if (result.profile && result.profile.rol !== 'colaborador') {
+    result.profile.rol = 'colaborador'
+  }
+
+  return result
+}
+

@@ -2,8 +2,9 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import CentralLayout from '../components/CentralLayout'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { Users, Eye, Play, Loader2, AlertTriangle } from 'lucide-react'
+import { DatePicker } from '../../shared/components/ui'
 
 // ── Llamada al backend proxy ──────────────────────────────────────────────────
 async function callSyncApi(endpoint, body = {}) {
@@ -142,7 +143,6 @@ export default function CentralSyncPage() {
 
   return (
     <CentralLayout>
-      <Toaster position="top-right" />
       <div className="p-6 sm:p-10 max-w-7xl mx-auto space-y-8 animate-in fade-in zoom-in-95 duration-300">
         <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
@@ -187,24 +187,22 @@ export default function CentralSyncPage() {
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                   Fecha Inicio <span className="text-indigo-500">*</span>
                 </label>
-                <input
-                  type="date"
+                <DatePicker
                   value={fechaInicio}
                   onChange={e => setFechaInicio(e.target.value)}
                   disabled={isAnyLoading}
-                  className="w-full py-2.5 px-3 text-sm rounded-lg border border-slate-200 dark:border-[#2e3a4e] bg-white dark:bg-[#24303f] focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all disabled:opacity-50"
+                  placeholder="Inicio"
                 />
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                   Fecha Fin <span className="text-indigo-500">*</span>
                 </label>
-                <input
-                  type="date"
+                <DatePicker
                   value={fechaFin}
                   onChange={e => setFechaFin(e.target.value)}
                   disabled={isAnyLoading}
-                  className="w-full py-2.5 px-3 text-sm rounded-lg border border-slate-200 dark:border-[#2e3a4e] bg-white dark:bg-[#24303f] focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all disabled:opacity-50"
+                  placeholder="Fin"
                 />
               </div>
             </div>

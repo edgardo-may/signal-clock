@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../features/auth/hooks/useAuth'
 
-export function useTenantLimits(customClienteId = null) {
+export function useTenantLimits(customClienteId = null, loadTenantInfo) {
   const { profile } = useAuth()
   const clienteId = customClienteId || profile?.cliente_id
 
@@ -29,6 +29,11 @@ export function useTenantLimits(customClienteId = null) {
 
     try {
       setLoading(true)
+
+      if (loadTenantInfo) {
+        setTenantInfo(await loadTenantInfo())
+        return
+      }
 
       // 1. Obtener datos reales del tenant desde clientes
       const [
@@ -70,7 +75,7 @@ export function useTenantLimits(customClienteId = null) {
     } finally {
       setLoading(false)
     }
-  }, [clienteId])
+  }, [clienteId, loadTenantInfo])
 
   useEffect(() => {
     refreshLimits()

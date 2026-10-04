@@ -2,10 +2,11 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { usePagination } from '../../../shared/hooks/usePagination'
 import PaginationControl from '../../../shared/components/ui/PaginationControl'
 import { useCurrentTenant } from '../../../shared/hooks/useCurrentTenant'
+import { DatePicker } from '../../../shared/components/ui'
 import {
   Clock, Search, RefreshCw, Calendar, Download, AlertTriangle
 } from 'lucide-react'
@@ -25,57 +26,135 @@ function calculateDelayMinutes(firstPunchDate, horarioStr, tolerancia) {
   return 0
 }
 
+// Utilidad para resolver la dirección de un marcaje
+function resolvePunchDirection(punch, hasOpenCycle) {
+  const rawStatus = punch?.raw_payload?.raw_status ? String(punch.raw_payload.raw_status).trim() : null
+  const isAuto = punch?.raw_payload?.auto_resolved === true
+  const tipo = String(punch?.tipo_verificacion || '').toLowerCase().trim()
+
+  // Regla de Oro: Si no hay ciclo abierto, la primera perforación siempre abre jornada como ENTRADA
+  if (!hasOpenCycle) {
+    return 'IN'
+  }
+
+  // Si el hardware envió 255 o fue auto-resuelto y ya hay ciclo abierto, actúa como SALIDA
+  if (rawStatus === '255' || isAuto) {
+    return 'OUT'
+  }
+
+  if (tipo === '0' || tipo === 'entrada' || tipo === 'in' || tipo === 'check_in') return 'IN'
+  if (tipo === '1' || tipo === 'salida' || tipo === 'out' || tipo === 'check_out') return 'OUT'
+
+  return 'OUT'
+}
+
+function getPunchDateStr(ts) {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 function processRetardos(asistencias, empleados, asignaciones) {
-  const groups = {}
+  const empMap = new Map((empleados || []).map(e => [e.id, e]))
+  const asigMap = new Map((asignaciones || []).map(as => [as.empleado_id, as]))
 
+  const punchesByEmp = {}
   asistencias.forEach(a => {
-    const dateStr = a.verificado_at.slice(0, 10)
     const empId = a.empleado_id
-    const key = `${dateStr}_${empId}`
-
-    if (!groups[key]) {
-      const emp = empleados.find(e => e.id === empId) || {}
-      const asig = asignaciones.find(as => as.empleado_id === empId)
-      const horario = asig?.horario
-
-      groups[key] = {
-        empleado_id: empId,
-        id_persona: emp.hikvision_device_userid || emp.clave_empleado || '—',
-        nombre: emp.nombre ? `${emp.nombre} ${emp.apellido}` : 'Desconocido',
-        departamento: emp.departamento || '—',
-        fecha: dateStr,
-        horario: horario,
-        punches: []
-      }
-    }
-    groups[key].punches.push(new Date(a.verificado_at))
+    if (!punchesByEmp[empId]) punchesByEmp[empId] = []
+    punchesByEmp[empId].push(a)
   })
 
-  const result = Object.values(groups).map(g => {
-    g.punches.sort((a, b) => a - b)
-    
-    const firstPunch = g.punches[0]
-    const lastPunch = g.punches[g.punches.length - 1]
-    
-    const formatTime = (d) => d.toLocaleTimeString('es-MX', { hour12: false })
-    const dayOfWeek = new Intl.DateTimeFormat('es-MX', { weekday: 'short' }).format(new Date(`${g.fecha}T12:00:00`))
+  const cycles = []
+
+  Object.entries(punchesByEmp).forEach(([empId, empPunches]) => {
+    const emp = empMap.get(empId) || {}
+    const asig = asigMap.get(empId)
+    const horario = asig?.horario || null
+    const idPersona = emp.device_userid || emp.clave_empleado || '—'
+    const nombre = emp.nombre ? `${emp.nombre} ${emp.apellido}` : 'Desconocido'
+    const departamento = emp.departamento || '—'
+
+    const sorted = [...empPunches].sort((a, b) => new Date(a.verificado_at) - new Date(b.verificado_at))
+    let currentCycle = null
+
+    sorted.forEach(punch => {
+      const punchDate = new Date(punch.verificado_at)
+      const punchDateStr = getPunchDateStr(punch.verificado_at)
+      const dir = resolvePunchDirection(punch, Boolean(currentCycle))
+
+      if (currentCycle && dir === 'IN' && !currentCycle.salida) {
+        const diffMs = punchDate - currentCycle.entrada
+        if (diffMs >= 0 && diffMs < 60000) return
+      }
+
+      if (dir === 'IN') {
+        if (currentCycle) {
+          cycles.push(currentCycle)
+        }
+        currentCycle = {
+          idPersona,
+          nombre,
+          departamento,
+          horario,
+          fecha: punchDateStr,
+          entrada: punchDate,
+          salida: null
+        }
+      } else if (dir === 'OUT') {
+        const isWithinWindow = currentCycle && (punchDate - currentCycle.entrada <= 24 * 60 * 60 * 1000)
+        if (currentCycle && isWithinWindow) {
+          currentCycle.salida = punchDate
+          cycles.push(currentCycle)
+          currentCycle = null
+        } else {
+          if (currentCycle) {
+            cycles.push(currentCycle)
+          }
+          // Si no había ciclo previo o excede 24h, abre nueva jornada como entrada
+          currentCycle = {
+            idPersona,
+            nombre,
+            departamento,
+            horario,
+            fecha: punchDateStr,
+            entrada: punchDate,
+            salida: null
+          }
+        }
+      }
+    })
+
+    if (currentCycle) {
+      cycles.push(currentCycle)
+    }
+  })
+
+  const formatTime = (d) => d ? (d instanceof Date ? d : new Date(d)).toLocaleTimeString('es-MX', { hour12: false }) : '—'
+
+  const result = cycles.map(c => {
+    const dayOfWeek = new Intl.DateTimeFormat('es-MX', { weekday: 'short' }).format(new Date(`${c.fecha}T12:00:00`))
 
     let retraso = 0
     let horarioLabel = 'Sin Horario'
-    if (g.horario) {
-      horarioLabel = `${g.horario.hora_entrada?.slice(0,5) || ''} - ${g.horario.hora_salida?.slice(0,5) || ''}`
-      retraso = calculateDelayMinutes(firstPunch, g.horario.hora_entrada, g.horario.tolerancia_minutos || 0)
+    if (c.horario) {
+      horarioLabel = `${c.horario.hora_entrada?.slice(0,5) || ''} - ${c.horario.hora_salida?.slice(0,5) || ''}`
+      retraso = calculateDelayMinutes(c.entrada, c.horario.hora_entrada, c.horario.tolerancia_minutos || 0)
     }
 
     return {
-      'ID de persona': g.id_persona,
-      'Nombre de la persona': g.nombre,
-      'Departamento': g.departamento,
-      'Fecha': g.fecha,
+      'ID de persona': c.idPersona,
+      'Nombre de la persona': c.nombre,
+      'Departamento': c.departamento,
+      'Fecha': c.fecha,
       'Día de la semana': dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1),
       'Horario': horarioLabel,
-      'Registro de entrada': formatTime(firstPunch),
-      'Registro de salida': formatTime(lastPunch),
+      'Registro de entrada': formatTime(c.entrada),
+      'Registro de salida': formatTime(c.salida),
       'Minutos de retraso': retraso
     }
   })
@@ -114,8 +193,9 @@ export default function ReporteRetardosPage() {
       if (empRes.error) throw empRes.error
       if (asigRes.error) throw asigRes.error
 
-      const start = new Date(`${fechaInicio}T00:00:00`).toISOString()
-      const end = new Date(`${fechaFin}T23:59:59.999`).toISOString()
+      // Asistencias con buffer de 24h para cruces de medianoche
+      const start = new Date(new Date(`${fechaInicio}T00:00:00`).getTime() - 24 * 60 * 60 * 1000).toISOString()
+      const end = new Date(new Date(`${fechaFin}T23:59:59.999`).getTime() + 24 * 60 * 60 * 1000).toISOString()
 
       const { data: asisData, error: asisError } = await supabase
         .from('registro_asistencia')
@@ -127,7 +207,8 @@ export default function ReporteRetardosPage() {
       if (asisError) throw asisError
 
       const processedData = processRetardos(asisData || [], empRes.data || [], asigRes.data || [])
-      setFileData(processedData)
+      const inRangeData = processedData.filter(c => c.Fecha >= fechaInicio && c.Fecha <= fechaFin)
+      setFileData(inRangeData)
       
     } catch (error) {
       console.error(error)
@@ -191,7 +272,6 @@ export default function ReporteRetardosPage() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC] dark:bg-slate-900 text-slate-900 dark:text-white">
-      <Toaster position="top-right" />
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
@@ -231,22 +311,20 @@ export default function ReporteRetardosPage() {
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row items-end justify-between gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
               <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
-                <div className="space-y-1.5 w-full sm:w-auto">
+                <div className="space-y-1.5 w-full sm:w-44">
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Desde</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={fechaInicio}
                     onChange={(e) => setFechaInicio(e.target.value)}
-                    className="w-full sm:w-auto px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500 text-slate-900 dark:text-white"
+                    placeholder="Fecha inicio"
                   />
                 </div>
-                <div className="space-y-1.5 w-full sm:w-auto">
+                <div className="space-y-1.5 w-full sm:w-44">
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Hasta</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={fechaFin}
                     onChange={(e) => setFechaFin(e.target.value)}
-                    className="w-full sm:w-auto px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500 text-slate-900 dark:text-white"
+                    placeholder="Fecha fin"
                   />
                 </div>
                 <div className="pt-5 w-full sm:w-auto">

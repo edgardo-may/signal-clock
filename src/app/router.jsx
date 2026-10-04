@@ -3,61 +3,70 @@
  * Separa completamente Signum-Clock Central (Master) de Signum-Clock Client (Tenant)
  */
 
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useAuth } from '../features/auth/hooks/useAuth'
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "../features/auth/hooks/useAuth";
 
 // Central (Master App)
-import CentralAdminRoute from '../central/guards/CentralAdminRoute'
-import CentralLoginPage from '../central/pages/CentralLoginPage'
-import CentralDashboardPage from '../central/pages/CentralDashboardPage'
-import CentralTenantsPage from '../central/pages/CentralTenantsPage'
-import CentralUsersPage from '../central/pages/CentralUsersPage'
-import CentralPermissionsPage from '../central/pages/CentralPermissionsPage'
-import CentralSyncPage from '../central/pages/CentralSyncPage'
-import CentralBiometricsSummaryPage from '../central/pages/CentralBiometricsSummaryPage'
-import CentralAuditPage from '../central/pages/CentralAuditPage'
+import CentralAdminRoute from "../central/guards/CentralAdminRoute";
+import CentralLoginPage from "../central/pages/CentralLoginPage";
+import CentralDashboardPage from "../central/pages/CentralDashboardPage";
+import CentralTenantsPage from "../central/pages/CentralTenantsPage";
+import CentralUsersPage from "../central/pages/CentralUsersPage";
+import CentralPermissionsPage from "../central/pages/CentralPermissionsPage";
+import CentralSyncPage from "../central/pages/CentralSyncPage";
+import CentralBiometricsSummaryPage from "../central/pages/CentralBiometricsSummaryPage";
+import CentralAuditPage from "../central/pages/CentralAuditPage";
+import AttendancePoliciesPage from "../central/pages/attendance-policies/AttendancePoliciesPage";
+import CentralPlansPage from "../central/pages/CentralPlansPage";
+import CompanyDetailPage from "../central/pages/company-detail/CompanyDetailPage";
 
 // Client (Tenant App)
-import ClientTenantRoute from '../client/guards/ClientTenantRoute'
-import ClientPermissionRoute from '../client/guards/ClientPermissionRoute'
-import ClientAdminRoute from '../client/guards/ClientAdminRoute'
-import { isSuperAdmin, PERMISSION } from '../shared/auth/permissions'
-import ClientLoginPage from '../client/pages/ClientLoginPage'
-import ClientAuditPage from '../client/pages/ClientAuditPage'
-import DashboardPage from '../features/dashboard/pages/DashboardPage'
-import EmpleadosPage from '../features/employees/pages/EmpleadosPage'
-import HorariosPage from '../features/schedules/pages/HorariosPage'
-import AsignacionHorariosPage from '../features/schedules/pages/AsignacionHorariosPage'
-import DiasFestivosPage from '../features/schedules/pages/DiasFestivosPage'
-import ChecadasManualesPage from '../features/attendance/pages/ChecadasManualesPage'
-import IncidenciasPage from '../features/attendance/pages/IncidenciasPage'
-import KioskoChecadorPage from '../features/attendance/pages/KioskoChecadorPage'
-import VisorAsistenciasPage from '../features/attendance/pages/VisorAsistenciasPage'
-import ReporteRetardosPage from '../features/attendance/pages/ReporteRetardosPage'
-import MatrizChecadasPage from '../features/attendance/pages/MatrizChecadasPage'
-import HistorialEventosPage from '../features/attendance/pages/HistorialEventosPage'
-import TarjetaFichajePage from '../features/attendance/pages/TarjetaFichajePage'
-import ReportesPage from '../features/reports/pages/ReportesPage'
-import UsersPage from '../features/users/pages/UsersPage'
-import PermissionsPage from '../features/permissions/pages/PermissionsPage'
-import BiometricosPage from '../features/biometrics/pages/BiometricosPage'
-import EnrollmentPage from '../features/biometrics/pages/EnrollmentPage'
-import SyncPage from '../features/sync/pages/SyncPage'
+import ClientTenantRoute from "../client/guards/ClientTenantRoute";
+import ClientPermissionRoute from "../client/guards/ClientPermissionRoute";
+import ClientAdminRoute from "../client/guards/ClientAdminRoute";
+import { isSuperAdmin, PERMISSION } from "../shared/auth/permissions";
+import ClientLoginPage from "../client/pages/ClientLoginPage";
+import ForgotPasswordPage from "../features/auth/pages/ForgotPasswordPage";
+import ResetPasswordPage from "../features/auth/pages/ResetPasswordPage";
+import ClientAuditPage from "../client/pages/ClientAuditPage";
+import DashboardPage from "../features/dashboard/pages/DashboardPage";
+import EmpleadosPage from "../features/employees/pages/EmpleadosPage";
+import HorariosPage from "../features/schedules/pages/HorariosPage";
+import AsignacionHorariosPage from "../features/schedules/pages/AsignacionHorariosPage";
+import DiasFestivosPage from "../features/schedules/pages/DiasFestivosPage";
+import ChecadasManualesPage from "../features/attendance/pages/ChecadasManualesPage";
+import IncidenciasPage from "../features/attendance/pages/IncidenciasPage";
+import KioskoChecadorPage from "../features/attendance/pages/KioskoChecadorPage";
+import VisorAsistenciasPage from "../features/attendance/pages/VisorAsistenciasPage";
+import ReporteRetardosPage from "../features/attendance/pages/ReporteRetardosPage";
+import MatrizChecadasPage from "../features/attendance/pages/MatrizChecadasPage";
+import HistorialEventosPage from "../features/attendance/pages/HistorialEventosPage";
+import TarjetaFichajePage from "../features/attendance/pages/TarjetaFichajePage";
+import ReporteDescansosPage from "../features/attendance/pages/ReporteDescansosPage";
+import ReportesPage from "../features/reports/pages/ReportesPage";
+import UsersPage from "../features/users/pages/UsersPage";
+import PermissionsPage from "../features/permissions/pages/PermissionsPage";
+import BiometricosPage from "../features/biometrics/pages/BiometricosPage";
+import EnrollmentPage from "../features/biometrics/pages/EnrollmentPage";
+import SyncPage from "../features/sync/pages/SyncPage";
+import ColaboradorDashboardPage from "../features/collaborator/pages/ColaboradorDashboardPage";
+import ColaboradorLoginPage from "../features/collaborator/pages/ColaboradorLoginPage";
+import ColaboradorRoute from "../features/collaborator/guards/ColaboradorRoute";
 
-import { Clock } from 'lucide-react'
+import { Clock } from "lucide-react";
 
 // Placeholder para módulos en construcción
 const PlaceholderPage = ({ title }) => (
-  <div
-    className="flex min-h-screen items-center justify-center bg-[#F8FAFC] dark:bg-[#0B132B]"
-  >
+  <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC] dark:bg-[#0B132B]">
     <div className="text-center space-y-3">
       <p className="text-4xl">🚧</p>
-      <h2 className="text-xl font-semibold text-slate-900 dark:text-white">{title}</h2>
+      <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+        {title}
+      </h2>
       <p className="text-sm text-blue-600">Módulo en integración</p>
     </div>
   </div>
-)
+);
 
 /**
  * PublicClientRoute — Para /login del Client.
@@ -66,23 +75,29 @@ const PlaceholderPage = ({ title }) => (
  * - Si es usuario de tenant → redirige a /
  */
 function PublicClientRoute({ children }) {
-  const { status, profile } = useAuth()
+  const { status, profile } = useAuth();
 
-  if (status === 'loading') {
+  if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] dark:bg-[#0B132B]">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 shadow-md animate-spin" style={{ animationDuration: '3s' }}>
+        <div
+          className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 shadow-md animate-spin"
+          style={{ animationDuration: "3s" }}
+        >
           <Clock className="w-6 h-6 text-white" />
         </div>
       </div>
-    )
+    );
   }
 
-  if (status === 'authenticated') {
-    return isSuperAdmin(profile) ? <Navigate to="/central" replace /> : <Navigate to="/" replace />
+  if (status === "authenticated") {
+    if (isSuperAdmin(profile)) return <Navigate to="/central" replace />;
+    if (profile?.rol?.toLowerCase() === "colaborador")
+      return <Navigate to="/portal-colaborador" replace />;
+    return <Navigate to="/" replace />;
   }
 
-  return children
+  return children;
 }
 
 /**
@@ -90,42 +105,52 @@ function PublicClientRoute({ children }) {
  * Si ya está autenticado y es SuperAdmin → redirige a /central.
  */
 function PublicCentralRoute({ children }) {
-  const { status, profile } = useAuth()
+  const { status, profile } = useAuth();
 
-  if (status === 'loading') {
+  if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#070D1E]">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 shadow-md animate-pulse">
           <Clock className="w-6 h-6 text-white" />
         </div>
       </div>
-    )
+    );
   }
 
-  if (status === 'authenticated') {
-    return isSuperAdmin(profile) ? <Navigate to="/central" replace /> : <Navigate to="/" replace />
+  if (status === "authenticated") {
+    return isSuperAdmin(profile) ? (
+      <Navigate to="/central" replace />
+    ) : (
+      <Navigate to="/" replace />
+    );
   }
 
-  return children
+  return children;
 }
 
 function ClientRoute({ permission, children }) {
   return (
     <ClientTenantRoute>
-      <ClientPermissionRoute permission={permission}>{children}</ClientPermissionRoute>
+      <ClientPermissionRoute permission={permission}>
+        {children}
+      </ClientPermissionRoute>
     </ClientTenantRoute>
-  )
+  );
 }
 
 function ClientSuperAdminRoute({ permission, children }) {
-  const { profile } = useAuth()
+  const { profile } = useAuth();
   return (
     <ClientTenantRoute>
       <ClientPermissionRoute permission={permission}>
-        {isSuperAdmin(profile) ? children : <Navigate to="/biometricos" replace />}
+        {isSuperAdmin(profile) ? (
+          children
+        ) : (
+          <Navigate to="/biometricos" replace />
+        )}
       </ClientPermissionRoute>
     </ClientTenantRoute>
-  )
+  );
 }
 
 export function AppRouter() {
@@ -161,6 +186,14 @@ export function AppRouter() {
           }
         />
         <Route
+          path="/central/empresas/:id"
+          element={
+            <CentralAdminRoute>
+              <CompanyDetailPage />
+            </CentralAdminRoute>
+          }
+        />
+        <Route
           path="/central/usuarios"
           element={
             <CentralAdminRoute>
@@ -180,7 +213,95 @@ export function AppRouter() {
           path="/central/dispositivos"
           element={
             <CentralAdminRoute>
-              <BiometricosPage />
+              <CentralBiometricsSummaryPage forcedSubview="devices" />
+            </CentralAdminRoute>
+          }
+        />
+        <Route
+          path="/central/biometricos-resumen"
+          element={
+            <CentralAdminRoute>
+              <CentralBiometricsSummaryPage forcedSubview="dashboard" />
+            </CentralAdminRoute>
+          }
+        />
+        <Route
+          path="/central/biometricos"
+          element={
+            <CentralAdminRoute>
+              <CentralBiometricsSummaryPage />
+            </CentralAdminRoute>
+          }
+        />
+        <Route
+          path="/central/biometricos/dashboard"
+          element={
+            <CentralAdminRoute>
+              <CentralBiometricsSummaryPage forcedSubview="dashboard" />
+            </CentralAdminRoute>
+          }
+        />
+        <Route
+          path="/central/biometricos/resumen"
+          element={
+            <CentralAdminRoute>
+              <CentralBiometricsSummaryPage forcedSubview="dashboard" />
+            </CentralAdminRoute>
+          }
+        />
+        <Route
+          path="/central/biometricos/dispositivos"
+          element={
+            <CentralAdminRoute>
+              <CentralBiometricsSummaryPage forcedSubview="devices" />
+            </CentralAdminRoute>
+          }
+        />
+        <Route
+          path="/central/biometricos/colaboradores"
+          element={
+            <CentralAdminRoute>
+              <CentralBiometricsSummaryPage forcedSubview="colaboradores" />
+            </CentralAdminRoute>
+          }
+        />
+        <Route
+          path="/central/biometricos/asignaciones"
+          element={
+            <CentralAdminRoute>
+              <CentralBiometricsSummaryPage forcedSubview="asignaciones" />
+            </CentralAdminRoute>
+          }
+        />
+        <Route
+          path="/central/biometricos/asistencias"
+          element={
+            <CentralAdminRoute>
+              <CentralBiometricsSummaryPage forcedSubview="logs" />
+            </CentralAdminRoute>
+          }
+        />
+        <Route
+          path="/central/biometricos/historial"
+          element={
+            <CentralAdminRoute>
+              <CentralBiometricsSummaryPage forcedSubview="logs" />
+            </CentralAdminRoute>
+          }
+        />
+        <Route
+          path="/central/biometricos/comandos"
+          element={
+            <CentralAdminRoute>
+              <CentralBiometricsSummaryPage forcedSubview="commands" />
+            </CentralAdminRoute>
+          }
+        />
+        <Route
+          path="/central/biometricos/sincronizacion"
+          element={
+            <CentralAdminRoute>
+              <CentralBiometricsSummaryPage forcedSubview="sync" />
             </CentralAdminRoute>
           }
         />
@@ -193,18 +314,10 @@ export function AppRouter() {
           }
         />
         <Route
-          path="/central/biometricos-resumen"
-          element={
-            <CentralAdminRoute>
-              <CentralBiometricsSummaryPage />
-            </CentralAdminRoute>
-          }
-        />
-        <Route
           path="/central/planes"
           element={
             <CentralAdminRoute>
-              <CentralTenantsPage />
+              <CentralPlansPage />
             </CentralAdminRoute>
           }
         />
@@ -224,7 +337,14 @@ export function AppRouter() {
             </CentralAdminRoute>
           }
         />
-
+        <Route
+          path="/central/politicas-asistencia"
+          element={
+            <CentralAdminRoute>
+              <AttendancePoliciesPage />
+            </CentralAdminRoute>
+          }
+        />
 
         {/* ═══════════════════════════════════════════════════════ */}
         {/* ── 2. SIGNUM-CLOCK CLIENT (Tenant App) ─────────────── */}
@@ -237,6 +357,15 @@ export function AppRouter() {
             </PublicClientRoute>
           }
         />
+        <Route
+          path="/recuperar-contrasena"
+          element={
+            <PublicClientRoute>
+              <ForgotPasswordPage />
+            </PublicClientRoute>
+          }
+        />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         <Route
           path="/"
@@ -245,6 +374,31 @@ export function AppRouter() {
               <DashboardPage />
             </ClientRoute>
           }
+        />
+        {/* ── Rutas Exclusivas del Colaborador (Independientes de Clientes y Central) ── */}
+        <Route
+          path="/portal-colaborador/login"
+          element={<ColaboradorLoginPage />}
+        />
+        <Route
+          path="/colaborador/login"
+          element={<ColaboradorLoginPage />}
+        />
+        <Route
+          path="/portal-colaborador"
+          element={
+            <ColaboradorRoute>
+              <ColaboradorDashboardPage />
+            </ColaboradorRoute>
+          }
+        />
+        <Route
+          path="/colaborador"
+          element={<Navigate to="/portal-colaborador" replace />}
+        />
+        <Route
+          path="/mi-portal"
+          element={<Navigate to="/portal-colaborador" replace />}
         />
         <Route
           path="/empleados"
@@ -339,6 +493,14 @@ export function AppRouter() {
           element={
             <ClientRoute permission={PERMISSION.REPORTS}>
               <TarjetaFichajePage />
+            </ClientRoute>
+          }
+        />
+        <Route
+          path="/reporte-descansos"
+          element={
+            <ClientRoute permission={PERMISSION.REPORTS}>
+              <ReporteDescansosPage />
             </ClientRoute>
           }
         />
@@ -483,5 +645,5 @@ export function AppRouter() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
-  )
+  );
 }

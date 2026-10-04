@@ -686,63 +686,28 @@ export const biometricsService = {
 
 
   /**
-   * Actualiza un device.
+   * Actualiza un device (admite actualización parcial).
    */
   async updateDevice(
     id,
-    {
-      name,
-      serial_number,
-      location,
-      ip_address,
-      port,
-      timezone,
-      device_type,
-      is_active
-    }
+    fields = {}
   ) {
     if (!id) {
-      throw new Error(
-        'ID de dispositivo requerido'
-      )
+      throw new Error('ID de dispositivo requerido')
     }
 
-    const payload = {
-      name:
-        name?.trim() || null,
+    const payload = {}
+    if (fields.name !== undefined) payload.name = fields.name?.trim() || null
+    if (fields.serial_number !== undefined) payload.serial_number = normalizeSerial(fields.serial_number)
+    if (fields.location !== undefined) payload.location = fields.location?.trim() || null
+    if (fields.ip_address !== undefined) payload.ip_address = fields.ip_address?.trim() || null
+    if (fields.port !== undefined) payload.port = fields.port ? parseInt(fields.port, 10) : DEFAULT_PORT
+    if (fields.timezone !== undefined) payload.timezone = fields.timezone || DEFAULT_TIMEZONE
+    if (fields.device_type !== undefined) payload.device_type = fields.device_type || DEFAULT_DEVICE_TYPE
+    if (fields.is_active !== undefined) payload.is_active = Boolean(fields.is_active)
 
-      serial_number:
-        normalizeSerial(
-          serial_number
-        ),
-
-      location:
-        location?.trim() || null,
-
-      ip_address:
-        ip_address?.trim() || null,
-
-      port:
-        port
-          ? parseInt(port, 10)
-          : DEFAULT_PORT,
-
-      timezone:
-        timezone ||
-        DEFAULT_TIMEZONE,
-
-      device_type:
-        device_type ||
-        DEFAULT_DEVICE_TYPE,
-
-      is_active:
-        Boolean(is_active)
-    }
-
-    if (!payload.serial_number) {
-      throw new Error(
-        'El número de serie es obligatorio.'
-      )
+    if (fields.serial_number !== undefined && !payload.serial_number) {
+      throw new Error('El número de serie no puede estar vacío.')
     }
 
     const {
@@ -762,6 +727,13 @@ export const biometricsService = {
     return normalizeDevice(data)
   },
 
+  /**
+   * Activa o desactiva un dispositivo biométrico.
+   */
+  async toggleDeviceActive(id, isActive) {
+    return this.updateDevice(id, { is_active: isActive })
+  },
+
 
   /**
    * Elimina un device.
@@ -771,59 +743,92 @@ export const biometricsService = {
    */
   async deleteDevice(id) {
     if (!id) {
-      throw new Error(
-        'ID de dispositivo requerido'
-      )
+      throw new Error('ID de dispositivo requerido')
     }
 
-    const {
-      data: device,
-      error: getErr
-    } = await supabase
-      .from('devices')
-      .select(
-        'id, cliente_id, serial_number'
-      )
-      .eq('id', id)
-      .maybeSingle()
+    // 1. Intentar mediante la RPC de seguridad de SuperAdmin (preserva checadas históricas desacoplando fk)
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('fn_delete_device_superadmin', {
+      p_device_id: id
+    })
 
-    if (getErr) {
-      throw getErr
+    if (!rpcError) {
+      if (rpcResult && rpcResult.success === false) {
+        throw new Error(rpcResult.message || 'No se pudo eliminar el dispositivo.')
+      }
+      return true
     }
 
-    if (!device) {
-      throw new Error(
-        'Dispositivo no encontrado.'
-      )
+    // Si la RPC rechaza por falta de permisos de superadmin:
+    if (
+      rpcError.message?.includes('Solo el superadmin') ||
+      rpcError.message?.includes('permisos') ||
+      rpcError.code === '42501'
+    ) {
+      throw new Error('Permiso denegado: Solo el usuario superadmin en el panel Central puede eliminar biométricos.')
     }
 
-    // Eliminar asignaciones
-    const {
-      error: assignmentError
-    } = await supabase
-      .from(
-        'device_employee_assignments'
-      )
+    console.warn('[deleteDevice] RPC falló o no existe aún, intentando vía backend sync-server:', rpcError.message)
+
+    // 2. Fallback vía backend sync-server (/api/sync/device/delete)
+    try {
+      const session = (await supabase.auth.getSession())?.data?.session
+      if (session?.access_token) {
+        const response = await fetch('/api/sync/device/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({ deviceId: id })
+        })
+        const resData = await response.json().catch(() => ({}))
+        if (response.ok && resData.ok) {
+          return true
+        }
+        if (resData.error) {
+          throw new Error(resData.error)
+        }
+      }
+    } catch (backendErr) {
+      console.warn('[deleteDevice] Error en backend sync-server:', backendErr.message)
+      if (backendErr.message?.includes('superadmin') || backendErr.message?.includes('Permiso')) {
+        throw backendErr
+      }
+    }
+
+    // 3. Fallback directo a Supabase con desacoplamiento seguro de checadas (dispositivo_id = null)
+    // Desvincular checadas de registro_asistencia para no romper integridad ni perder datos de colaboradores
+    await supabase
+      .from('registro_asistencia')
+      .update({ dispositivo_id: null })
+      .eq('dispositivo_id', id)
+
+    // Desvincular templates biométricos
+    await supabase
+      .from('biometric_templates')
+      .update({ device_id: null })
+      .eq('device_id', id)
+
+    // Eliminar comandos de la cola de este dispositivo
+    await supabase
+      .from('device_commands')
       .delete()
-      .eq(
-        'device_id',
-        id
-      )
+      .eq('device_id', id)
 
-    if (assignmentError) {
-      throw assignmentError
-    }
+    // Eliminar asignaciones empleado-dispositivo
+    await supabase
+      .from('device_employee_assignments')
+      .delete()
+      .eq('device_id', id)
 
-    // Eliminar hardware
-    const {
-      error
-    } = await supabase
+    // Eliminar el hardware terminal
+    const { error } = await supabase
       .from('devices')
       .delete()
       .eq('id', id)
 
     if (error) {
-      throw error
+      throw new Error('Error al eliminar terminal: ' + (error.message || 'Requiere permisos de superadmin.'))
     }
 
     return true

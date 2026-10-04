@@ -15,11 +15,13 @@
 
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { signIn } from '../../features/auth/services/authService'
+import { signIn, resetPassword } from '../../features/auth/services/authService'
+import { supabase } from '../../lib/supabase'
 import {
   Mail, Lock, Eye, EyeOff,
   AlertCircle, AlertTriangle, CheckCircle2,
-  ArrowRight, ShieldAlert,
+  ArrowRight, ShieldAlert, X, Send,
+  Building2, Sparkles, User,
 } from 'lucide-react'
 import AuthBranding from '../../features/auth/components/AuthBranding'
 import logoImg from '../../assets/logo.png'
@@ -310,6 +312,7 @@ function AlertBanner({ def, isLocked, countdown }) {
 export default function ClientLoginPage() {
   const navigate = useNavigate()
 
+  // Credenciales administrativas exclusivas para clientes / RH
   const [email,        setEmail]        = useState('')
   const [password,     setPassword]     = useState('')
   const [loading,      setLoading]      = useState(false)
@@ -322,6 +325,24 @@ export default function ClientLoginPage() {
   const [attempts,     setAttempts]     = useState(0)
   const [lockedUntil,  setLockedUntil]  = useState(null)
   const [countdown,    setCountdown]    = useState(0)
+
+  const [rememberMe,   setRememberMe]   = useState(false)
+  const [showForgot,   setShowForgot]   = useState(false)
+  const [forgotEmail,  setForgotEmail]  = useState('')
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotSent,   setForgotSent]   = useState(false)
+  const [forgotError,  setForgotError]  = useState('')
+
+  /* Cargar datos recordados en almacenamiento local */
+  useEffect(() => {
+    try {
+      const savedEmail = localStorage.getItem('sc_remember_email')
+      if (savedEmail) {
+        setEmail(savedEmail)
+        setRememberMe(true)
+      }
+    } catch (_) {}
+  }, [])
 
   /* Lockout countdown */
   useEffect(() => {
@@ -346,6 +367,7 @@ export default function ClientLoginPage() {
     setErrorDef(null)
     if (isLocked) return
 
+    // Modo administrativo exclusivo para clientes y RH
     const eErr = validateEmail(email)
     const pErr = validatePassword(password)
     setEmailErr(eErr); setPassErr(pErr)
@@ -356,9 +378,20 @@ export default function ClientLoginPage() {
     try {
       const { data, profile, error } = await signIn(email.trim(), password)
       if (error) throw error
+
+      // Guardar o eliminar correo según la opción "Recuérdame"
+      try {
+        if (rememberMe) {
+          localStorage.setItem('sc_remember_email', email.trim())
+        } else {
+          localStorage.removeItem('sc_remember_email')
+        }
+      } catch (_) {}
+
       const isSuperAdmin = profile?.rol?.toLowerCase() === 'superadmin'
+      const isColaborador = profile?.rol?.toLowerCase() === 'colaborador'
       setLoginOk(true)
-      setTimeout(() => navigate(isSuperAdmin ? '/central' : '/', { replace: true }), 700)
+      setTimeout(() => navigate(isSuperAdmin ? '/central' : isColaborador ? '/portal-colaborador' : '/', { replace: true }), 700)
     } catch (err) {
       const next = attempts + 1
       setAttempts(next)
@@ -369,6 +402,26 @@ export default function ClientLoginPage() {
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleForgotSubmit = async (e) => {
+    e?.preventDefault()
+    setForgotError('')
+    const targetEmail = (forgotEmail || email).trim().toLowerCase()
+    if (!targetEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
+      setForgotError('Ingresa un correo electrónico válido.')
+      return
+    }
+    setForgotLoading(true)
+    try {
+      const { error: resetErr } = await resetPassword(targetEmail)
+      if (resetErr) throw resetErr
+      setForgotSent(true)
+    } catch (err) {
+      setForgotError(err.message || 'Error al enviar enlace.')
+    } finally {
+      setForgotLoading(false)
     }
   }
 
@@ -458,22 +511,28 @@ export default function ClientLoginPage() {
             ) : (
               <>
                 {/* Header */}
-                <div style={{ marginBottom: 24 }}>
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 20, background: 'rgba(0,54,61,0.06)', marginBottom: 12 }}>
+                    <Building2 size={13} color={BW} />
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: BW }}>
+                      Clientes & RH
+                    </span>
+                  </div>
                   <h1
                     style={{
-                      margin: 0, fontSize: 22, fontWeight: 700,
+                      margin: 0, fontSize: 21, fontWeight: 700,
                       color: BW, letterSpacing: '-0.025em', lineHeight: 1.2,
                     }}
                   >
-                    Bienvenido
+                    Acceso Administrativo
                   </h1>
                   <p
                     style={{
-                      margin: '8px 0 0', fontSize: 14,
-                      color: 'rgba(0,54,61,0.48)', lineHeight: 1.5,
+                      margin: '6px 0 0', fontSize: 13,
+                      color: 'rgba(0,54,61,0.52)', lineHeight: 1.45,
                     }}
                   >
-                    Ingresa a tu cuenta para continuar
+                    Ingresa con tu correo corporativo y contraseña de gestión
                   </p>
                 </div>
 
@@ -537,6 +596,71 @@ export default function ClientLoginPage() {
                     {passTouched && <span id="cl-pass-err"><FieldError msg={passErr} /></span>}
                   </div>
 
+                  {/* Options row: Recuérdame & Olvidé contraseña */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginTop: -2,
+                      fontSize: 13,
+                    }}
+                  >
+                    <label
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        color: BW,
+                        fontWeight: 500,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        id="cl-remember"
+                        checked={rememberMe}
+                        onChange={e => setRememberMe(e.target.checked)}
+                        disabled={loading || isLocked}
+                        style={{
+                          width: 16,
+                          height: 16,
+                          borderRadius: 4,
+                          accentColor: BW,
+                          cursor: 'pointer',
+                        }}
+                      />
+                      <span>Recuérdame</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      id="cl-forgot-trigger"
+                      onClick={() => {
+                        setForgotEmail(email)
+                        setForgotSent(false)
+                        setForgotError('')
+                        setShowForgot(true)
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: 'rgba(0,54,61,0.55)',
+                        cursor: 'pointer',
+                        textDecoration: 'none',
+                        transition: 'color 140ms ease',
+                      }}
+                      onMouseOver={e => e.currentTarget.style.color = BW}
+                      onMouseOut={e => e.currentTarget.style.color = 'rgba(0,54,61,0.55)'}
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </button>
+                  </div>
+
                   {/* Submit */}
                   <button
                     type="submit"
@@ -570,26 +694,242 @@ export default function ClientLoginPage() {
                     )}
                   </button>
 
-                  {/* Forgot password */}
-                  <div style={{ textAlign: 'center', marginTop: 4 }}>
-                    <Link
-                      to="/recuperar-contrasena"
-                      style={{
-                        fontSize: 13, fontWeight: 500,
-                        color: 'rgba(0,54,61,0.40)',
-                        textDecoration: 'none',
-                        transition: 'color 140ms ease',
-                      }}
-                      onMouseOver={e => e.currentTarget.style.color = BW}
-                      onMouseOut={e => e.currentTarget.style.color = 'rgba(0,54,61,0.40)'}
-                    >
-                      ¿Olvidaste tu contraseña?
-                    </Link>
+                  {/* Link al Portal de Colaboradores */}
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      marginTop: 14,
+                      paddingTop: 14,
+                      borderTop: '1px solid rgba(0,54,61,0.06)',
+                    }}
+                  >
+                    <p style={{ margin: 0, fontSize: 13, color: 'rgba(0,54,61,0.6)' }}>
+                      ¿Eres colaborador y necesitas checar?{' '}
+                      <Link
+                        to="/portal-colaborador/login"
+                        style={{
+                          fontWeight: 600,
+                          color: '#03363D',
+                          textDecoration: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          marginLeft: 4,
+                        }}
+                      >
+                        Ir al Portal de Checadas
+                        <ArrowRight size={13} />
+                      </Link>
+                    </p>
                   </div>
                 </form>
               </>
             )}
           </div>
+
+          {/* Modal de recuperación rápida */}
+          {showForgot && (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 9999,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(0, 54, 61, 0.45)',
+                backdropFilter: 'blur(4px)',
+                padding: 16,
+              }}
+              onClick={e => {
+                if (e.target === e.currentTarget) setShowForgot(false)
+              }}
+            >
+              <div
+                className="sc-card"
+                style={{
+                  width: '100%',
+                  maxWidth: 420,
+                  background: '#FFFFFF',
+                  borderRadius: 16,
+                  boxShadow: '0 20px 40px rgba(0,54,61,0.22)',
+                  border: '1px solid rgba(0,54,61,0.12)',
+                  padding: '28px 26px',
+                  position: 'relative',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(false)}
+                  style={{
+                    position: 'absolute',
+                    top: 16,
+                    right: 16,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'rgba(0,54,61,0.45)',
+                    padding: 4,
+                    borderRadius: 6,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onMouseOver={e => e.currentTarget.style.color = BW}
+                  onMouseOut={e => e.currentTarget.style.color = 'rgba(0,54,61,0.45)'}
+                  aria-label="Cerrar modal"
+                >
+                  <X size={18} />
+                </button>
+
+                {forgotSent ? (
+                  <div style={{ textAlign: 'center', padding: '12px 0 6px' }}>
+                    <div
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: '50%',
+                        background: 'rgba(189,217,215,0.25)',
+                        border: `2px solid ${BW}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto 14px',
+                      }}
+                    >
+                      <CheckCircle2 size={24} strokeWidth={2.2} color={BW} />
+                    </div>
+                    <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: BW }}>
+                      Enlace enviado
+                    </h3>
+                    <p style={{ margin: '0 0 20px', fontSize: 13.5, color: 'rgba(0,54,61,0.65)', lineHeight: 1.5 }}>
+                      Te enviamos un correo a <strong>{forgotEmail || email}</strong> con las instrucciones para restablecer tu contraseña.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowForgot(false)}
+                      className="sc-btn"
+                      style={{ width: '100%' }}
+                    >
+                      Entendido
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleForgotSubmit}>
+                    <div style={{ marginBottom: 18 }}>
+                      <h3 style={{ margin: '0 0 6px', fontSize: 19, fontWeight: 700, color: BW }}>
+                        Recuperar contraseña
+                      </h3>
+                      <p style={{ margin: 0, fontSize: 13, color: 'rgba(0,54,61,0.60)', lineHeight: 1.45 }}>
+                        Ingresa el correo registrado para enviarte un enlace seguro de restablecimiento.
+                      </p>
+                    </div>
+
+                    {forgotError && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          background: '#FEF2F2',
+                          border: '1px solid #FECACA',
+                          color: '#991B1B',
+                          fontSize: 12.5,
+                          marginBottom: 14,
+                        }}
+                      >
+                        <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                        <span>{forgotError}</span>
+                      </div>
+                    )}
+
+                    <div style={{ marginBottom: 18 }}>
+                      <label
+                        htmlFor="cl-forgot-email"
+                        style={{
+                          display: 'block',
+                          marginBottom: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          letterSpacing: '0.07em',
+                          textTransform: 'uppercase',
+                          color: BW,
+                        }}
+                      >
+                        Correo electrónico
+                      </label>
+                      <div style={{ position: 'relative' }}>
+                        <span
+                          style={{
+                            position: 'absolute',
+                            left: 12,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            color: 'rgba(0,54,61,0.35)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            pointerEvents: 'none',
+                          }}
+                        >
+                          <Mail size={16} />
+                        </span>
+                        <input
+                          id="cl-forgot-email"
+                          type="email"
+                          className="sc-input pl"
+                          value={forgotEmail || email}
+                          onChange={e => {
+                            setForgotEmail(e.target.value)
+                            setForgotError('')
+                          }}
+                          placeholder="usuario@empresa.com"
+                          disabled={forgotLoading}
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowForgot(false)}
+                        style={{
+                          padding: '0 16px',
+                          height: 42,
+                          background: 'none',
+                          border: '1px solid rgba(0,54,61,0.18)',
+                          borderRadius: 10,
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: 'rgba(0,54,61,0.70)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={forgotLoading}
+                        className="sc-btn"
+                        style={{ flex: 1, height: 42 }}
+                      >
+                        {forgotLoading ? (
+                          'Enviando…'
+                        ) : (
+                          <>
+                            Enviar enlace
+                            <Send size={14} />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Link a Central — abajo, discreto */}
           <div

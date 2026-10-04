@@ -20,12 +20,13 @@ import {
   Key,
   ShieldAlert,
   Info,
+  Clock,
 } from 'lucide-react'
 
 const TIMEZONES = [
   { value: 'America/Mexico_City',  label: 'Centro / CDMX / Guadalajara / Monterrey (UTC-6)' },
   { value: 'America/Cancun',       label: 'Sureste / Cancún / Quintana Roo (UTC-5)' },
-  { value: 'America/Tijuana',      label: 'Noroeste / Tijuana / Baja California (UTC-8 / PST)' },
+  { value: 'America/Tijuana',      label: 'Noroeste / Tijuana / Baja California (UTC-7 verano / UTC-8 invierno)' },
   { value: 'America/Hermosillo',   label: 'Pacífico / Sonora / Hermosillo (UTC-7 / MST)' },
   { value: 'America/Chihuahua',    label: 'Norte / Chihuahua / Cd. Juárez (UTC-6)' },
   { value: 'America/Mazatlan',     label: 'Pacífico / Sinaloa / Mazatlán (UTC-7)' },
@@ -294,6 +295,10 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
                   <option key={tz.value} value={tz.value}>{tz.label}</option>
                 ))}
               </select>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                <span>Al guardar o actualizar se emitirá el comando canónico <strong className="font-mono text-slate-700 dark:text-slate-300">SET OPTIONS TimeZone</strong> al checador.</span>
+              </p>
             </div>
           </div>
 
@@ -324,24 +329,48 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
             </div>
           </div>
 
-          {/* ── Habilitada ────────────────────────────────────────────────── */}
-          <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-            <div className="flex items-center gap-2.5">
-              <Power className="w-4 h-4 text-slate-400" />
-              <div>
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Terminal habilitada</p>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500">Permite recibir checadas para este número de serie</p>
+          {/* ── Estado Operativo (Habilitada / Pausada) ────────────────────────── */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 transition-all">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 border ${
+                  formData.is_active
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
+                }`}>
+                  <Power className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                      {formData.is_active ? 'Terminal activa' : 'Terminal pausada'}
+                    </p>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      formData.is_active
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+                        : 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-400'
+                    }`}>
+                      {formData.is_active ? 'En servicio' : 'Deshabilitada'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                    {formData.is_active
+                      ? 'Permite recibir marcajes y sincronizar asignaciones con este biométrico.'
+                      : 'Pausa las operaciones del dispositivo sin eliminar checadas ni historial laboral.'}
+                  </p>
+                </div>
               </div>
+
+              <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                <input
+                  type="checkbox"
+                  checked={formData.is_active}
+                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:border-slate-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#03363D]" />
+              </label>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
-              <input
-                type="checkbox"
-                checked={formData.is_active}
-                onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                className="sr-only peer"
-              />
-              <div className="w-10 h-5.5 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border after:border-slate-300 after:rounded-full after:h-4.5 after:w-4.5 after:transition-all peer-checked:bg-[#03363D]" />
-            </label>
           </div>
 
           {/* ── Footer ─────────────────────────────────────────────────────── */}

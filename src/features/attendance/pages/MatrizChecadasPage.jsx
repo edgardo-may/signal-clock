@@ -2,10 +2,11 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { usePagination } from '../../../shared/hooks/usePagination'
 import PaginationControl from '../../../shared/components/ui/PaginationControl'
 import { useCurrentTenant } from '../../../shared/hooks/useCurrentTenant'
+import { DatePicker } from '../../../shared/components/ui'
 import {
   Search, RefreshCw, Calendar, Download, FileSpreadsheet
 } from 'lucide-react'
@@ -43,7 +44,7 @@ function processMatriz(asistencias, empleados, fechaInicio, fechaFin) {
 
   empleados.forEach(emp => {
     groups[emp.id] = {
-      'ID de persona': emp.hikvision_device_userid || emp.clave_empleado || '—',
+      'ID de persona': emp.device_userid || emp.clave_empleado || '—',
       'Nombre de la persona': emp.nombre ? `${emp.nombre} ${emp.apellido}` : 'Desconocido',
       'Departamento': emp.departamento || '—',
       // Inicializar las columnas de fecha con arrays vacíos
@@ -187,7 +188,6 @@ export default function MatrizChecadasPage() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC] dark:bg-slate-900 text-slate-900 dark:text-white">
-      <Toaster position="top-right" />
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
@@ -227,22 +227,20 @@ export default function MatrizChecadasPage() {
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row items-end justify-between gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
               <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
-                <div className="space-y-1.5 w-full sm:w-auto">
+                <div className="space-y-1.5 w-full sm:w-44">
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Desde</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={fechaInicio}
                     onChange={(e) => setFechaInicio(e.target.value)}
-                    className="w-full sm:w-auto px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500 text-slate-900 dark:text-white"
+                    placeholder="Fecha inicio"
                   />
                 </div>
-                <div className="space-y-1.5 w-full sm:w-auto">
+                <div className="space-y-1.5 w-full sm:w-44">
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Hasta</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={fechaFin}
                     onChange={(e) => setFechaFin(e.target.value)}
-                    className="w-full sm:w-auto px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500 text-slate-900 dark:text-white"
+                    placeholder="Fecha fin"
                   />
                 </div>
                 <div className="pt-5 w-full sm:w-auto">

@@ -3,13 +3,13 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { useCurrentTenant } from '../../../shared/hooks/useCurrentTenant'
 import TenantSelector from '../../../shared/components/Layout/TenantSelector'
 import {
   FileSpreadsheet, FileDown, CalendarDays, Download,
   Users, AlertTriangle, RefreshCw, Activity,
-  CheckCircle2, Building2
+  CheckCircle2, Building2, Coffee
 } from 'lucide-react'
 
 // ─── Componentes Auxiliares ──────────────────────────────────────────
@@ -297,9 +297,109 @@ export default function ReportesPage() {
     }
   }
 
+  const handleDownloadDescansos = async () => {
+    setGenerating(true)
+    try {
+      const empMap = new Map((empleados || []).map(e => [e.id, e]))
+      const isBreakOut = (p) => {
+        const raw = String(p.raw_payload?.raw_status || '').toLowerCase().trim()
+        const tipo = String(p.tipo_verificacion || '').toLowerCase().trim()
+        return raw === 'break_out' || tipo === 'descanso_inicio' || tipo === 'comida_salida' || raw === '2'
+      }
+      const isBreakIn = (p) => {
+        const raw = String(p.raw_payload?.raw_status || '').toLowerCase().trim()
+        const tipo = String(p.tipo_verificacion || '').toLowerCase().trim()
+        return raw === 'break_in' || tipo === 'descanso_fin' || tipo === 'comida_entrada' || raw === '3'
+      }
+
+      const formatDuration = (diffMs) => {
+        if (!diffMs || diffMs <= 0) return '00:00:00'
+        const totalSec = Math.floor(diffMs / 1000)
+        const h = Math.floor(totalSec / 3600)
+        const m = Math.floor((totalSec % 3600) / 60)
+        const s = totalSec % 60
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+      }
+
+      const empPunches = {}
+      asistencias.forEach(a => {
+        if (!empPunches[a.empleado_id]) empPunches[a.empleado_id] = []
+        empPunches[a.empleado_id].push(a)
+      })
+
+      const breakIntervals = []
+      let totalMs = 0
+
+      Object.entries(empPunches).forEach(([empId, pList]) => {
+        const emp = empMap.get(empId) || {}
+        const sorted = [...pList].sort((a, b) => new Date(a.verificado_at) - new Date(b.verificado_at))
+        let currentBreak = null
+
+        sorted.forEach(p => {
+          const pDate = new Date(p.verificado_at)
+          if (isBreakOut(p)) {
+            if (currentBreak) breakIntervals.push(currentBreak)
+            currentBreak = {
+              clave: emp.clave_empleado || '—',
+              nombre: emp.nombre ? `${emp.nombre} ${emp.apellido}` : 'Desconocido',
+              departamento: emp.departamento || '—',
+              fecha: formatDateOnly(p.verificado_at),
+              inicioDate: pDate,
+              inicio: formatTimeOnly(p.verificado_at),
+              fin: '—',
+              duracion: '— (En descanso)',
+              estatus: 'Pendiente de regreso'
+            }
+          } else if (isBreakIn(p)) {
+            if (currentBreak && (pDate - currentBreak.inicioDate <= 12 * 3600 * 1000)) {
+              const diffMs = Math.max(0, pDate - currentBreak.inicioDate)
+              totalMs += diffMs
+              currentBreak.fin = formatTimeOnly(p.verificado_at)
+              currentBreak.duracion = formatDuration(diffMs)
+              currentBreak.estatus = 'Completado'
+              breakIntervals.push(currentBreak)
+              currentBreak = null
+            }
+          }
+        })
+        if (currentBreak) breakIntervals.push(currentBreak)
+      })
+
+      if (breakIntervals.length === 0) {
+        return toast.error('No se encontraron registros de descanso o comida en este periodo')
+      }
+
+      const rows = breakIntervals.map(b => ({
+        'Clave Empleado': b.clave,
+        'Nombre': b.nombre,
+        'Departamento': b.departamento,
+        'Fecha': b.fecha,
+        'Salida a Descanso': b.inicio,
+        'Regreso de Descanso': b.fin,
+        'Tiempo de Descanso': b.duracion,
+        'Estatus': b.estatus
+      }))
+
+      // Fila de suma total acumulada
+      rows.push({
+        'Clave Empleado': 'TOTAL GENERAL',
+        'Nombre': `${breakIntervals.length} pausas registradas`,
+        'Departamento': '',
+        'Fecha': '',
+        'Salida a Descanso': '',
+        'Regreso de Descanso': 'Suma Total:',
+        'Tiempo de Descanso': formatDuration(totalMs),
+        'Estatus': ''
+      })
+
+      exportToCsv('Reporte_Horas_Descanso.csv', rows)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
   return (
     <div className="flex h-screen bg-[#F8FAFC]  overflow-hidden font-inter transition-colors duration-300 text-slate-900 dark:text-white ">
-      <Toaster position="top-right" />
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
@@ -441,6 +541,23 @@ export default function ReportesPage() {
               >
                 <Download className="w-4 h-4" />
                 Descargar Incidencias
+              </button>
+            </div>
+
+            {/* Tarjeta: Horas de Descanso */}
+            <div className="rounded-sm border border-slate-200 dark:border-slate-800 bg-white p-6 shadow-sm dark:bg-white flex flex-col relative overflow-hidden group">
+              <div className="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Horas de Descanso y Comida</h3>
+              <p className="text-sm text-slate-700 dark:text-slate-300 flex-1 mb-6">
+                Desglose de pausas y tiempos de comida por colaborador con cálculo de duración y suma total de horas en formato sexagesimal.
+              </p>
+              <button 
+                onClick={handleDownloadDescansos}
+                disabled={loading || generating || periodos.length === 0}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 border border-purple-200 dark:border-purple-800 transition-all active:scale-98 disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                Descargar Descansos
               </button>
             </div>
 

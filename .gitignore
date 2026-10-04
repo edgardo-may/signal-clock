@@ -19,10 +19,13 @@ build/
 .env
 .env.*
 !.env.example
+!.env.dbreal.example
 
 **/.env
 **/.env.*
 !**/.env.example
+!**/.env.dbreal.example
+!.env.employee-api.example
 
 *.pem
 *.key

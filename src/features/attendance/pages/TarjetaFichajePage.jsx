@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { useCurrentTenant } from '../../../shared/hooks/useCurrentTenant'
+import { DatePicker } from '../../../shared/components/ui'
 import {
   Printer, Calendar, Clock, User, Building2, ChevronDown, CheckCircle2, AlertTriangle, Fingerprint, RefreshCw
 } from 'lucide-react'
@@ -18,77 +19,131 @@ function calculateDelayMinutes(firstPunchDate, horarioStr, tolerancia) {
   return diff > tolerancia ? diff : 0
 }
 
+// Utilidad para resolver la dirección de un marcaje
+function resolvePunchDirection(punch, hasOpenCycle) {
+  const rawStatus = punch?.raw_payload?.raw_status ? String(punch.raw_payload.raw_status).trim() : null
+  const isAuto = punch?.raw_payload?.auto_resolved === true
+  const tipo = String(punch?.tipo_verificacion || '').toLowerCase().trim()
+
+  // Regla de Oro: Si no hay ciclo abierto, la primera perforación siempre abre jornada como ENTRADA
+  if (!hasOpenCycle) {
+    return 'IN'
+  }
+
+  // Si el hardware envió 255 o fue auto-resuelto y ya hay ciclo abierto, actúa como SALIDA
+  if (rawStatus === '255' || isAuto) {
+    return 'OUT'
+  }
+
+  if (tipo === '0' || tipo === 'entrada' || tipo === 'in' || tipo === 'check_in') return 'IN'
+  if (tipo === '1' || tipo === 'salida' || tipo === 'out' || tipo === 'check_out') return 'OUT'
+  if (tipo === '2' || tipo === 'descanso_inicio' || tipo === 'comida_salida' || tipo === 'break_out') return 'BREAK_OUT'
+  if (tipo === '3' || tipo === 'descanso_fin' || tipo === 'comida_entrada' || tipo === 'break_in') return 'BREAK_IN'
+
+  return 'OUT'
+}
+
+function getPunchDateStr(ts) {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 function processTimecard(asistencias, horario) {
-  const groups = {}
-  
-  asistencias.forEach(a => {
-    const dateStr = a.verificado_at.slice(0, 10)
-    if (!groups[dateStr]) {
-      groups[dateStr] = {
-        fecha: dateStr,
-        punches: []
+  const sorted = [...asistencias].sort((a, b) => new Date(a.verificado_at) - new Date(b.verificado_at))
+
+  const cycles = []
+  let currentCycle = null
+
+  sorted.forEach(a => {
+    const punchDate = new Date(a.verificado_at)
+    const punchDateStr = getPunchDateStr(a.verificado_at)
+    const dir = resolvePunchDirection(a, Boolean(currentCycle))
+
+    // Evitar doble tap idéntico accidental dentro de 60 segundos
+    if (currentCycle && dir === 'IN' && !currentCycle.lastPunch) {
+      const diffMs = punchDate - currentCycle.firstPunch
+      if (diffMs >= 0 && diffMs < 60000) return
+    }
+
+    if (dir === 'IN') {
+      if (currentCycle) {
+        cycles.push(currentCycle)
+      }
+      currentCycle = {
+        fecha: punchDateStr,
+        firstPunch: punchDate,
+        breakOut: null,
+        breakIn: null,
+        lastPunch: null,
+        punches: [{ date: punchDate, tipo: a.tipo_verificacion }]
+      }
+    } else if (dir === 'OUT') {
+      const isWithinWindow = currentCycle && (punchDate - currentCycle.firstPunch <= 24 * 60 * 60 * 1000)
+      if (currentCycle && isWithinWindow) {
+        currentCycle.lastPunch = punchDate
+        currentCycle.punches.push({ date: punchDate, tipo: a.tipo_verificacion })
+        cycles.push(currentCycle)
+        currentCycle = null
+      } else {
+        if (currentCycle) {
+          cycles.push(currentCycle)
+        }
+        // Si no había ciclo previo o excede 24h, abre nueva jornada como entrada
+        currentCycle = {
+          fecha: punchDateStr,
+          firstPunch: punchDate,
+          breakOut: null,
+          breakIn: null,
+          lastPunch: null,
+          punches: [{ date: punchDate, tipo: a.tipo_verificacion }]
+        }
+      }
+    } else if (dir === 'BREAK_OUT') {
+      if (currentCycle) {
+        currentCycle.breakOut = punchDate
+        currentCycle.punches.push({ date: punchDate, tipo: a.tipo_verificacion })
+      }
+    } else if (dir === 'BREAK_IN') {
+      if (currentCycle) {
+        currentCycle.breakIn = punchDate
+        currentCycle.punches.push({ date: punchDate, tipo: a.tipo_verificacion })
       }
     }
-    groups[dateStr].punches.push({
-      date: new Date(a.verificado_at),
-      tipo: a.tipo_verificacion
-    })
   })
 
-  return Object.values(groups).map(g => {
-    g.punches.sort((a, b) => a.date - b.date)
-    let firstPunch = null
-    let breakOut = null
-    let breakIn = null
-    let lastPunch = null
+  if (currentCycle) {
+    cycles.push(currentCycle)
+  }
+
+  const formatTime = (d) => d ? (d instanceof Date ? d : new Date(d)).toLocaleTimeString('es-MX', { hour12: false }) : '—'
+
+  return cycles.map(g => {
     let estatus = 'Asistencia'
-
-    // Separate punches by type if explicit, otherwise by chronological
-    const pEntrada = g.punches.find(p => p.tipo === '0' || p.tipo === 'entrada')
-    const pSalida = g.punches.find(p => p.tipo === '1' || p.tipo === 'salida')
-    const pDescansoOut = g.punches.find(p => p.tipo === '2' || p.tipo === 'descanso_inicio')
-    const pDescansoIn = g.punches.find(p => p.tipo === '3' || p.tipo === 'descanso_fin')
-
-    if (g.punches.length === 1) {
-      const p = g.punches[0]
-      if (p.tipo === '1' || p.tipo === 'salida' || p.tipo?.toLowerCase().includes('out')) {
-        lastPunch = p.date
-        estatus = 'Falta Entrada'
-      } else {
-        firstPunch = p.date
-        estatus = 'Falta Salida'
-      }
-    } else if (g.punches.length === 2) {
-      firstPunch = pEntrada?.date || g.punches[0].date
-      lastPunch = pSalida?.date || g.punches[1].date
-      estatus = 'Asistencia'
-    } else if (g.punches.length === 3) {
-      firstPunch = pEntrada?.date || g.punches[0].date
-      breakOut = pDescansoOut?.date || g.punches[1].date
-      lastPunch = pSalida?.date || g.punches[2].date
+    if (g.firstPunch && !g.lastPunch) {
+      estatus = 'Falta Salida'
+    } else if (!g.firstPunch && g.lastPunch) {
+      estatus = 'Falta Entrada'
+    } else if (g.breakOut && !g.breakIn) {
       estatus = 'Incompleto (Falta 1 Marca)'
-    } else if (g.punches.length >= 4) {
-      firstPunch = pEntrada?.date || g.punches[0].date
-      breakOut = pDescansoOut?.date || g.punches[1].date
-      breakIn = pDescansoIn?.date || g.punches[2].date
-      lastPunch = pSalida?.date || g.punches[g.punches.length - 1].date
-      estatus = 'Asistencia'
     }
 
-    const formatTime = (d) => d ? d.toLocaleTimeString('es-MX', { hour12: false }) : '—'
-
     let retraso = 0
-    if (horario && firstPunch) {
-      retraso = calculateDelayMinutes(firstPunch, horario.hora_entrada, horario.tolerancia_minutos || 0)
+    if (horario && g.firstPunch) {
+      retraso = calculateDelayMinutes(g.firstPunch, horario.hora_entrada, horario.tolerancia_minutos || 0)
     }
 
     return {
       fecha: g.fecha,
       diaSemana: new Intl.DateTimeFormat('es-MX', { weekday: 'long' }).format(new Date(`${g.fecha}T12:00:00`)),
-      entrada: formatTime(firstPunch),
-      salidaDescanso: formatTime(breakOut),
-      regresoDescanso: formatTime(breakIn),
-      salida: formatTime(lastPunch),
+      entrada: formatTime(g.firstPunch),
+      salidaDescanso: formatTime(g.breakOut),
+      regresoDescanso: formatTime(g.breakIn),
+      salida: formatTime(g.lastPunch),
       numPunches: g.punches.length,
       retraso: retraso,
       estatus: estatus,
@@ -120,11 +175,14 @@ export default function TarjetaFichajePage() {
   useEffect(() => {
     if (!currentTenantId) return
     const fetchEmpleados = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('empleados')
-        .select('id, nombre, apellido, clave_empleado, departamento, puesto, hikvision_device_userid')
+        .select('id, nombre, apellido, clave_empleado, departamento, puesto, device_userid')
         .eq('cliente_id', currentTenantId)
         .order('nombre', { ascending: true })
+      if (error) {
+        console.error('Error al cargar empleados:', error)
+      }
       setEmpleados(data || [])
     }
     fetchEmpleados()
@@ -150,9 +208,9 @@ export default function TarjetaFichajePage() {
       const horario = asig?.horario || null
       setHorarioData(horario)
 
-      // Asistencias
-      const start = new Date(`${fechaInicio}T00:00:00`).toISOString()
-      const end = new Date(`${fechaFin}T23:59:59.999`).toISOString()
+      // Asistencias (con buffer de 24h para cubrir jornadas nocturnas cruzadas)
+      const start = new Date(new Date(`${fechaInicio}T00:00:00`).getTime() - 24 * 60 * 60 * 1000).toISOString()
+      const end = new Date(new Date(`${fechaFin}T23:59:59.999`).getTime() + 24 * 60 * 60 * 1000).toISOString()
 
       const { data: asisData } = await supabase
         .from('registro_asistencia')
@@ -162,7 +220,8 @@ export default function TarjetaFichajePage() {
         .lte('verificado_at', end)
 
       const processed = processTimecard(asisData || [], horario)
-      setTimecardData(processed)
+      const inRange = processed.filter(c => c.fecha >= fechaInicio && c.fecha <= fechaFin)
+      setTimecardData(inRange)
       
     } catch (error) {
       console.error(error)
@@ -186,7 +245,6 @@ export default function TarjetaFichajePage() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC] dark:bg-slate-900 text-slate-900 dark:text-white print:bg-white print:text-black">
-      <Toaster position="top-right" />
       <div className="print:hidden">
         <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
       </div>
@@ -218,22 +276,20 @@ export default function TarjetaFichajePage() {
                 </div>
               </div>
               
-              <div className="w-full sm:w-auto">
+              <div className="w-full sm:w-44">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Desde</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={fechaInicio}
                   onChange={(e) => setFechaInicio(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500"
+                  placeholder="Fecha inicio"
                 />
               </div>
-              <div className="w-full sm:w-auto">
+              <div className="w-full sm:w-44">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Hasta</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={fechaFin}
                   onChange={(e) => setFechaFin(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500"
+                  placeholder="Fecha fin"
                 />
               </div>
             </div>
@@ -263,7 +319,7 @@ export default function TarjetaFichajePage() {
                     {empleadoData.nombre} {empleadoData.apellido}
                   </h1>
                   <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-slate-500 dark:text-slate-400 print:text-slate-700">
-                    <span className="flex items-center gap-1.5"><Fingerprint className="w-4 h-4" /> ID Biométrico: {empleadoData.hikvision_device_userid || 'N/A'}</span>
+                    <span className="flex items-center gap-1.5"><Fingerprint className="w-4 h-4" /> ID Biométrico: {empleadoData.device_userid || empleadoData.clave_empleado || 'N/A'}</span>
                     <span className="flex items-center gap-1.5"><Building2 className="w-4 h-4" /> {empleadoData.departamento || 'Sin departamento'}</span>
                   </div>
                 </div>

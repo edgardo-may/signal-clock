@@ -63,9 +63,9 @@ export async function createFixture(config) {
   const employeeUserA1 = await makeUser(tenantA, 'operador', 'employee-a1')
   const employeeUserA2 = await makeUser(tenantA, 'operador', 'employee-a2')
   const employeeUserB1 = await makeUser(tenantB, 'operador', 'employee-b1')
-  const employeeA1 = await insert('empleados', { cliente_id: tenantA.id, hikvision_device_userid: `a1-${suffix}`, nombre: 'A1', apellido: 'Test' })
-  const employeeA2 = await insert('empleados', { cliente_id: tenantA.id, hikvision_device_userid: `a2-${suffix}`, nombre: 'A2', apellido: 'Test' })
-  const employeeB1 = await insert('empleados', { cliente_id: tenantB.id, hikvision_device_userid: `b1-${suffix}`, nombre: 'B1', apellido: 'Test' })
+  const employeeA1 = await insert('empleados', { cliente_id: tenantA.id, device_userid: `a1-${suffix}`, nombre: 'A1', apellido: 'Test' })
+  const employeeA2 = await insert('empleados', { cliente_id: tenantA.id, device_userid: `a2-${suffix}`, nombre: 'A2', apellido: 'Test' })
+  const employeeB1 = await insert('empleados', { cliente_id: tenantB.id, device_userid: `b1-${suffix}`, nombre: 'B1', apellido: 'Test' })
   for (const [employee, user, tenant] of [[employeeA1, employeeUserA1, tenantA], [employeeA2, employeeUserA2, tenantA], [employeeB1, employeeUserB1, tenantB]]) await insert('employee_user_links', { cliente_id: tenant.id, empleado_id: employee.id, auth_user_id: user.id })
   const activeNight = { activo: true, entrada: '22:00', salida: '06:00' }
   const schedule = await insert('horarios', {
@@ -76,7 +76,7 @@ export async function createFixture(config) {
   const assignment = await insert('empleados_horarios', { cliente_id: tenantA.id, empleado_id: employeeA1.id, horario_id: schedule.id, fecha_inicio: '2026-09-01', activo: true })
   await insert('tenant_features', { cliente_id: tenantA.id, feature_key: 'attendance_engine_v2', state: 'SHADOW' })
   await insert('tenant_features', { cliente_id: tenantA.id, feature_key: 'electronic_workday_record', state: 'SHADOW' })
-  const log = await insert('attendance_logs', { cliente_id: tenantA.id, numero_serie: `device-${suffix}`, biometric_user_id: employeeA1.hikvision_device_userid, timestamp: '2026-09-01T22:00:00.000Z' })
+  const log = await insert('attendance_logs', { cliente_id: tenantA.id, numero_serie: `device-${suffix}`, biometric_user_id: employeeA1.device_userid, timestamp: '2026-09-01T22:00:00.000Z' })
   const login = async user => { const c = createClient(config.url, config.anonKey, { auth: { persistSession: false } }); const { error } = await c.auth.signInWithPassword({ email: user.email, password: user.password }); if (error) throw error; return c }
   return { service, tenantA, tenantB, adminA, adminB, employeeUserA1, employeeUserA2, employeeUserB1, employeeA1, employeeA2, employeeB1, schedule, assignment, log, login, suffix }
 }
