@@ -13,7 +13,6 @@ import {
   FileText,
   ClipboardCheck,
   Cpu,
-  Camera,
   UserCog,
   FileSpreadsheet,
   LogOut,
@@ -91,7 +90,6 @@ export default function ClientSidebar({ sidebarOpen, setSidebarOpen }) {
               { label: 'Checadas', to: '/biometricos/historial', icon: Activity, permission: PERMISSION.BIOMETRICS },
             ],
         },
-        { label: 'Kiosco Checador Web', to: '/kiosko', icon: Camera, permission: PERMISSION.ATTENDANCE_MANAGE },
       ],
     },
     {

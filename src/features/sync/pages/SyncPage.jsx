@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { useCurrentTenant } from '../../../shared/hooks/useCurrentTenant'
 import { useAuth } from '../../auth/hooks/useAuth'
 import {
@@ -165,8 +165,6 @@ export default function SyncPage() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC] dark:bg-[#1a222c] text-slate-900 dark:text-white">
-      <Toaster position="top-right" containerStyle={{ top: 20, right: 20 }} />
-
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden">

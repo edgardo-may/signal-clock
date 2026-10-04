@@ -57,15 +57,62 @@ export function isAuditor(profile) {
   return normalizeRole(profile?.rol) === ROLE.AUDITOR
 }
 
+function getStoredRoleModules(role, clienteId) {
+  if (typeof window === 'undefined') return null
+  const cleanKey = String(role || '').trim().toUpperCase()
+  if (!cleanKey) return null
+
+  try {
+    const key = clienteId ? `signum_role_modules_${clienteId}` : 'signum_role_modules'
+    const raw = localStorage.getItem(key)
+    if (raw) {
+      const map = JSON.parse(raw)
+      if (Array.isArray(map[cleanKey])) {
+        return map[cleanKey]
+      }
+    }
+  } catch (e) {
+    // fallback
+  }
+  return null
+}
+
 export function getDefaultModuleAccess(profile, permission) {
   const role = normalizeRole(profile?.rol)
 
   if (role === ROLE.SUPERADMIN) return permission === PERMISSION.PLATFORM_MANAGE
+
+  // Módulos configurados dinámicamente para este rol
+  const storedModules = getStoredRoleModules(role, profile?.cliente_id)
+  if (storedModules && Array.isArray(storedModules)) {
+    return storedModules.includes(permission)
+  }
+
   if (role === ROLE.ADMIN) return permission !== PERMISSION.PLATFORM_MANAGE
   if (role === ROLE.AUDITOR) return AUDITOR_DEFAULT_MODULES.has(permission)
 
-  // Existing roles are intentionally left unchanged until their own permission
-  // model is implemented.
+  if (role === 'rh') {
+    return [
+      PERMISSION.DASHBOARD,
+      PERMISSION.EMPLOYEES,
+      PERMISSION.HOLIDAYS,
+      PERMISSION.ATTENDANCE,
+      PERMISSION.ATTENDANCE_MANAGE,
+      PERMISSION.REPORTS,
+    ].includes(permission)
+  }
+
+  if (role === 'supervisor') {
+    return [
+      PERMISSION.DASHBOARD,
+      PERMISSION.EMPLOYEES,
+      PERMISSION.SCHEDULES,
+      PERMISSION.SCHEDULE_AGENDA,
+      PERMISSION.ATTENDANCE,
+      PERMISSION.ATTENDANCE_MANAGE,
+    ].includes(permission)
+  }
+
   return true
 }
 

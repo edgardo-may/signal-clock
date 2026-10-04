@@ -3,7 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import {
   Clock, Camera, CameraOff, CheckCircle2,
   XCircle, Fingerprint, Maximize2, Minimize2,
@@ -332,9 +332,9 @@ export default function KioskoChecador() {
     try {
       const { data, error } = await supabase
         .from('empleados')
-        .select('id, nombre, apellido, clave_empleado, pin, departamento, puesto, hikvision_device_userid, tarjeta, avatar_url, activo')
+        .select('id, nombre, apellido, clave_empleado, pin, departamento, puesto, device_userid, tarjeta, avatar_url, activo')
         .eq('cliente_id', clienteId)
-        .or(`clave_empleado.eq.${clean},hikvision_device_userid.eq.${clean},tarjeta.eq.${clean}`)
+        .or(`clave_empleado.eq.${clean},device_userid.eq.${clean},tarjeta.eq.${clean}`)
         .maybeSingle()
 
       if (!error && data) {
@@ -620,8 +620,6 @@ export default function KioskoChecador() {
 
   return (
     <div className="min-h-[100dvh] w-full flex flex-col bg-[#060911] text-slate-100 select-none overflow-x-hidden font-sans">
-      <Toaster position="top-center" containerStyle={{ top: 12 }} />
-
       {/* ── Contenedor Principal del Kiosco (Optimizado para Celular y Pantallas Táctiles) ── */}
       <div className="relative flex flex-1 flex-col justify-between w-full max-w-lg mx-auto p-3 sm:p-5 bg-gradient-to-b from-[#080d1a] via-[#0d1424] to-[#151233] min-h-[100dvh]">
 

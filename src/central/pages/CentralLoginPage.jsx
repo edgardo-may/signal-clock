@@ -7,7 +7,7 @@
  * Lógica de auth SuperAdmin idéntica a versiones anteriores.
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { signIn } from '../../features/auth/services/authService'
@@ -296,6 +296,18 @@ export default function CentralLoginPage() {
   const [passErr,      setPassErr]      = useState('')
   const [emailTouched, setEmailTouched] = useState(false)
   const [passTouched,  setPassTouched]  = useState(false)
+  const [rememberMe,   setRememberMe]   = useState(false)
+
+  /* Cargar correo recordado en almacenamiento local */
+  useEffect(() => {
+    try {
+      const savedEmail = localStorage.getItem('sc_remember_email_central') || localStorage.getItem('sc_remember_email')
+      if (savedEmail) {
+        setEmail(savedEmail)
+        setRememberMe(true)
+      }
+    } catch (_) {}
+  }, [])
 
   const validateEmail    = v => !v ? 'Ingresa tu correo.' : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? 'Formato inválido.' : ''
   const validatePassword = v => !v ? 'Ingresa tu contraseña.' : v.length < 8 ? 'Mínimo 8 caracteres.' : ''
@@ -326,6 +338,15 @@ export default function CentralLoginPage() {
         })
         return
       }
+
+      // Guardar o eliminar correo según la opción "Recuérdame"
+      try {
+        if (rememberMe) {
+          localStorage.setItem('sc_remember_email_central', email.trim())
+        } else {
+          localStorage.removeItem('sc_remember_email_central')
+        }
+      } catch (_) {}
 
       setLoginOk(true)
       setTimeout(() => navigate('/central', { replace: true }), 700)
@@ -500,6 +521,60 @@ export default function CentralLoginPage() {
                     {passTouched && <span id="cn-pass-err"><FieldError msg={passErr} /></span>}
                   </div>
 
+                  {/* Options row: Recuérdame & Olvidé contraseña */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginTop: -2,
+                      fontSize: 13,
+                    }}
+                  >
+                    <label
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        color: BW,
+                        fontWeight: 500,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        id="cn-remember"
+                        checked={rememberMe}
+                        onChange={e => setRememberMe(e.target.checked)}
+                        disabled={loading}
+                        style={{
+                          width: 16,
+                          height: 16,
+                          borderRadius: 4,
+                          accentColor: BW,
+                          cursor: 'pointer',
+                        }}
+                      />
+                      <span>Recuérdame</span>
+                    </label>
+
+                    <Link
+                      to="/recuperar-contrasena"
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: 'rgba(0,54,61,0.55)',
+                        textDecoration: 'none',
+                        transition: 'color 140ms ease',
+                      }}
+                      onMouseOver={e => e.currentTarget.style.color = BW}
+                      onMouseOut={e => e.currentTarget.style.color = 'rgba(0,54,61,0.55)'}
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </Link>
+                  </div>
+
                   {/* Submit */}
                   <button
                     type="submit"
@@ -528,23 +603,6 @@ export default function CentralLoginPage() {
                       </>
                     )}
                   </button>
-
-                  {/* Forgot */}
-                  <div style={{ textAlign: 'center', marginTop: 4 }}>
-                    <Link
-                      to="/recuperar-contrasena"
-                      style={{
-                        fontSize: 13, fontWeight: 500,
-                        color: 'rgba(0,54,61,0.40)',
-                        textDecoration: 'none',
-                        transition: 'color 140ms ease',
-                      }}
-                      onMouseOver={e => e.currentTarget.style.color = BW}
-                      onMouseOut={e => e.currentTarget.style.color = 'rgba(0,54,61,0.40)'}
-                    >
-                      ¿Olvidaste tu contraseña?
-                    </Link>
-                  </div>
                 </form>
               </>
             )}

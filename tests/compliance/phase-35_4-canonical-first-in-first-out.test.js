@@ -1,4 +1,4 @@
-/** Phase 35.4: canonical attendance is first ENTRY + first later EXIT. */
+/** Historical Phase 35.4 evidence, with canonical cycles updated by Phase B. */
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -51,7 +51,7 @@ function processed(raw = realShapeFixture()) {
 
 test('1. first of consecutive ENTRY events wins canonically', () => assert.equal(calculate().metrics.actualStart, '2026-09-03T16:26:04.000Z'))
 test('2. later ENTRY does not replace firstIn', () => assert.notEqual(calculate().metrics.actualStart, '2026-09-03T17:34:00.000Z'))
-test('3. first EXIT after firstIn wins canonically', () => assert.equal(calculate().metrics.actualEnd, '2026-09-03T17:55:13.000Z'))
+test('3. last closed cycle supplies actualEnd despite anomalies', () => assert.equal(calculate().metrics.actualEnd, '2026-09-03T19:07:00.000Z'))
 test('4. later EXIT does not replace firstOut', () => assert.notEqual(calculate().metrics.actualEnd, '2026-09-03T20:15:00.000Z'))
 test('5. EXIT before firstIn is not a canonical out', () => {
   const { metrics } = calculate([punch('early-exit', '2026-09-03T10:55:00.000Z', 'salida'), punch('in', '2026-09-03T11:00:00.000Z', 'entrada'), punch('out', '2026-09-03T19:00:00.000Z', 'salida')])
@@ -61,14 +61,14 @@ test('5. EXIT before firstIn is not a canonical out', () => {
 test('6. supplemental ENTRY is retained', () => assert.equal(calculate().metrics.supplementalEvents.some((event) => event.reason === 'ADDITIONAL_ENTRY'), true))
 test('7. supplemental EXIT is retained', () => assert.equal(calculate().metrics.supplementalEvents.some((event) => event.reason === 'ADDITIONAL_EXIT'), true))
 test('8. supplemental entries do not alter firstIn', () => assert.equal(calculate().metrics.actualStart, realShapeFixture()[0].timestamp))
-test('9. supplemental exits do not alter firstOut', () => assert.equal(calculate().metrics.actualEnd, realShapeFixture()[6].timestamp))
-test('10. supplemental events do not alter canonical workedMinutes', () => assert.equal(calculate().metrics.workedMinutes, 89))
+test('9. trailing orphan exits do not alter the last closed cycle', () => assert.equal(calculate().metrics.actualEnd, realShapeFixture()[8].timestamp))
+test('10. anomalies preserve both complete canonical pairs', () => assert.equal(calculate().metrics.workedMinutes, 154))
 test('11. supplemental events do not alter lateMinutes', () => assert.equal(calculate().metrics.lateMinutes, 326))
-test('12. supplemental events do not alter earlyLeaveMinutes', () => assert.equal(calculate().metrics.earlyLeaveMinutes, 65))
-test('13. later orphan entry cannot make a canonical day incomplete', () => assert.equal(processed().workdayState, 'COMPLETE'))
+test('12. earlyLeaveMinutes uses last closed cycle', () => assert.equal(calculate().metrics.earlyLeaveMinutes, 0))
+test('13. closed cycles remain complete despite trailing orphan exits', () => assert.equal(processed().workdayState, 'COMPLETE'))
 test('14. missing firstOut remains incomplete', () => assert.equal(processed([punch('in-only', '2026-09-03T16:26:04.000Z', 'entrada')]).workdayState, 'INCOMPLETE'))
 test('15. break is not inferred from supplemental punches', () => assert.equal(calculate().metrics.breakMinutes, 0))
-test('16. workedMinutes is the canonical interval only', () => assert.equal(calculate().metrics.segments[0].durationMinutes, calculate().metrics.workedMinutes))
+test('16. workedMinutes sums the two retained intervals', () => assert.deepEqual(calculate().metrics.segments.map(s => s.durationMinutes), [89, 65]))
 test('17. overtime follows canonical worked time', () => assert.equal(calculate().metrics.overtimeMinutes, 0))
 test('18. sanitized real-shape fixture has 16 events', () => assert.equal(realShapeFixture().length, 16))
 test('19. exactly fourteen supplemental events are preserved', () => assert.equal(calculate().metrics.supplementalEvents.length, 14))

@@ -70,7 +70,7 @@ export function pairingWarningCodes(metrics: CalculationMetrics): string[] {
     if (event.reason === 'ADDITIONAL_ENTRY') codes.add('ADDITIONAL_ENTRY')
     if (event.reason === 'ADDITIONAL_EXIT' || event.reason === 'EXIT_BEFORE_FIRST_IN') codes.add('ADDITIONAL_EXIT')
   }
-  const order = ['CONSECUTIVE_ENTRY', 'CONSECUTIVE_EXIT', 'ADDITIONAL_ENTRY', 'ADDITIONAL_EXIT', 'PUNCH_SEQUENCE_AMBIGUOUS']
+  const order = ['CONSECUTIVE_ENTRY', 'CONSECUTIVE_EXIT', 'ORPHAN_EXIT', 'ADDITIONAL_ENTRY', 'ADDITIONAL_EXIT', 'PUNCH_SEQUENCE_AMBIGUOUS']
   return order.filter((code) => codes.has(code))
 }
 
@@ -81,8 +81,8 @@ export interface CanonicalAttendanceSelection {
 }
 
 /**
- * Phase 35.4 policy: a workday is one canonical first ENTRY plus the first
- * subsequent EXIT. Pairing remains analytics only; it cannot replace either.
+ * Select first-entry/first-exit evidence for the legacy fallback and tracing.
+ * Explicit ENTRY/EXIT sequences use all closed pairs in calculateMultiplePunches.
  */
 export function selectCanonicalAttendance(punches: readonly NormalizedPunch[]): CanonicalAttendanceSelection {
   const firstIn = punches.find((punch) => punch.direction === 'ENTRY')
@@ -170,8 +170,8 @@ export class WorkdayCalculator {
    *
    * Cuando se detecta ambigüedad (dos ENTRY consecutivos o dos EXIT consecutivos):
    * - Se genera la incidencia correspondiente (CONSECUTIVE_ENTRY / CONSECUTIVE_EXIT).
-   * - NO se corrige silenciosamente.
-   * - El par ambiguo se excluye del cálculo con un orphan.
+   * - Para ciclos explícitos se conserva la primera ENTRY abierta y el primer EXIT que la cierra.
+   * - El evento consecutivo queda fuera del pairing, conservado como evidencia.
    */
   public static pairPunches(punches: NormalizedPunch[]): PunchPairingResult {
     if (punches.length === 0) {
@@ -218,8 +218,9 @@ export class WorkdayCalculator {
     const pairingIncidents: WorkdayIncident[] = []
     let openEntry: NormalizedPunch | undefined
     let orphanExit: NormalizedPunch | undefined
+    const explicitCycles = punches.every(p => p.direction === 'ENTRY' || p.direction === 'EXIT')
 
-    for (const punch of punches) {
+    for (const [position, punch] of punches.entries()) {
       const dir = punch.direction
 
       if (dir === 'ENTRY') {
@@ -228,16 +229,19 @@ export class WorkdayCalculator {
           pairingIncidents.push({
             code: 'CONSECUTIVE_ENTRY',
             severity: 'WARNING',
-            message: `Dos marcajes de ENTRADA consecutivos detectados: ${openEntry.id} y ${punch.id}. Se descarta la primera entrada.`,
+            message: explicitCycles
+              ? `Entrada consecutiva excluida del pairing: ${punch.id}. Se conserva la entrada abierta ${openEntry.id}.`
+              : `Dos marcajes de ENTRADA consecutivos detectados: ${openEntry.id} y ${punch.id}. Se descarta la primera entrada.`,
             metadata: {
-              discardedPunchId: openEntry.id,
-              discardedTimestamp: openEntry.utcTimestamp,
+              discardedPunchId: explicitCycles ? punch.id : openEntry.id,
+              discardedTimestamp: explicitCycles ? punch.utcTimestamp : openEntry.utcTimestamp,
               conflictingPunchId: punch.id,
               conflictingTimestamp: punch.utcTimestamp,
+              ...(explicitCycles ? { retainedPunchId: openEntry.id, type: punch.inOutType, position, reason: 'CONSECUTIVE_ENTRY' } : {}),
             },
           })
-          // Estrategia: descartar la primera ENTRY, conservar la nueva (más razonable)
-          openEntry = punch
+          // Phase B preserves the first open ENTRY. Mixed UNKNOWN fallback is unchanged.
+          if (!explicitCycles) openEntry = punch
         } else {
           openEntry = punch
         }
@@ -245,12 +249,13 @@ export class WorkdayCalculator {
         if (openEntry === undefined) {
           // EXIT sin ENTRY previo → entrada faltante
           pairingIncidents.push({
-            code: 'CONSECUTIVE_EXIT',
+            code: explicitCycles && pairs.length === 0 ? 'ORPHAN_EXIT' : 'CONSECUTIVE_EXIT',
             severity: 'WARNING',
             message: `Marcaje de SALIDA sin ENTRADA previa: ${punch.id}. Se marca como salida huérfana.`,
             metadata: {
               orphanExitPunchId: punch.id,
               orphanExitTimestamp: punch.utcTimestamp,
+              ...(explicitCycles ? { type: punch.inOutType, position, reason: pairs.length === 0 ? 'ORPHAN_EXIT' : 'CONSECUTIVE_EXIT' } : {}),
             },
           })
           orphanExit = punch
@@ -273,7 +278,7 @@ export class WorkdayCalculator {
     const orphanEntry = openEntry // Si quedó entrada abierta sin salida
 
     // Si hay ambigüedad significativa (múltiples incidencias sin pares), generar incidencia general
-    if (pairingIncidents.length > 0 && pairs.length === 0 && !orphanEntry) {
+    if (!explicitCycles && pairingIncidents.length > 0 && pairs.length === 0 && !orphanEntry) {
       pairingIncidents.push({
         code: 'PUNCH_SEQUENCE_AMBIGUOUS',
         severity: 'CRITICAL',
@@ -420,7 +425,7 @@ export class WorkdayCalculator {
         segments: [],
         sourceLogIds,
         devicesInvolved,
-        pairingIncidents: [],
+        pairingIncidents: singlePunch.direction === 'EXIT' ? this.pairPunches([singlePunch]).pairingIncidents : [],
         supplementalEvents: selectCanonicalAttendance([singlePunch]).supplementalEvents,
       }
     }
@@ -546,9 +551,8 @@ export class WorkdayCalculator {
       }
     }
 
-    // Pairing-derived values above are retained only for diagnostic pairing
-    // evidence. Mark them intentionally consumed before canonical metrics are
-    // derived below; no pairing result is authoritative for the workday.
+    // Legacy intermediate metrics are not returned. Canonical metrics below
+    // use recognized pairs for explicit ENTRY/EXIT sequences, including anomalies.
     void totalNocturnalMinutes
     void missingEntry
     void actualStart
@@ -559,20 +563,38 @@ export class WorkdayCalculator {
     void overtimeMinutes
 
     const canonical = selectCanonicalAttendance(punches)
+    const canonicalPairs = pairing.pairs
+    // Phase B: explicit cycles remain canonical despite consecutive/orphan
+    // evidence. UNKNOWN retains its existing fallback contract.
+    const useMultiPairCanonical = punches.every((punch) => punch.direction === 'ENTRY' || punch.direction === 'EXIT')
     const canonicalFirstIn = canonical.firstIn
-    const canonicalFirstOut = canonical.firstOut
-    const canonicalMissingEntry = !canonicalFirstIn
-    const canonicalMissingExit = Boolean(canonicalFirstIn && !canonicalFirstOut)
-    const canonicalWorkedMinutes = canonicalFirstIn && canonicalFirstOut
-      ? Math.round((canonicalFirstOut.epochMs - canonicalFirstIn.epochMs) / 60000)
-      : 0
-    const canonicalSegments: WorkdaySegment[] = canonicalFirstIn && canonicalFirstOut ? [{
-      segmentType: 'WORK',
-      startPunch: canonicalFirstIn,
-      endPunch: canonicalFirstOut,
-      durationMinutes: canonicalWorkedMinutes,
-      isNocturnalMinutes: 0,
-    }] : []
+    const canonicalLastOut = useMultiPairCanonical ? canonicalPairs.at(-1)?.exit : canonical.firstOut
+    const canonicalMissingEntry = useMultiPairCanonical
+      ? canonicalPairs.length === 0 && pairing.orphanExit !== undefined
+      : !canonical.firstIn
+    const canonicalMissingExit = useMultiPairCanonical
+      ? pairing.orphanEntry !== undefined
+      : Boolean(canonical.firstIn && !canonical.firstOut)
+    const canonicalWorkedMinutes = useMultiPairCanonical
+      ? canonicalPairs.reduce((total, pair) => total + Math.round((pair.exit.epochMs - pair.entry.epochMs) / 60000), 0)
+      : canonical.firstIn && canonical.firstOut
+        ? Math.round((canonical.firstOut.epochMs - canonical.firstIn.epochMs) / 60000)
+        : 0
+    const canonicalSegments: WorkdaySegment[] = useMultiPairCanonical
+      ? canonicalPairs.map((pair) => ({
+        segmentType: 'WORK',
+        startPunch: pair.entry,
+        endPunch: pair.exit,
+        durationMinutes: Math.round((pair.exit.epochMs - pair.entry.epochMs) / 60000),
+        isNocturnalMinutes: 0,
+      }))
+      : canonical.firstIn && canonical.firstOut ? [{
+        segmentType: 'WORK',
+        startPunch: canonical.firstIn,
+        endPunch: canonical.firstOut,
+        durationMinutes: canonicalWorkedMinutes,
+        isNocturnalMinutes: 0,
+      }] : []
     let canonicalLateMinutes = 0
     if (canonicalFirstIn && matchResult.scheduledStartUtc) {
       const startMs = new Date(matchResult.scheduledStartUtc).getTime()
@@ -581,13 +603,16 @@ export class WorkdayCalculator {
       }
     }
     let canonicalEarlyLeaveMinutes = 0
-    if (canonicalFirstOut && matchResult.scheduledEndUtc) {
+    // Preserve the scheduled-end comparison, including an open final cycle;
+    // actualEnd now identifies the last closed cycle, never an invented EXIT.
+    if (canonicalLastOut && matchResult.scheduledEndUtc) {
       const endMs = new Date(matchResult.scheduledEndUtc).getTime()
-      if (canonicalFirstOut.epochMs < endMs) {
-        canonicalEarlyLeaveMinutes = Math.round((endMs - canonicalFirstOut.epochMs) / 60000)
+      if (canonicalLastOut.epochMs < endMs) {
+        canonicalEarlyLeaveMinutes = Math.round((endMs - canonicalLastOut.epochMs) / 60000)
       }
     }
     const canonicalEffectiveMinutes = canonicalWorkedMinutes
+    // Apply the existing daily threshold once to the aggregate, not per pair.
     const canonicalOrdinaryMinutes = isRestOrHoliday
       ? 0
       : Math.min(canonicalEffectiveMinutes, dailyOrdinaryThreshold)
@@ -597,7 +622,7 @@ export class WorkdayCalculator {
 
     return {
       actualStart: canonicalFirstIn?.utcTimestamp,
-      actualEnd: canonicalFirstOut?.utcTimestamp,
+      actualEnd: canonicalLastOut?.utcTimestamp,
       workedMinutes: canonicalWorkedMinutes,
       // Supplemental punches never infer a break. A canonical scheduled-break
       // interval is not available in this calculation contract yet.

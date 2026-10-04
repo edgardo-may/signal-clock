@@ -1,5 +1,8 @@
 // src/features/biometrics/components/DeviceDetailModal.jsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import toast from 'react-hot-toast'
+import { supabase } from '../../../lib/supabase'
+import { syncService } from '../services/syncService'
 import {
   X,
   Cpu,
@@ -19,6 +22,11 @@ import {
   UserCheck,
   ShieldCheck,
   RefreshCw,
+  Users,
+  Fingerprint,
+  ScanFace,
+  Info,
+  Sparkles,
 } from 'lucide-react'
 
 const TYPE_CONFIG = {
@@ -30,10 +38,106 @@ const TYPE_CONFIG = {
   acceso: { label: 'Control de Acceso', icon: ShieldCheck, badge: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' },
 }
 
-export default function DeviceDetailModal({ device, onClose, onOpenSendCommand, onSyncEmployees, onSyncTime }) {
+export default function DeviceDetailModal({ device, onClose, onOpenSendCommand, onSyncEmployees, onSyncTime, onRefresh }) {
   const [activeTab, setActiveTab] = useState('info') // 'info' | 'colaboradores' | 'commands' | 'logs'
+  const [biometricsCount, setBiometricsCount] = useState(
+    device?.biometricsCount || { totalUsers: 0, totalFaces: 0, totalFingers: 0 }
+  )
+  const [loadingBio, setLoadingBio] = useState(false)
+  const [enqueuingInfo, setEnqueuingInfo] = useState(false)
+  const [enqueuingUsers, setEnqueuingUsers] = useState(false)
+  const [enqueuingTime, setEnqueuingTime] = useState(false)
+
+  useEffect(() => {
+    if (device?.id && device?.cliente_id) {
+      setLoadingBio(true)
+      syncService.getDeviceBiometricsSummary({
+        deviceId: device.id,
+        clienteId: device.cliente_id
+      })
+        .then((res) => setBiometricsCount(res))
+        .catch((err) => console.warn('[DeviceDetailModal] Error cargando biometría:', err))
+        .finally(() => setLoadingBio(false))
+    } else if (device?.biometricsCount) {
+      setBiometricsCount(device.biometricsCount)
+    }
+  }, [device?.id, device?.cliente_id])
 
   if (!device) return null
+
+  const handleEnqueueInfo = async () => {
+    if (!device?.serial_number) {
+      toast.error('Número de serie no disponible.')
+      return
+    }
+    try {
+      setEnqueuingInfo(true)
+      await syncService.enqueueDeviceInfoCommand({ deviceSerial: device.serial_number })
+      toast.success(`Comando INFO encolado para el checador (SN: ${device.serial_number}). Se responderá al próximo contacto ADMS.`)
+    } catch (err) {
+      console.error('[DeviceDetailModal] Error encolando INFO:', err)
+      toast.error('Error al encolar comando INFO: ' + err.message)
+    } finally {
+      setEnqueuingInfo(false)
+    }
+  }
+
+  const handleEnqueueQueryUsers = async () => {
+    if (!device?.serial_number) {
+      toast.error('Número de serie no disponible.')
+      return
+    }
+    try {
+      setEnqueuingUsers(true)
+      await syncService.enqueueQueryUsersCommand({ deviceSerial: device.serial_number })
+      toast.success(`Comando DATA QUERY USERINFO encolado para ${device.serial_number}.`)
+    } catch (err) {
+      console.error('[DeviceDetailModal] Error encolando QUERY USERINFO:', err)
+      toast.error('Error al solicitar usuarios: ' + err.message)
+    } finally {
+      setEnqueuingUsers(false)
+    }
+  }
+
+  const [selectedTz, setSelectedTz] = useState(device?.timezone || 'America/Mexico_City')
+
+  useEffect(() => {
+    if (device?.timezone) {
+      setSelectedTz(device.timezone)
+    }
+  }, [device?.timezone])
+
+  const handleSyncTime = async (tzToUse = selectedTz) => {
+    if (!device?.serial_number) return
+    try {
+      setEnqueuingTime(true)
+      const targetTz = tzToUse || selectedTz || 'America/Mexico_City'
+
+      // 1. Guardar la nueva zona horaria en la base de datos para este dispositivo
+      if (device.id) {
+        await supabase
+          .from('devices')
+          .update({ timezone: targetTz })
+          .eq('id', device.id)
+        device.timezone = targetTz
+      }
+
+      // 2. Encolar el comando canónico con la hora exacta local calculada para esa zona
+      const res = await syncService.syncDeviceTime({
+        deviceSerial: device.serial_number,
+        timezone: targetTz
+      })
+
+      onRefresh && onRefresh()
+
+      toast.success(`Comando SET OPTIONS enviado a ${device.serial_number} (${targetTz}, Hora local: ${res.localFormatted.slice(11)}, Offset: ${res.tzOffset}h)`)
+    } catch (err) {
+      console.error('[DeviceDetailModal] Error encolando sincronización de hora:', err)
+      toast.error('Error al sincronizar hora: ' + err.message)
+    } finally {
+      setEnqueuingTime(false)
+    }
+  }
 
   const formatTime = (ts) => {
     if (!ts) return '—'
@@ -52,7 +156,7 @@ export default function DeviceDetailModal({ device, onClose, onOpenSendCommand, 
   const typeInfo = TYPE_CONFIG[device.device_type] || TYPE_CONFIG.general
   const TypeIcon = typeInfo.icon
 
-  const targetTz = device.timezone || 'America/Cancun'
+  const targetTz = selectedTz || device.timezone || 'America/Mexico_City'
   let expectedTimeFormatted = '—'
   try {
     expectedTimeFormatted = new Intl.DateTimeFormat('es-MX', {
@@ -121,6 +225,131 @@ export default function DeviceDetailModal({ device, onClose, onOpenSendCommand, 
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
               <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Resumen Biométrico y Comandos ADMS ── */}
+        <div className="px-6 py-4 bg-slate-50/70 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 space-y-3.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                Capacidad y Censo Biométrico en Terminal
+              </span>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Conteo en tiempo real de registros y comandos canónicos ADMS para este checador
+              </p>
+            </div>
+            {loadingBio && (
+              <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                <RefreshCw className="w-3 h-3 animate-spin text-blue-500" />
+                Actualizando censo...
+              </span>
+            )}
+          </div>
+
+          {/* 3 KPI Cards: Total Usuarios, Rostros, Huellas */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* 1. Total Usuarios */}
+            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-teal-500/10 text-[#03363D] dark:text-teal-400 flex items-center justify-center flex-shrink-0 border border-teal-500/20">
+                <Users className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block truncate">Total Usuarios</span>
+                <p className="text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                  {biometricsCount.totalUsers}
+                </p>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                  {syncStats.synced} sincronizados
+                </span>
+              </div>
+            </div>
+
+            {/* 2. Rostros */}
+            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0 border border-blue-500/20">
+                <ScanFace className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block truncate">Rostros Enrolados</span>
+                <p className="text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                  {biometricsCount.totalFaces}
+                </p>
+                <span className="text-[10px] text-slate-400">
+                  Templates faciales
+                </span>
+              </div>
+            </div>
+
+            {/* 3. Huellas */}
+            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0 border border-amber-500/20">
+                <Fingerprint className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block truncate">Huellas Enroladas</span>
+                <p className="text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                  {biometricsCount.totalFingers}
+                </p>
+                <span className="text-[10px] text-slate-400">
+                  Templates dactilares
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Barra de Comandos Directos: INFO, DATA QUERY USERINFO, Sincronizar Hora */}
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            <button
+              type="button"
+              onClick={handleEnqueueInfo}
+              disabled={enqueuingInfo}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#03363D] hover:bg-[#02272c] text-white flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+              title="Encolar comando canónico INFO para recibir firmware, modelo y capacidades del checador"
+            >
+              <Info className="w-3.5 h-3.5 text-teal-300" />
+              <span>{enqueuingInfo ? 'Encolando INFO...' : 'Pedir Info Checador (INFO)'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleEnqueueQueryUsers}
+              disabled={enqueuingUsers}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+              title="Encolar comando canónico DATA QUERY USERINFO para solicitar el censo de usuarios del dispositivo"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-blue-500 ${enqueuingUsers ? 'animate-spin' : ''}`} />
+              <span>{enqueuingUsers ? 'Solicitando...' : 'Consultar Usuarios (DATA QUERY)'}</span>
+            </button>
+
+            <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 shadow-2xs">
+              <Globe className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+              <select
+                value={selectedTz}
+                onChange={(e) => setSelectedTz(e.target.value)}
+                className="text-xs bg-transparent text-slate-800 dark:text-slate-200 outline-none font-medium pr-1 cursor-pointer"
+                title="Seleccionar zona horaria a sincronizar"
+              >
+                <option value="America/Mexico_City">CDMX / Centro (UTC-6)</option>
+                <option value="America/Tijuana">Tijuana / BC (UTC-7)</option>
+                <option value="America/Cancun">Cancún / QRoo (UTC-5)</option>
+                <option value="America/Hermosillo">Hermosillo / Sonora (UTC-7)</option>
+                <option value="America/Chihuahua">Chihuahua / Juárez (UTC-6)</option>
+                <option value="America/Mazatlan">Mazatlán / Sinaloa (UTC-7)</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleSyncTime(selectedTz)}
+              disabled={enqueuingTime}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/25 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+              title={`Enviar comando canónico SET OPTIONS DateTime=${expectedTimeFormatted},TimeZone a ${selectedTz}`}
+            >
+              <Clock className="w-3.5 h-3.5 text-amber-500" />
+              <span>{enqueuingTime ? 'Enviando...' : `Enviar Hora (${expectedTimeFormatted.slice(0, 5)})`}</span>
             </button>
           </div>
         </div>

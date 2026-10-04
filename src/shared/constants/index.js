@@ -4,6 +4,7 @@ import {
   CreditCard,
   Hash,
   Shuffle,
+  Globe,
 } from 'lucide-react'
 
 // ─── Configuración visual de Roles ──────────────────────────────────────────
@@ -57,4 +58,5 @@ export const METODO_CONFIG = {
   tarjeta:   { icon: CreditCard,   label: 'Tarjeta',   cls: 'bg-amber-500/10   text-amber-600   dark:text-amber-400   border-amber-500/20'   },
   pin:       { icon: Hash,         label: 'PIN',        cls: 'bg-slate-500/10   text-slate-600   dark:text-slate-400   border-slate-500/20'   },
   combinado: { icon: Shuffle,      label: 'Combinado', cls: 'bg-violet-500/10  text-violet-600  dark:text-violet-400  border-violet-500/20'  },
+  web:       { icon: Globe,        label: 'Web',        cls: 'bg-sky-500/10     text-sky-600     dark:text-sky-400     border-sky-500/20'     },
 }

@@ -3,13 +3,22 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import {
   ShieldCheck, Search, Filter, RefreshCw, ChevronLeft, ChevronRight,
-  Eye, X, AlertCircle, CheckCircle2, XCircle, Info, Lock, Clock
+  Eye, X, AlertCircle, CheckCircle2, XCircle, Info, Lock, Clock,
+  Download, FileText
 } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { DatePicker } from '../ui'
+import { useCurrentTenant } from '../../hooks/useCurrentTenant'
+import { useAuth } from '../../../features/auth/hooks/useAuth'
+import { startOfDayCancun, endOfDayCancun } from '../../utils/dateUtils'
+import { openProfessionalAuditReport } from '../../utils/auditReportGenerator'
 
 export default function AuditView({ scope = 'central' }) {
+  const { currentTenantId, currentTenant } = useCurrentTenant()
+  const { profile } = useAuth()
   const [logs, setLogs] = useState([])
   const [usersMap, setUsersMap] = useState({})
   const [tenantsMap, setTenantsMap] = useState({})
@@ -44,23 +53,20 @@ export default function AuditView({ scope = 'central' }) {
   const fetchReferenceData = async () => {
     try {
       const promises = [
-        supabase.from('usuarios_perfiles').select('id, nombre, email, rol')
+        supabase.from('usuarios_perfiles').select('id, nombre, email, rol'),
+        supabase.from('clientes').select('id, nombre_empresa, nombre_comercial')
       ]
-      
-      if (scope === 'central') {
-        promises.push(supabase.from('clientes').select('id, nombre_empresa, nombre_comercial'))
-      }
 
       const results = await Promise.all(promises)
-      const users = results[0].data
-      const tenants = scope === 'central' ? results[1]?.data : []
+      const users = results[0]?.data || []
+      const tenants = results[1]?.data || []
 
       const uMap = {}
-      users?.forEach(u => uMap[u.id] = u)
+      users.forEach(u => uMap[u.id] = u)
       setUsersMap(uMap)
 
       const tMap = {}
-      tenants?.forEach(t => tMap[t.id] = t)
+      tenants.forEach(t => tMap[t.id] = t)
       setTenantsMap(tMap)
     } catch (err) {
       console.error('Error fetching references:', err)
@@ -75,7 +81,10 @@ export default function AuditView({ scope = 'central' }) {
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
 
-      if (scope === 'central' && filterTenant !== 'todos') {
+      // Scope tenant: filtrar explícitamente por cliente_id del tenant activo
+      if (scope === 'tenant' && currentTenantId) {
+        query = query.eq('cliente_id', currentTenantId)
+      } else if (scope === 'central' && filterTenant !== 'todos') {
         if (filterTenant === 'global') query = query.is('cliente_id', null)
         else query = query.eq('cliente_id', filterTenant)
       }
@@ -89,13 +98,11 @@ export default function AuditView({ scope = 'central' }) {
       }
 
       if (filterDateFrom) {
-        query = query.gte('created_at', new Date(filterDateFrom).toISOString())
+        query = query.gte('created_at', startOfDayCancun(filterDateFrom))
       }
 
       if (filterDateTo) {
-        const toDate = new Date(filterDateTo)
-        toDate.setHours(23, 59, 59, 999)
-        query = query.lte('created_at', toDate.toISOString())
+        query = query.lte('created_at', endOfDayCancun(filterDateTo))
       }
 
       if (debouncedSearch) {
@@ -110,7 +117,20 @@ export default function AuditView({ scope = 'central' }) {
 
       if (error) throw error
 
-      setLogs(data || [])
+      // Deduplicar eventos en caso de que coincidan acción, recurso, actor y segundo
+      const raw = data || []
+      const deduped = []
+      const seen = new Set()
+      for (const item of raw) {
+        const timeSec = item.created_at ? new Date(item.created_at).toISOString().slice(0, 19) : item.id
+        const key = `${item.action}_${item.resource_id}_${item.actor_user_id}_${timeSec}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          deduped.push(item)
+        }
+      }
+
+      setLogs(deduped)
       setTotalCount(count || 0)
     } catch (err) {
       console.error('[CentralAuditPage] Error:', err)
@@ -118,7 +138,7 @@ export default function AuditView({ scope = 'central' }) {
     } finally {
       setLoading(false)
     }
-  }, [page, filterTenant, filterAction, filterResult, filterDateFrom, filterDateTo, debouncedSearch])
+  }, [scope, currentTenantId, page, filterTenant, filterAction, filterResult, filterDateFrom, filterDateTo, debouncedSearch])
 
   useEffect(() => {
     fetchReferenceData().then(() => fetchLogs())
@@ -144,7 +164,10 @@ export default function AuditView({ scope = 'central' }) {
       'EMPLOYEE_CREATED': 'Empleado creado',
       'EMPLOYEE_UPDATED': 'Empleado modificado',
       'EMPLOYEE_DEACTIVATED': 'Empleado desactivado',
-      'EMPLOYEE_REACTIVATED': 'Empleado reactivado'
+      'EMPLOYEE_REACTIVATED': 'Empleado reactivado',
+      'INCIDENCE_CREATED': 'Incidencia asignada',
+      'INCIDENCE_UPDATED': 'Incidencia modificada',
+      'INCIDENCE_DELETED': 'Incidencia eliminada'
     }
     return actions[action] || action
   }
@@ -182,11 +205,72 @@ export default function AuditView({ scope = 'central' }) {
     const base = [
       'USER_CREATED', 'DEVICE_REGISTERED', 'DEVICE_DISABLED', 'ROLE_CHANGED', 'SECURITY_DENIED',
       'SCHEDULE_CREATED', 'SCHEDULE_UPDATED', 'SCHEDULE_DELETED', 'SCHEDULE_ASSIGNED', 'SCHEDULE_UNASSIGNED',
-      'EMPLOYEE_CREATED', 'EMPLOYEE_UPDATED', 'EMPLOYEE_DEACTIVATED', 'EMPLOYEE_REACTIVATED'
+      'EMPLOYEE_CREATED', 'EMPLOYEE_UPDATED', 'EMPLOYEE_DEACTIVATED', 'EMPLOYEE_REACTIVATED',
+      'INCIDENCE_CREATED', 'INCIDENCE_UPDATED', 'INCIDENCE_DELETED'
     ]
     logs.forEach(l => { if (!base.includes(l.action)) base.push(l.action) })
     return base
   }, [logs])
+
+  // ── Exportar CSV ────────────────────────────────────────────────────────────
+  const exportToCsv = () => {
+    if (logs.length === 0) {
+      toast.error('No hay registros para exportar.')
+      return
+    }
+    const rows = logs.map(log => {
+      const actor = log.actor_user_id ? usersMap[log.actor_user_id] : null
+      const tenant = log.cliente_id ? tenantsMap[log.cliente_id] : null
+      const actorName = actor?.nombre || (actor?.email ? actor.email.split('@')[0] : null) || (log.actor_user_id === profile?.id ? (profile?.nombre || profile?.email?.split('@')[0]) : null) || (log.actor_role ? `Usuario (${log.actor_role})` : (log.actor_user_id ? 'Usuario' : 'Sistema Automático'))
+      const tenantName = tenant ? (tenant.nombre_comercial || tenant.nombre_empresa) : (currentTenant ? (currentTenant.nombre_comercial || currentTenant.nombre_empresa) : 'Global')
+      return {
+        'Fecha / Hora': format(new Date(log.created_at), 'dd/MM/yyyy HH:mm:ss'),
+        'Actor':        actorName,
+        'Rol':          log.actor_role || (actor?.rol ?? '—'),
+        'Empresa':      tenantName,
+        'Acción':       formatAction(log.action),
+        'Tipo Recurso': log.resource_type || '—',
+        'Recurso ID':   log.resource_id  || '—',
+        'Resultado':    log.result       || '—',
+      }
+    })
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Auditoría')
+    const fileName = `auditoria_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`
+    XLSX.writeFile(wb, fileName, { bookType: 'csv' })
+    toast.success(`Exportado: ${fileName}`)
+  }
+
+  // ── Exportar Reporte Profesional PDF ────────────────────────────────────────
+  const exportToPdf = () => {
+    if (logs.length === 0) {
+      toast.error('No hay registros para generar el reporte.')
+      return
+    }
+
+    const result = openProfessionalAuditReport({
+      logs,
+      usersMap,
+      tenantsMap,
+      currentUser: profile,
+      activeTenant: currentTenant,
+      filters: {
+        action: filterAction,
+        result: filterResult,
+        dateFrom: filterDateFrom,
+        dateTo: filterDateTo,
+        search: debouncedSearch
+      },
+      scope
+    })
+
+    if (result.success) {
+      toast.success(`Informe generado: ${result.folio}`)
+    } else {
+      toast.error(result.message || 'Error al abrir el reporte.')
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -204,13 +288,31 @@ export default function AuditView({ scope = 'central' }) {
             Registro inmutable de eventos del sistema e intentos de acceso
           </p>
         </div>
-        <button
-          onClick={fetchLogs}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white transition-all bg-[#03363D] border border-transparent rounded-lg hover:bg-[#022429] focus:ring-2 focus:ring-[#BDD9D7] focus:ring-offset-1"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refrescar
-        </button>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={fetchLogs}
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 text-sm font-semibold text-white transition-all bg-[#03363D] hover:bg-[#022429] rounded-lg shadow-sm border border-transparent"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refrescar
+          </button>
+          <button
+            onClick={exportToCsv}
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 text-sm font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-all shadow-sm cursor-pointer"
+            title="Exportar registros visibles a archivo CSV"
+          >
+            <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            Exportar CSV
+          </button>
+          <button
+            onClick={exportToPdf}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-bold text-white bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 rounded-lg shadow-md hover:shadow-lg transition-all border border-rose-500 cursor-pointer"
+            title="Generar informe oficial y exportar a PDF"
+          >
+            <FileText className="w-4 h-4 text-white" />
+            Reporte PDF
+          </button>
+        </div>
       </div>
 
       <div className="mt-6 flex flex-col xl:flex-row gap-4">
@@ -284,20 +386,20 @@ export default function AuditView({ scope = 'central' }) {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Desde</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={filterDateFrom}
                     onChange={e => { setFilterDateFrom(e.target.value); setPage(1); }}
-                    className="w-full px-2 py-1.5 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-[#BDD9D7]"
+                    size="sm"
+                    placeholder="Desde"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Hasta</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={filterDateTo}
                     onChange={e => { setFilterDateTo(e.target.value); setPage(1); }}
-                    className="w-full px-2 py-1.5 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-[#BDD9D7]"
+                    size="sm"
+                    placeholder="Hasta"
                   />
                 </div>
               </div>
@@ -324,13 +426,25 @@ export default function AuditView({ scope = 'central' }) {
 
         {/* Table Area */}
         <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden flex flex-col min-w-0">
+          {/* Sub-header de acciones de la tabla */}
+          <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-slate-950/50">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                Bitácora de Eventos
+              </span>
+              <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200">
+                {totalCount} registros
+              </span>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-950/50 border-b border-slate-200 dark:border-slate-800">
                   <th className="px-4 py-3 font-semibold text-slate-500">Fecha / Hora</th>
                   <th className="px-4 py-3 font-semibold text-slate-500">Actor</th>
-                  {scope === 'central' && <th className="px-4 py-3 font-semibold text-slate-500">Cliente</th>}
+                  {scope === 'central' && <th className="px-4 py-3 font-semibold text-slate-500">Empresa</th>}
                   <th className="px-4 py-3 font-semibold text-slate-500">Acción</th>
                   <th className="px-4 py-3 font-semibold text-slate-500">Recurso</th>
                   <th className="px-4 py-3 font-semibold text-slate-500">Resultado</th>
@@ -357,6 +471,8 @@ export default function AuditView({ scope = 'central' }) {
                   logs.map(log => {
                     const actor = log.actor_user_id ? usersMap[log.actor_user_id] : null
                     const tenant = log.cliente_id ? tenantsMap[log.cliente_id] : null
+                    const actorDisplayName = actor?.nombre || (actor?.email ? actor.email.split('@')[0] : null) || (log.actor_user_id === profile?.id ? (profile?.nombre || profile?.email?.split('@')[0]) : null) || (log.actor_role ? `Usuario (${log.actor_role})` : (log.actor_user_id ? 'Usuario' : 'Sistema Automático'))
+                    const tenantDisplayName = tenant ? (tenant.nombre_comercial || tenant.nombre_empresa) : (currentTenant && log.cliente_id === currentTenant.id ? (currentTenant.nombre_comercial || currentTenant.nombre_empresa) : (log.cliente_id ? 'Empresa Local' : 'Global'))
                     
                     return (
                       <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
@@ -371,27 +487,21 @@ export default function AuditView({ scope = 'central' }) {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          {actor ? (
-                            <div className="flex flex-col">
-                              <span className="font-medium text-slate-900 dark:text-slate-100">{actor.nombre}</span>
-                              <span className="text-[10px] text-slate-500">{log.actor_role || actor.rol}</span>
-                            </div>
-                          ) : log.actor_user_id ? (
-                            <div className="flex flex-col">
-                              <span className="font-medium text-slate-600 dark:text-slate-400">Usuario no disponible</span>
-                              <span className="text-[10px] text-slate-400 font-mono truncate max-w-[120px]">{log.actor_user_id}</span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-500 italic">Sistema</span>
-                          )}
+                          <div className="flex flex-col">
+                            <span className="font-medium text-slate-900 dark:text-slate-100">
+                              {actorDisplayName}
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              {log.actor_role || actor?.rol || 'operación'}
+                              {actor?.email && actor?.nombre ? ` · ${actor.email}` : ''}
+                            </span>
+                          </div>
                         </td>
                         {scope === 'central' && (
                           <td className="px-4 py-3">
-                            {tenant ? (
-                              <span className="font-medium text-slate-700 dark:text-slate-300">{tenant.nombre_comercial || tenant.nombre_empresa}</span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">Global</span>
-                            )}
+                            <span className="font-medium text-slate-700 dark:text-slate-300">
+                              {tenantDisplayName}
+                            </span>
                           </td>
                         )}
                         <td className="px-4 py-3">
@@ -523,6 +633,47 @@ export default function AuditView({ scope = 'central' }) {
                   </div>
                 </div>
               </div>
+
+              {/* Resumen Especializado para Incidencias */}
+              {(selectedLog.resource_type === 'Incidencia' || selectedLog.action?.startsWith('INCIDENCE_')) && selectedLog.metadata && (
+                <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/30 space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                    <FileText className="w-4 h-4" /> Detalle de Incidencia
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-slate-500 font-medium">Colaborador:</span>
+                      <p className="font-bold text-slate-800 dark:text-white text-sm">
+                        {selectedLog.metadata.empleado_nombre || selectedLog.metadata.empleado_id || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 font-medium">Tipo de Incidencia:</span>
+                      <p className="font-bold text-slate-800 dark:text-white text-sm">
+                        {selectedLog.metadata.tipo_incidencia || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 font-medium">Periodo:</span>
+                      <p className="font-semibold text-slate-700 dark:text-slate-300">
+                        {selectedLog.metadata.fecha_inicio ? `Del ${selectedLog.metadata.fecha_inicio} al ${selectedLog.metadata.fecha_fin}` : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 font-medium">Estado:</span>
+                      <p className="font-semibold text-slate-700 dark:text-slate-300">
+                        {selectedLog.metadata.estado || '—'}
+                      </p>
+                    </div>
+                  </div>
+                  {selectedLog.metadata.descripcion && (
+                    <div className="text-xs pt-2 border-t border-blue-100 dark:border-blue-900/40">
+                      <span className="text-slate-500 font-medium">Motivo / Notas:</span>
+                      <p className="text-slate-700 dark:text-slate-300 mt-0.5 italic">"{selectedLog.metadata.descripcion}"</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Metadata JSON */}
               {selectedLog.metadata && (

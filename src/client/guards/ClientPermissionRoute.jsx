@@ -22,6 +22,11 @@ export default function ClientPermissionRoute({ permission, children }) {
   const { profile, modulePermissions } = useAuth()
   const location = useLocation()
 
+  const isColaborador = profile?.rol?.toLowerCase() === 'colaborador'
+  if (isColaborador) {
+    return <Navigate to="/portal-colaborador" replace />
+  }
+
   const allowed = hasPermission(profile, permission, modulePermissions)
 
   if (!allowed) {

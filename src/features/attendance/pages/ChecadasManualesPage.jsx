@@ -3,8 +3,9 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { useConfirm } from '../../../shared/hooks/useConfirm'
+import { DatePicker } from '../../../shared/components/ui'
 import {
   Clock, Plus, Search, Filter, RefreshCw,
   CheckCircle2, XCircle, AlertTriangle, Edit3,
@@ -271,12 +272,11 @@ function ModalChecadaManual({ checada, empleados, supervisores, clienteId, userE
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 ">
                 Fecha <span className="text-blue-600 dark:text-blue-400">*</span>
               </label>
-              <input
-                type="date"
+              <DatePicker
                 value={fecha}
                 onChange={e => setFecha(e.target.value)}
                 required
-                className="w-full py-2 px-3 text-xs sm:text-sm rounded-md border border-slate-200 dark:border-slate-800  bg-white  text-slate-900 dark:text-white  outline-none focus:border-blue-500"
+                placeholder="Seleccionar fecha"
               />
             </div>
 
@@ -459,14 +459,14 @@ export default function ChecadasManuales() {
     const [asigRes, empRes, supRes] = await Promise.all([
       supabase
         .from('registro_asistencia')
-        .select('*, empleado:empleados(id, nombre, apellido, clave_empleado, departamento, puesto, hikvision_device_userid)')
+        .select('*, empleado:empleados(id, nombre, apellido, clave_empleado, departamento, puesto, device_userid)')
         .eq('cliente_id', clienteId)
         .gte('verificado_at', startDay)
         .lte('verificado_at', endDay)
         .order('verificado_at', { ascending: false }),
       supabase
         .from('empleados')
-        .select('id, nombre, apellido, clave_empleado, departamento, puesto, hikvision_device_userid')
+        .select('id, nombre, apellido, clave_empleado, departamento, puesto, device_userid')
         .eq('cliente_id', clienteId)
         .eq('activo', true)
         .order('apellido', { ascending: true }),
@@ -524,7 +524,7 @@ export default function ChecadasManuales() {
         !q ||
         `${emp.nombre} ${emp.apellido}`.toLowerCase().includes(q) ||
         emp.clave_empleado?.toLowerCase().includes(q) ||
-        emp.hikvision_device_userid?.toLowerCase().includes(q) ||
+        emp.device_userid?.toLowerCase().includes(q) ||
         a.motivo_manual?.toLowerCase().includes(q) ||
         a.autorizado_por?.toLowerCase().includes(q)
 
@@ -546,7 +546,6 @@ export default function ChecadasManuales() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]  text-slate-900 dark:text-white ">
-      <Toaster position="top-right" containerStyle={{ top: 20, right: 20 }} />
       {ConfirmDialogNode}
 
 
@@ -571,14 +570,12 @@ export default function ChecadasManuales() {
 
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Selector de Fecha */}
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white dark:bg-white border border-slate-200 dark:border-slate-800  text-xs font-semibold text-slate-700 dark:text-slate-300  shadow-sm">
-                <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                <span>Fecha:</span>
-                <input
-                  type="date"
+              <div className="w-44">
+                <DatePicker
                   value={fechaFiltro}
                   onChange={e => setFechaFiltro(e.target.value)}
-                  className="bg-transparent font-bold text-blue-600 dark:text-blue-400  outline-none cursor-pointer"
+                  placeholder="Filtrar por fecha"
+                  size="sm"
                 />
               </div>
 

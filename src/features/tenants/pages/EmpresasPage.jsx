@@ -3,8 +3,9 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { useConfirm } from '../../../shared/hooks/useConfirm'
+import { DatePicker } from '../../../shared/components/ui'
 import {
   Building2, Plus, Search, Filter, RefreshCw,
   Edit3, Trash2, X, Save, Eye, CheckCircle2,
@@ -349,11 +350,10 @@ function ModalEmpresa({ empresa, onClose, onSaved }) {
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                   Fecha de Vencimiento / Próxima Facturación
                 </label>
-                <input
-                  type="date"
+                <DatePicker
                   value={form.fecha_vencimiento}
                   onChange={setField('fecha_vencimiento')}
-                  className="w-full py-2.5 px-3 text-xs sm:text-sm rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#24303f] text-slate-800 dark:text-slate-100 outline-none focus:border-blue-500 font-mono"
+                  placeholder="Fecha de vencimiento"
                 />
               </div>
             </div>
@@ -794,8 +794,6 @@ export default function EmpresasPage() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f8fafc] dark:bg-[#0f172a] text-slate-800 dark:text-slate-100">
-      <Toaster position="top-right" containerStyle={{ top: 20, right: 20 }} />
-
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden">

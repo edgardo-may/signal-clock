@@ -1,6 +1,7 @@
 // src/pages/AsignacionHorarios.jsx — Agenda y Asignación de Horarios a Colaboradores
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { scheduleLifecycleService } from '../services/scheduleLifecycleService'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
 import toast, { Toaster } from 'react-hot-toast'
@@ -9,6 +10,7 @@ import { useCurrentTenant } from '../../../shared/hooks/useCurrentTenant'
 import { usePagination } from '../../../shared/hooks/usePagination'
 import TenantSelector from '../../../shared/components/Layout/TenantSelector'
 import PaginationControl from '../../../shared/components/ui/PaginationControl'
+import { DatePicker } from '../../../shared/components/ui'
 import {
   CalendarDays, Clock, Search, Filter,
   CheckCircle2, AlertTriangle, UserCheck,
@@ -80,6 +82,10 @@ function ModalAsignarHorario({
       toast.error('Indica la fecha de fin o marca como permanente')
       return
     }
+    if (!notas.trim()) {
+      toast.error('El motivo de la asignación es obligatorio')
+      return
+    }
 
     const ok = await confirmDialog({
       title: '¿Asignar horario?',
@@ -91,30 +97,29 @@ function ModalAsignarHorario({
 
     setSaving(true)
     try {
-      // Desactivar asignaciones activas previas de estos empleados
       const employeeIds = selectedEmployees.map(emp => emp.id)
-      await supabase
-        .from('empleados_horarios')
-        .update({ activo: false, actualizado_at: new Date().toISOString() })
-        .in('empleado_id', employeeIds)
-        .eq('activo', true)
-
-      // Insertar nuevas asignaciones
-      const payloads = selectedEmployees.map(emp => ({
-        cliente_id: clienteId,
-        empleado_id: emp.id,
-        horario_id: horarioId,
-        fecha_inicio: fechaInicio,
-        fecha_fin: esPermanente ? null : (fechaFin || null),
-        activo: true,
-        notas: notas.trim() || null,
-      }))
-
-      const { error } = await supabase
-        .from('empleados_horarios')
-        .insert(payloads)
-
-      if (error) throw error
+      const request = {
+        clienteId,
+        empleadoIds: employeeIds,
+        horarioId,
+        effectiveDate: fechaInicio,
+        fechaFin: esPermanente ? null : fechaFin,
+        reason: notas.trim(),
+      }
+      const today = new Date().toISOString().slice(0, 10)
+      if (fechaInicio < today) {
+        const preview = await scheduleLifecycleService.assignOrReplace({ ...request, previewOnly: true })
+        const approved = await confirmDialog({
+          title: 'Confirmar cambio retroactivo',
+          message: `Afecta ${preview?.affected_attendance_count || 0} checada(s) y ${preview?.affected_workday_count || 0} workday(s).`,
+          variant: 'warning',
+          confirmLabel: 'Confirmar cambio histórico',
+        })
+        if (!approved) return
+        await scheduleLifecycleService.assignOrReplace({ ...request, retroactiveConfirmed: true })
+      } else {
+        await scheduleLifecycleService.assignOrReplace(request)
+      }
 
       toast.success(`Horario asignado a ${selectedEmployees.length} colaborador(es)`)
       onSaved()
@@ -196,12 +201,11 @@ function ModalAsignarHorario({
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 ">
                 Fecha de Inicio <span className="text-blue-600 dark:text-blue-400">*</span>
               </label>
-              <input
-                type="date"
+              <DatePicker
                 value={fechaInicio}
                 onChange={e => setFechaInicio(e.target.value)}
                 required
-                className="w-full py-2 px-3 text-xs sm:text-sm rounded-md border border-slate-200 dark:border-slate-800  bg-white  text-slate-900 dark:text-white  outline-none focus:border-blue-500"
+                placeholder="Inicio"
               />
             </div>
 
@@ -209,15 +213,14 @@ function ModalAsignarHorario({
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 ">
                 Fecha de Fin
               </label>
-              <input
-                type="date"
+              <DatePicker
                 value={fechaFin}
                 onChange={e => {
                   setFechaFin(e.target.value)
                   if (e.target.value) setEsPermanente(false)
                 }}
                 disabled={esPermanente}
-                className="w-full py-2 px-3 text-xs sm:text-sm rounded-md border border-slate-200 dark:border-slate-800  bg-white  text-slate-900 dark:text-white  outline-none focus:border-blue-500 disabled:opacity-50"
+                placeholder="Fin (o permanente)"
               />
             </div>
           </div>
@@ -277,6 +280,59 @@ function ModalAsignarHorario({
   )
 }
 
+function ModalCerrarHorario({ empleado, clienteId, onClose, onSaved }) {
+  const [fechaFin, setFechaFin] = useState(() => new Date().toISOString().slice(0, 10))
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const submit = async (event) => {
+    event.preventDefault()
+    if (!reason.trim()) {
+      toast.error('La desasignación requiere un motivo')
+      return
+    }
+    setSaving(true)
+    try {
+      await scheduleLifecycleService.close({
+        clienteId,
+        empleadoIds: [empleado.id],
+        effectiveDate: fechaFin,
+        reason: reason.trim(),
+      })
+      toast.success(`Horario cerrado para ${empleado.nombre}`)
+      onSaved()
+      onClose()
+    } catch (err) {
+      toast.error(err?.message || 'No se pudo cerrar el horario')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <form onSubmit={submit} className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-2xl space-y-5">
+        <div>
+          <h3 className="text-base font-bold text-slate-900">Cerrar vigencia de horario</h3>
+          <p className="mt-1 text-xs text-slate-600">{empleado.nombre} {empleado.apellido}. La fecha es el último día inclusive; la asignación histórica permanece válida.</p>
+        </div>
+        <div className="space-y-1.5">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">Último día con horario *</label>
+          <DatePicker value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} required placeholder="Fecha efectiva" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">Motivo *</label>
+          <input value={reason} onChange={(e) => setReason(e.target.value)} required className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#03363D]" placeholder="Ej. baja temporal o fin de cobertura" />
+        </div>
+        <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
+          <button type="button" onClick={onClose} disabled={saving} className="px-4 py-2 text-sm text-slate-700">Cancelar</button>
+          <button type="submit" disabled={saving} className="rounded-md bg-[#03363D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Cerrando…' : 'Cerrar vigencia'}</button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL: ASIGNACIÓN DE HORARIOS
 // ═══════════════════════════════════════════════════════════════
@@ -304,6 +360,7 @@ export default function AsignacionHorarios() {
   const [selectedIds, setSelectedIds] = useState([])
 
   const [modalAsignar, setModalAsignar] = useState(null)
+  const [modalCerrar, setModalCerrar] = useState(null)
 
   // Cargar datos
   const fetchData = useCallback(async () => {
@@ -417,38 +474,14 @@ export default function AsignacionHorarios() {
     )
   }
 
-  const { confirmDialog, ConfirmDialogNode } = useConfirm()
-
   // Desasignar horario
   const handleDesasignar = async (empleado) => {
-    const ok = await confirmDialog({
-      title: '¿Retirar horario?',
-      message: `Se eliminará la asignación actual de horario para ${empleado.nombre}.`,
-      variant: 'warning',
-      confirmLabel: 'Sí, retirar'
-    })
-    if (!ok) return
-
-    try {
-      const { error } = await supabase
-        .from('empleados_horarios')
-        .update({ activo: false, actualizado_at: new Date().toISOString() })
-        .eq('empleado_id', empleado.id)
-        .eq('activo', true)
-
-      if (error) throw error
-      toast.success(`Horario retirado a ${empleado.nombre}`)
-      fetchData()
-    } catch (err) {
-      toast.error('Error al desasignar horario: ' + err.message)
-    }
+    setModalCerrar(empleado)
   }
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]  text-slate-900 dark:text-white ">
       <Toaster position="top-right" containerStyle={{ top: 20, right: 20 }} />
-      {ConfirmDialogNode}
-
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
@@ -788,6 +821,14 @@ export default function AsignacionHorarios() {
             setSelectedIds([])
             fetchData()
           }}
+        />
+      )}
+      {modalCerrar && (
+        <ModalCerrarHorario
+          empleado={modalCerrar}
+          clienteId={currentTenantId}
+          onClose={() => setModalCerrar(null)}
+          onSaved={fetchData}
         />
       )}
     </div>

@@ -496,8 +496,8 @@ describe('ADV-M: Cantidad impar de marcajes', () => {
     const result = AttendanceEngine.process(TENANT_A, EMP_A, shift, rawPunches, { timezone: TZ_CDMX })
 
     // El motor interpreta la cantidad impar como missingExit (el último punch queda sin par)
-    assert.equal(result.missingExit, false)
-    assert.equal(result.workdayState, 'COMPLETE')
+    assert.equal(result.missingExit, true)
+    assert.equal(result.workdayState, 'INCOMPLETE')
     assert.equal(result.workedMinutes, 300)
     assert.equal(result.supplementalEvents.length, 1)
 
@@ -529,9 +529,9 @@ describe('ADV-N: 5 marcajes', () => {
 
     const result = AttendanceEngine.process(TENANT_A, EMP_A, shift, rawPunches, { timezone: TZ_CDMX })
 
-    assert.equal(result.missingExit, false)
-    assert.equal(result.workdayState, 'COMPLETE')
-    assert.equal(result.workedMinutes, 300)
+    assert.equal(result.missingExit, true)
+    assert.equal(result.workdayState, 'INCOMPLETE')
+    assert.equal(result.workedMinutes, 420)
     assert.equal(result.supplementalEvents.length, 3)
   })
 })

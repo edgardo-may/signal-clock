@@ -2,70 +2,185 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { usePagination } from '../../../shared/hooks/usePagination'
 import PaginationControl from '../../../shared/components/ui/PaginationControl'
 import { useCurrentTenant } from '../../../shared/hooks/useCurrentTenant'
+import { DatePicker } from '../../../shared/components/ui'
 import {
   FileSpreadsheet, Search, RefreshCw, 
   Clock, Calendar, User, Building2, Download
 } from 'lucide-react'
 
-// Utilidad para agrupar por fecha
+// Utilidad para resolver la dirección de un marcaje
+function resolvePunchDirection(punch, hasOpenCycle) {
+  const rawStatus = punch?.raw_payload?.raw_status ? String(punch.raw_payload.raw_status).trim() : null
+  const isAuto = punch?.raw_payload?.auto_resolved === true
+  const tipo = String(punch?.tipo_verificacion || '').toLowerCase().trim()
+
+  // Regla de Oro: Si no hay ciclo abierto, la primera perforación siempre abre jornada como ENTRADA
+  // (un colaborador no puede registrar salida sin entrada previa; resuelve checadas 255 auto-resolved o fuera de horario)
+  if (!hasOpenCycle) {
+    return 'IN'
+  }
+
+  // Si el hardware envió 255 (sin botón de función) o fue auto-resuelto:
+  // Al haber ya una entrada abierta, actúa como SALIDA de cierre
+  if (rawStatus === '255' || isAuto) {
+    return 'OUT'
+  }
+
+  if (tipo === '0' || tipo === 'entrada' || tipo === 'in' || tipo === 'check_in') return 'IN'
+  if (tipo === '1' || tipo === 'salida' || tipo === 'out' || tipo === 'check_out') return 'OUT'
+  if (tipo === '2' || tipo === 'descanso_inicio' || tipo === 'comida_salida' || tipo === 'break_out') return 'BREAK_OUT'
+  if (tipo === '3' || tipo === 'descanso_fin' || tipo === 'comida_entrada' || tipo === 'break_in') return 'BREAK_IN'
+
+  return 'OUT'
+}
+
+// Utilidad para obtener YYYY-MM-DD local de una checada
+function getPunchDateStr(ts) {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// Formateador seguro de hora (HH:MM:SS)
+function formatTime(d) {
+  if (!d) return '—'
+  const dateObj = d instanceof Date ? d : new Date(d)
+  if (isNaN(dateObj.getTime())) return '—'
+  return dateObj.toLocaleTimeString('es-MX', { hour12: false })
+}
+
+// Formateador seguro de duración (HH:MM:SS) para que minutos y segundos nunca excedan de 59
+function formatDuration(diffMs) {
+  if (!diffMs || diffMs <= 0 || isNaN(diffMs)) return '—'
+  const totalSeconds = Math.floor(diffMs / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+// Reconstrucción lógica en memoria de ciclos de jornada por empleado
 function groupByDateAndEmployee(asistencias, empleados) {
-  const groups = {}
+  const empMap = new Map((empleados || []).map(e => [e.id, e]))
 
+  // 1. Agrupar checadas por empleado
+  const punchesByEmp = {}
   asistencias.forEach(a => {
-    // Tomar solo la fecha YYYY-MM-DD
-    const dateStr = a.verificado_at.slice(0, 10)
     const empId = a.empleado_id
-    const key = `${dateStr}_${empId}`
-
-    if (!groups[key]) {
-      const emp = empleados.find(e => e.id === empId) || {}
-      groups[key] = {
-        empleado_id: empId,
-        id_persona: emp.hikvision_device_userid || emp.clave_empleado || '—',
-        nombre: emp.nombre ? `${emp.nombre} ${emp.apellido}` : 'Desconocido',
-        departamento: emp.departamento || '—',
-        fecha: dateStr,
-        punches: []
-      }
-    }
-    groups[key].punches.push(new Date(a.verificado_at))
+    if (!punchesByEmp[empId]) punchesByEmp[empId] = []
+    punchesByEmp[empId].push(a)
   })
 
-  // Procesar cada grupo para sacar primera, última y horas
-  const result = Object.values(groups).map(g => {
-    // Ordenar cronológicamente
-    g.punches.sort((a, b) => a - b)
-    
-    const firstPunch = g.punches[0]
-    const lastPunch = g.punches[g.punches.length - 1]
-    const numPunches = g.punches.length
-    
-    // Formatear horas (HH:MM:SS)
-    const formatTime = (d) => d.toLocaleTimeString('es-MX', { hour12: false })
-    
-    let hoursWorked = 0
-    if (numPunches > 1) {
-      const diffMs = lastPunch - firstPunch
-      hoursWorked = diffMs / (1000 * 60 * 60)
+  const cycles = []
+
+  // 2. Para cada empleado, ordenar cronológicamente y reconstruir ciclos:
+  //    IN  -> abre ciclo (determina la fecha de la jornada)
+  //    OUT -> cierra el último ciclo abierto válido (máx 24h)
+  Object.entries(punchesByEmp).forEach(([empId, empPunches]) => {
+    const emp = empMap.get(empId) || {}
+    const idPersona = emp.device_userid || emp.clave_empleado || '—'
+    const nombre = emp.nombre ? `${emp.nombre} ${emp.apellido}` : 'Desconocido'
+    const departamento = emp.departamento || '—'
+
+    // Orden cronológico estricto
+    const sorted = [...empPunches].sort((a, b) => new Date(a.verificado_at) - new Date(b.verificado_at))
+
+    let currentCycle = null
+
+    sorted.forEach(punch => {
+      const punchDate = new Date(punch.verificado_at)
+      const punchDateStr = getPunchDateStr(punch.verificado_at)
+      const dir = resolvePunchDirection(punch, Boolean(currentCycle))
+
+      // Evitar doble tap idéntico accidental dentro de 60 segundos
+      if (currentCycle && dir === 'IN' && !currentCycle.salida) {
+        const diffMs = punchDate - currentCycle.entrada
+        if (diffMs >= 0 && diffMs < 60000) {
+          return
+        }
+      }
+
+      if (dir === 'IN') {
+        // Si había un ciclo abierto sin salida, se consolida como jornada abierta
+        if (currentCycle) {
+          cycles.push(currentCycle)
+        }
+        // Nueva jornada que conserva como fecha la fecha de la entrada
+        currentCycle = {
+          idPersona,
+          nombre,
+          departamento,
+          fecha: punchDateStr,
+          entrada: punchDate,
+          salida: null,
+          numPunches: 1
+        }
+      } else if (dir === 'OUT') {
+        // Salida que cierra el último ciclo abierto válido (máximo 24h)
+        const isWithinWindow = currentCycle && (punchDate - currentCycle.entrada <= 24 * 60 * 60 * 1000)
+
+        if (currentCycle && isWithinWindow) {
+          currentCycle.salida = punchDate
+          currentCycle.numPunches += 1
+          cycles.push(currentCycle)
+          currentCycle = null
+        } else {
+          if (currentCycle) {
+            cycles.push(currentCycle)
+          }
+          // Si no había ciclo previo o excede 24h, abre nueva jornada como entrada
+          currentCycle = {
+            idPersona,
+            nombre,
+            departamento,
+            fecha: punchDateStr,
+            entrada: punchDate,
+            salida: null,
+            numPunches: 1
+          }
+        }
+      } else if (dir === 'BREAK_OUT' || dir === 'BREAK_IN') {
+        if (currentCycle) {
+          currentCycle.numPunches += 1
+        }
+      }
+    })
+
+    if (currentCycle) {
+      cycles.push(currentCycle)
+    }
+  })
+
+  // 3. Proyectar al formato de filas requerido por la tabla del reporte
+  const result = cycles.map(c => {
+    let durationStr = '—'
+    if (c.entrada && c.salida) {
+      const diffMs = c.salida - c.entrada
+      if (diffMs > 0) {
+        durationStr = formatDuration(diffMs)
+      }
     }
 
-    // Día de la semana
-    const dayOfWeek = new Intl.DateTimeFormat('es-MX', { weekday: 'short' }).format(new Date(`${g.fecha}T12:00:00`))
+    const dayOfWeek = new Intl.DateTimeFormat('es-MX', { weekday: 'short' }).format(new Date(`${c.fecha}T12:00:00`))
 
     return {
-      'ID de persona': g.id_persona,
-      'Nombre de la persona': g.nombre,
-      'Departamento': g.departamento,
-      'Fecha': g.fecha,
+      'ID de persona': c.idPersona,
+      'Nombre de la persona': c.nombre,
+      'Departamento': c.departamento,
+      'Fecha': c.fecha,
       'Día de la semana': dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1),
-      'Primera perforación': formatTime(firstPunch),
-      'Última perforación': formatTime(lastPunch),
-      'Número de perforaciones': numPunches,
-      'Horas reales de trabajo': hoursWorked > 0 ? hoursWorked.toFixed(2) : '0'
+      'Primera perforación': formatTime(c.entrada),
+      'Última perforación': formatTime(c.salida),
+      'Número de perforaciones': c.numPunches,
+      'Horas reales de trabajo': durationStr
     }
   })
 
@@ -103,9 +218,9 @@ export default function VisorAsistenciasPage() {
         .eq('cliente_id', currentTenantId)
       if (empError) throw empError
 
-      // 2. Cargar Asistencias en el rango
-      const start = new Date(`${fechaInicio}T00:00:00`).toISOString()
-      const end = new Date(`${fechaFin}T23:59:59.999`).toISOString()
+      // 2. Cargar Asistencias en el rango con buffer de 24h para cruces de medianoche
+      const start = new Date(new Date(`${fechaInicio}T00:00:00`).getTime() - 24 * 60 * 60 * 1000).toISOString()
+      const end = new Date(new Date(`${fechaFin}T23:59:59.999`).getTime() + 24 * 60 * 60 * 1000).toISOString()
 
       const { data: asisData, error: asisError } = await supabase
         .from('registro_asistencia')
@@ -115,9 +230,10 @@ export default function VisorAsistenciasPage() {
         .lte('verificado_at', end)
       if (asisError) throw asisError
 
-      // 3. Transformar los datos al formato deseado
+      // 3. Reconstruir ciclos y filtrar únicamente las jornadas cuya fecha pertenezca al rango seleccionado
       const processedData = groupByDateAndEmployee(asisData || [], empData || [])
-      setFileData(processedData)
+      const inRangeData = processedData.filter(row => row.Fecha >= fechaInicio && row.Fecha <= fechaFin)
+      setFileData(inRangeData)
       
     } catch (error) {
       console.error(error)
@@ -191,7 +307,6 @@ export default function VisorAsistenciasPage() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC] dark:bg-slate-900 text-slate-900 dark:text-white">
-      <Toaster position="top-right" />
       
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
@@ -236,22 +351,20 @@ export default function VisorAsistenciasPage() {
             <div className="flex flex-col sm:flex-row items-end justify-between gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
               
               <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
-                <div className="space-y-1.5 w-full sm:w-auto">
+                <div className="space-y-1.5 w-full sm:w-44">
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Desde</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={fechaInicio}
                     onChange={(e) => setFechaInicio(e.target.value)}
-                    className="w-full sm:w-auto px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500 text-slate-900 dark:text-white"
+                    placeholder="Fecha inicio"
                   />
                 </div>
-                <div className="space-y-1.5 w-full sm:w-auto">
+                <div className="space-y-1.5 w-full sm:w-44">
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Hasta</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={fechaFin}
                     onChange={(e) => setFechaFin(e.target.value)}
-                    className="w-full sm:w-auto px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500 text-slate-900 dark:text-white"
+                    placeholder="Fecha fin"
                   />
                 </div>
                 <div className="pt-5 w-full sm:w-auto">
@@ -302,8 +415,8 @@ export default function VisorAsistenciasPage() {
                         <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
                           {headers.map((h, i) => (
                             <td key={i} className="px-4 py-3 whitespace-nowrap text-slate-700 dark:text-slate-300">
-                              {h === 'Primera perforación' || h === 'Última perforación' ? (
-                                <span className="font-mono text-xs">{row[h]}</span>
+                              {h === 'Primera perforación' || h === 'Última perforación' || h === 'Horas reales de trabajo' ? (
+                                <span className="font-mono text-xs font-semibold">{row[h]}</span>
                               ) : h === 'Número de perforaciones' ? (
                                 <span className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 text-xs font-bold">
                                   {row[h]}

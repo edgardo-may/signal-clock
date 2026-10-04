@@ -83,16 +83,11 @@ export default function CentralUsersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              Usuarios Globales
-            </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-              {usuarios.length} Usuarios Registrados
-            </span>
-          </div>
-          <p className="text-xs sm:text-sm text-slate-550 dark:text-slate-400 mt-1">
-            Supervisión y control de accesos administrativos en todas las empresas
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">
+            Usuarios
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Cuentas del sistema en todas las empresas. Usuario ≠ Empleado.
           </p>
         </div>
 

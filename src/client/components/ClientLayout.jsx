@@ -2,15 +2,12 @@
 import { useState } from 'react'
 import ClientSidebar from './ClientSidebar'
 import ClientHeader from './ClientHeader'
-import { Toaster } from 'react-hot-toast'
 
 export default function ClientLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : true))
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC] dark:bg-[#0B132B] text-slate-900 dark:text-white font-sans transition-colors">
-      <Toaster position="top-right" containerStyle={{ top: 20, right: 20 }} />
-
       {/* Menú Lateral Corporativo */}
       <ClientSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 

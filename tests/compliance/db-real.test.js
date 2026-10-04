@@ -196,13 +196,13 @@ describe('DBREAL — Phase 2 persistence (isolated database only)', { concurrenc
 
   test('DBREAL-016 night shift consumes only its tenant/employee operational window', { skip }, async () => {
     const insertLog = row => fx.service.from('attendance_logs').insert(row).select().single()
-    const base = { cliente_id: fx.tenantA.id, numero_serie: `night-${fx.suffix}`, biometric_user_id: fx.employeeA1.hikvision_device_userid }
+    const base = { cliente_id: fx.tenantA.id, numero_serie: `night-${fx.suffix}`, biometric_user_id: fx.employeeA1.device_userid }
     const entry = await insertLog({ ...base, timestamp: '2026-09-02T03:58:00.000Z', in_out_state: 0 }) // 21:58 Merida
     const exit = await insertLog({ ...base, timestamp: '2026-09-02T12:03:00.000Z', in_out_state: 1 }) // 06:03 Merida
     assert.equal(entry.error, null); assert.equal(exit.error, null)
     await insertLog({ ...base, timestamp: '2026-08-31T12:00:00.000Z' })
     await insertLog({ ...base, timestamp: '2026-09-02T20:00:00.000Z' })
-    await insertLog({ cliente_id: fx.tenantA.id, numero_serie: `night-other-${fx.suffix}`, biometric_user_id: fx.employeeA2.hikvision_device_userid, timestamp: '2026-09-02T03:58:00.000Z' })
+    await insertLog({ cliente_id: fx.tenantA.id, numero_serie: `night-other-${fx.suffix}`, biometric_user_id: fx.employeeA2.device_userid, timestamp: '2026-09-02T03:58:00.000Z' })
     const result = await reprocess('2026-09-01')
     assert.notEqual(result.status, 'ERROR', result.error)
     const { data: record } = await fx.service.from('workday_records').select('workday_date,workday_state,source_log_ids').eq('workday_date', '2026-09-01').single()

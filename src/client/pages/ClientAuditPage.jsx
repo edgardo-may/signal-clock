@@ -2,7 +2,6 @@ import { useState } from 'react'
 import Sidebar from '../../shared/components/Layout/Sidebar'
 import Header from '../../shared/components/Layout/Header'
 import AuditView from '../../shared/components/Audit/AuditView'
-import { Toaster } from 'react-hot-toast'
 
 export default function ClientAuditPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -20,7 +19,6 @@ export default function ClientAuditPage() {
           </div>
         </main>
       </div>
-      <Toaster position="top-right" />
     </div>
   )
 }

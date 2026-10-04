@@ -91,14 +91,14 @@ async function orchestrated() {
   return { repository, result }
 }
 
-test('1. workedMinutes uses the canonical firstIn to firstOut interval', () => assert.equal(calculation().metrics.workedMinutes, 89))
+test('1. workedMinutes retains both canonical cycles despite anomalies', () => assert.equal(calculation().metrics.workedMinutes, 154))
 test('2. BREAK segments are excluded from workedMinutes', () => assert.notEqual(calculation().metrics.workedMinutes, 93))
 test('3. breakMinutes never derives from supplemental punches', () => assert.equal(calculation().metrics.breakMinutes, 0))
 test('4. gross 315-minute span cannot replace workedMinutes', () => {
   const { match, metrics } = calculation()
   const span = Math.round((match.matchedPunches.at(-1).epochMs - match.matchedPunches[0].epochMs) / 60000)
   assert.equal(span, 315)
-  assert.equal(metrics.workedMinutes, 89)
+  assert.equal(metrics.workedMinutes, 154)
 })
 test('5. four consecutive-entry events remain pairing evidence', () => assert.equal(calculation().metrics.pairingIncidents.filter((item) => item.code === 'CONSECUTIVE_ENTRY').length, 4))
 test('6. seven consecutive-exit events remain pairing evidence', () => assert.equal(calculation().metrics.pairingIncidents.filter((item) => item.code === 'CONSECUTIVE_EXIT').length, 7))
@@ -110,8 +110,8 @@ test('9. warnings reach the SHADOW orchestrator without incidents', async () => 
   assert.deepEqual(result.calculation.incidents, [])
 })
 test('10. warnings are deterministic and deduplicated', () => assert.deepEqual(calculation().warnings, ['CONSECUTIVE_ENTRY', 'CONSECUTIVE_EXIT', 'ADDITIONAL_ENTRY', 'ADDITIONAL_EXIT']))
-test('11. terminal supplemental entry does not invalidate a canonical complete day', async () => assert.equal((await orchestrated()).result.workdayRecord.status, 'COMPLETE'))
-test('12. firstIn is the earliest canonical ENTRY, even if pairing discards it', () => assert.equal(calculation().metrics.actualStart, '2026-09-03T16:26:04.000Z'))
+test('11. terminal open entry keeps prior work and makes the day incomplete', async () => assert.equal((await orchestrated()).result.workdayRecord.status, 'INCOMPLETE'))
+test('12. pairing and canonical firstIn retain the first ENTRY', () => assert.equal(calculation().metrics.actualStart, '2026-09-03T16:26:04.000Z'))
 test('13. late calculation uses canonical firstIn and full scheduled-start difference', () => assert.equal(calculation().metrics.lateMinutes, 326))
 test('14. tolerance boundary returns zero at exactly five minutes late', () => {
   const normalized = domain.AttendanceNormalizer.normalize([{ id: 'boundary', clienteId: TENANT, empleadoId: EMPLOYEE, timestamp: '2026-09-03T11:05:00.000Z', inOutState: 'entrada' }], TIMEZONE, TENANT, EMPLOYEE)
@@ -119,10 +119,10 @@ test('14. tolerance boundary returns zero at exactly five minutes late', () => {
   assert.equal(metrics.lateMinutes, 0)
 })
 test('15. overtime uses corrected effective WORK semantics', () => assert.equal(calculation().metrics.overtimeMinutes, 0))
-test('16. early leave uses canonical firstOut only', () => {
+test('16. early leave uses the last closed cycle', () => {
   const metrics = calculation().metrics
-  assert.equal(metrics.actualEnd, '2026-09-03T17:55:00.000Z')
-  assert.equal(metrics.earlyLeaveMinutes, 65)
+  assert.equal(metrics.actualEnd, '2026-09-03T19:07:00.000Z')
+  assert.equal(metrics.earlyLeaveMinutes, 0)
 })
 test('17. sanitized 16-event semantic fixture preserves the real trace shape', () => {
   const records = semanticFixture()

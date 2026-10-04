@@ -1,6 +1,7 @@
 // src/central/pages/CentralTenantsPage.jsx — Módulo Master de Empresas y Tenants
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useNavigate, useLocation } from 'react-router-dom'
 import CentralLayout from '../components/CentralLayout'
 import { useConfirm } from '../../shared/hooks/useConfirm'
 import {
@@ -12,6 +13,7 @@ import {
   TrendingUp, Shield, Layers, HardDrive, Hash,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { DatePicker } from '../../shared/components/ui'
 
 const PLANES_CONFIG = {
   free: {
@@ -80,8 +82,20 @@ export default function CentralTenantsPage() {
   const [modalForm, setModalForm] = useState(null)
   const [modalDetalle, setModalDetalle] = useState(null)
   const [copiedId, setCopiedId] = useState(null)
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const { confirmDialog, ConfirmDialogNode } = useConfirm()
+
+  // Si volvemos desde CompanyDetailPage con state.editId, abrir modal de edición
+  useEffect(() => {
+    if (location.state?.editId && empresas.length > 0) {
+      const empresa = empresas.find(e => e.id === location.state.editId)
+      if (empresa) setModalForm(empresa)
+      // Limpiar state para no re-abrir
+      window.history.replaceState({}, '')
+    }
+  }, [location.state, empresas])
 
   const fetchEmpresas = useCallback(async () => {
     setLoading(true)
@@ -234,11 +248,11 @@ export default function CentralTenantsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-slate-800">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
+            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">
               Empresas
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-              {empresas.length} Clientes
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 tabular-nums">
+              {empresas.length} empresas
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-555 dark:text-slate-400 mt-1">
@@ -443,13 +457,14 @@ export default function CentralTenantsPage() {
 
                       {/* Acciones */}
                       <td className="px-5 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-1">
                           <button
-                            onClick={() => setModalDetalle(e)}
-                            className="p-1.5 rounded-lg text-slate-450 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Ver detalles completos"
+                            onClick={() => navigate(`/central/empresas/${e.id}`)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-500/8 transition-colors"
+                            title="Ver detalle de empresa"
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye className="w-3.5 h-3.5" />
+                            Ver
                           </button>
 
                           <button
@@ -708,11 +723,10 @@ function ModalFormEmpresa({ empresa, onClose, onSaved }) {
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Fecha de Vencimiento
                 </label>
-                <input
-                  type="date"
+                <DatePicker
                   value={form.fecha_vencimiento}
                   onChange={(e) => setForm(f => ({ ...f, fecha_vencimiento: e.target.value }))}
-                  className="w-full py-2.5 px-3.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition-all cursor-pointer"
+                  placeholder="Vencimiento"
                 />
               </div>
 

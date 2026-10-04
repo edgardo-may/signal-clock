@@ -11,7 +11,7 @@ export default defineConfig({
       // Redirige /api/sync/* al servidor de sincronización backend
       // El Bearer Token de Consolide NUNCA pasa por Vite ni el navegador
       "/api/sync": {
-        target: "http://127.0.0.1:3001",
+        target: "https://signal-clock-api-integracion-test.vercel.app",
         changeOrigin: true,
       },
     },

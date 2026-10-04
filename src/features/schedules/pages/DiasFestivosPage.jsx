@@ -3,12 +3,13 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { useConfirm } from '../../../shared/hooks/useConfirm'
 import { useCurrentTenant } from '../../../shared/hooks/useCurrentTenant'
 import { usePagination } from '../../../shared/hooks/usePagination'
 import TenantSelector from '../../../shared/components/Layout/TenantSelector'
 import PaginationControl from '../../../shared/components/ui/PaginationControl'
+import { DatePicker } from '../../../shared/components/ui'
 import {
   CalendarHeart, Plus, Sparkles, Edit3,
   Trash2, AlertTriangle, X, Save, RefreshCw,
@@ -270,12 +271,11 @@ function ModalFestivo({ festivo, clienteId, defaultYear, onClose, onSaved }) {
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 ">
                 Fecha del Festivo <span className="text-pink-500">*</span>
               </label>
-              <input
-                type="date"
+              <DatePicker
                 value={fecha}
                 onChange={e => setFecha(e.target.value)}
                 required
-                className="w-full py-2 px-3 text-xs sm:text-sm rounded-md border border-slate-200 dark:border-slate-800  bg-white  text-slate-900 dark:text-white  outline-none focus:border-pink-500"
+                placeholder="Seleccionar fecha"
               />
             </div>
 
@@ -510,7 +510,6 @@ export default function DiasFestivos() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]  text-slate-900 dark:text-white ">
-      <Toaster position="top-right" containerStyle={{ top: 20, right: 20 }} />
       {ConfirmDialogNode}
 
       {/* ── Sidebar TailAdmin ───────────────────────────────── */}

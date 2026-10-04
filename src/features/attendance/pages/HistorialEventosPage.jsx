@@ -2,13 +2,17 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { usePagination } from '../../../shared/hooks/usePagination'
 import PaginationControl from '../../../shared/components/ui/PaginationControl'
 import { useCurrentTenant } from '../../../shared/hooks/useCurrentTenant'
+import { DatePicker } from '../../../shared/components/ui'
 import {
   Search, RefreshCw, Calendar, Download, Activity, FileText
 } from 'lucide-react'
+import { todayStr, startOfDayCancun, endOfDayCancun } from '../../../shared/utils/dateUtils'
+import { openProfessionalEventHistoryReport } from '../../../shared/utils/auditReportGenerator'
+import { useAuth } from '../../auth/hooks/useAuth'
 
 function formatDateTime(isoString) {
   if (!isoString) return '—'
@@ -39,7 +43,7 @@ function processEventos(asistencias, empleados, dispositivos) {
     let fuente = a.es_manual ? 'Sistema / Kiosko' : 'Dispositivo de asistencia'
 
     return {
-      'ID de persona': emp.hikvision_device_userid || emp.clave_empleado || '—',
+      'ID de persona': emp.device_userid || emp.clave_empleado || '—',
       'Nombre de la persona': emp.nombre ? `${emp.nombre} ${emp.apellido}` : 'Desconocido',
       'Departamento': emp.departamento || '—',
       'Tipo': a.tipo_verificacion === 'entrada' ? 'Entrada' : a.tipo_verificacion === 'salida' ? 'Salida' : a.tipo_verificacion,
@@ -57,30 +61,30 @@ function processEventos(asistencias, empleados, dispositivos) {
 
 export default function HistorialEventosPage() {
   const [sidebarOpen, setSidebarOpen] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : true))
-  const { currentTenantId } = useCurrentTenant()
+  const { currentTenantId, currentTenant } = useCurrentTenant()
+  const { profile } = useAuth()
   
   const [fileData, setFileData] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   
-  const today = new Date().toISOString().slice(0, 10)
-  const [fechaInicio, setFechaInicio] = useState(today)
-  const [fechaFin, setFechaFin] = useState(today)
+  const [fechaInicio, setFechaInicio] = useState(() => todayStr())
+  const [fechaFin, setFechaFin] = useState(() => todayStr())
 
   const fetchData = async () => {
     if (!currentTenantId) return
     setLoading(true)
     try {
       const [empRes, devRes] = await Promise.all([
-        supabase.from('empleados').select('id, nombre, apellido, departamento, clave_empleado, hikvision_device_userid').eq('cliente_id', currentTenantId),
+        supabase.from('empleados').select('id, nombre, apellido, departamento, clave_empleado, device_userid').eq('cliente_id', currentTenantId),
         supabase.from('dispositivos').select('id, nombre, device_id_hikvision').eq('cliente_id', currentTenantId)
       ])
       
       if (empRes.error) throw empRes.error
       if (devRes.error) throw devRes.error
 
-      const start = new Date(`${fechaInicio}T00:00:00`).toISOString()
-      const end = new Date(`${fechaFin}T23:59:59.999`).toISOString()
+      const start = startOfDayCancun(fechaInicio)
+      const end   = endOfDayCancun(fechaFin)
 
       const { data: asisData, error: asisError } = await supabase
         .from('registro_asistencia')
@@ -154,9 +158,28 @@ export default function HistorialEventosPage() {
     link.click()
   }
 
+  const handleExportPdf = () => {
+    if (fileData.length === 0) {
+      toast.error('No hay eventos para exportar.')
+      return
+    }
+    const result = openProfessionalEventHistoryReport({
+      events: filteredData,
+      activeTenant: currentTenant,
+      currentUser: profile,
+      fechaInicio,
+      fechaFin,
+      search
+    })
+    if (result.success) {
+      toast.success(`Reporte generado: ${result.folio}`)
+    } else {
+      toast.error(result.message || 'Error al generar reporte.')
+    }
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC] dark:bg-slate-900 text-slate-900 dark:text-white">
-      <Toaster position="top-right" />
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
@@ -185,10 +208,20 @@ export default function HistorialEventosPage() {
               <button
                 onClick={handleExport}
                 disabled={fileData.length === 0}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all dark:bg-emerald-900/40 dark:text-emerald-400 dark:border-emerald-800/60 disabled:opacity-50"
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-all dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-800/60 disabled:opacity-50 cursor-pointer shadow-sm"
               >
                 <Download className="w-4 h-4" />
                 Exportar CSV
+              </button>
+
+              <button
+                onClick={handleExportPdf}
+                disabled={fileData.length === 0}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 transition-all disabled:opacity-50 cursor-pointer shadow-sm"
+                title="Generar reporte PDF con logo"
+              >
+                <FileText className="w-4 h-4 text-white" />
+                Exportar PDF
               </button>
             </div>
           </div>
@@ -196,22 +229,20 @@ export default function HistorialEventosPage() {
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row items-end justify-between gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
               <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
-                <div className="space-y-1.5 w-full sm:w-auto">
+                <div className="space-y-1.5 w-full sm:w-44">
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Desde</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={fechaInicio}
                     onChange={(e) => setFechaInicio(e.target.value)}
-                    className="w-full sm:w-auto px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500 text-slate-900 dark:text-white"
+                    placeholder="Fecha inicio"
                   />
                 </div>
-                <div className="space-y-1.5 w-full sm:w-auto">
+                <div className="space-y-1.5 w-full sm:w-44">
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Hasta</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={fechaFin}
                     onChange={(e) => setFechaFin(e.target.value)}
-                    className="w-full sm:w-auto px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500 text-slate-900 dark:text-white"
+                    placeholder="Fecha fin"
                   />
                 </div>
                 <div className="pt-5 w-full sm:w-auto">

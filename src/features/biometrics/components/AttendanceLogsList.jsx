@@ -5,6 +5,7 @@ import {
   Download,
   RefreshCw,
 } from 'lucide-react'
+import { DatePicker } from '../../../shared/components/ui'
 
 // Soporta tanto códigos numéricos de ZKTeco ADMS como strings normalizados
 const ATTLOG_STATUS = {
@@ -151,13 +152,23 @@ export default function AttendanceLogsList({
             ))}
           </select>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 w-40">
             <span className="text-xs text-slate-400">Desde</span>
-            <input type="date" value={dateFrom} onChange={(e) => onDateFromChange(e.target.value)} className={inputClass} />
+            <DatePicker
+              value={dateFrom}
+              onChange={(e) => onDateFromChange(e.target.value)}
+              placeholder="Desde"
+              size="sm"
+            />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 w-40">
             <span className="text-xs text-slate-400">Hasta</span>
-            <input type="date" value={dateTo} onChange={(e) => onDateToChange(e.target.value)} className={inputClass} />
+            <DatePicker
+              value={dateTo}
+              onChange={(e) => onDateToChange(e.target.value)}
+              placeholder="Hasta"
+              size="sm"
+            />
           </div>
         </div>
       </div>

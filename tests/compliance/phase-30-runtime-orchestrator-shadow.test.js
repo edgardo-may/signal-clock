@@ -185,39 +185,40 @@ test('10. SHADOW never calls PersistenceService', async () => {
   assert.equal(calls, 0)
 })
 
-for (const outcome of ['INSERTED', 'UPDATED', 'UNCHANGED']) {
+for (const outcome of ['INSERTED', 'UPDATED', 'UNCHANGED', 'STALE']) {
   test(`11-${outcome}. V3 persistence boundary handles ${outcome} safely`, async () => {
     let calls = 0
     const run = orchestrator(fixture(), {
       mode: 'PERSIST',
-      persistenceService: new WorkdayPersistenceService({ rpc: async () => {
+      persistenceService: new WorkdayPersistenceService({ rpc: async (_name, params) => {
         calls++
+        assert.ok(params.p_evidence_manifest)
+        assert.ok(params.p_context_manifest)
         return {
           data: [{ workday_id: 'workday-1', persistence_result: outcome, integrity_hash: 'server-hash' }],
           error: null,
         }
       } }),
     }).instance.run({ registroId: 'out' })
-    if (outcome === 'UPDATED') {
-      await assert.rejects(() => run, (error) => error.code === 'PERSISTENCE_FAILED')
-    } else {
-      const result = await run
-      assert.equal(result.persistenceResult, outcome)
-      assert.equal(result.workdayId, 'workday-1')
-    }
+    const result = await run
+    assert.equal(result.persistenceResult, outcome)
+    assert.equal(result.workdayId, 'workday-1')
     assert.equal(calls, 1)
   })
 }
 
 test('14. PERSIST persistence error fails closed without fallback', async () => {
+  let calls = 0
   const { instance } = orchestrator(fixture(), {
-    mode: 'PERSIST', persistenceService: new WorkdayPersistenceService({ rpc: async () => ({
-      data: null, error: { message: 'rpc denied' },
-    }) }),
+    mode: 'PERSIST', persistenceService: new WorkdayPersistenceService({ rpc: async () => {
+      calls++
+      return { data: null, error: { message: 'PERSIST_SNAPSHOT_CONFLICT' } }
+    } }),
   })
   await assert.rejects(() => instance.run({ registroId: 'out' }), (error) =>
-    error instanceof AttendanceOrchestratorError && error.code === 'PERSISTENCE_FAILED'
+    error instanceof AttendanceOrchestratorError && error.code === 'PERSIST_SNAPSHOT_CONFLICT'
   )
+  assert.equal(calls, 1)
 })
 
 test('15. identical SHADOW context has the same operative date, metrics, state, and hash', async () => {

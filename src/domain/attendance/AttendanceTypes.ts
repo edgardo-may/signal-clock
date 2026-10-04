@@ -192,6 +192,7 @@ export type IncidentCode =
   | 'SCHEDULE_EXCEPTION'
   // ATT-001: Códigos de ambigüedad en secuencia de marcajes
   | 'CONSECUTIVE_ENTRY'        // Dos marcajes de ENTRADA consecutivos sin salida intermedia
+  | 'ORPHAN_EXIT'              // Salida sin entrada previa ni ciclo cerrado anterior
   | 'CONSECUTIVE_EXIT'         // Dos marcajes de SALIDA consecutivos sin entrada intermedia
   | 'PUNCH_SEQUENCE_AMBIGUOUS' // Secuencia de marcajes no interpretable unívocamente
 
@@ -271,10 +272,10 @@ export interface WorkdayCalculationResult {
   scheduledEnd?: string // ISO UTC o string formateado
   scheduledMinutes: number
 
-  actualStart?: string // ISO UTC de la primera ENTRY canónica
-  actualEnd?: string // ISO UTC de la primera EXIT posterior canónica
+  actualStart?: string // ISO UTC de la primera ENTRY válida de la jornada
+  actualEnd?: string // ISO UTC del último EXIT de un ciclo completo
 
-  workedMinutes: number // Intervalo canónico firstIn -> firstOut, en minutos UTC
+  workedMinutes: number // Suma de todos los intervalos completos ENTRY -> EXIT, en minutos UTC
   breakMinutes: number // Sólo descansos del contrato formal del horario; nunca inferidos de supplementalEvents
   effectiveMinutes: number // Minutos efectivos tras descansos canónicos aplicables
 

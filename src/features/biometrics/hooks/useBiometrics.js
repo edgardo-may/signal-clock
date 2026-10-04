@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { biometricsService } from '../services/biometricsService'
+import { syncService } from '../services/syncService'
 import toast from 'react-hot-toast'
 
 export function useBiometrics(currentTenantId) {
@@ -228,6 +229,20 @@ const loadDevices = useCallback(async () => {
         await biometricsService.createDevice({ ...deviceData, cliente_id: currentTenantId })
         toast.success(`Dispositivo "${deviceData.name}" registrado`)
       }
+
+      // Encolar comando canónico SET OPTIONS DateTime=...,TimeZone=... al checador
+      if (deviceData.serial_number && deviceData.timezone) {
+        try {
+          await syncService.syncDeviceTime({
+            deviceSerial: deviceData.serial_number,
+            timezone: deviceData.timezone
+          })
+          toast.success(`Zona horaria ${deviceData.timezone} enviada al checador (SET OPTIONS)`)
+        } catch (syncTimeErr) {
+          console.warn('[useBiometrics] Aviso al sincronizar zona horaria con checador:', syncTimeErr.message)
+        }
+      }
+
       setDeviceModalForm(null)
       loadDevices()
       loadDashboardData()
@@ -246,6 +261,19 @@ const loadDevices = useCallback(async () => {
     } catch (err) {
       console.error('[useBiometrics] Error al eliminar dispositivo:', err)
       toast.error('No se pudo eliminar el dispositivo: ' + err.message)
+    }
+  }
+
+  const handleToggleDeviceActive = async (device) => {
+    try {
+      const nextState = !device.is_active
+      await biometricsService.updateDevice(device.id, { is_active: nextState })
+      toast.success(`Terminal "${device.name || device.serial_number}" ${nextState ? 'habilitada' : 'deshabilitada'}`)
+      loadDevices()
+      loadDashboardData()
+    } catch (err) {
+      console.error('[useBiometrics] Error al alternar estado de terminal:', err)
+      toast.error('Error al cambiar estado: ' + err.message)
     }
   }
 
@@ -287,6 +315,12 @@ const loadDevices = useCallback(async () => {
       const pending = assigned.filter(a => a.sync_status === 'PENDING' || a.sync_status === 'SYNCING').length
       const error = assigned.filter(a => a.sync_status === 'ERROR').length
 
+      // Cargar resumen biométrico (usuarios, rostros, huellas)
+      const biometricsCount = await syncService.getDeviceBiometricsSummary({
+        deviceId: device.id,
+        clienteId: currentTenantId
+      })
+
       setDeviceDetailModal({
         ...fullDetail,
         syncStats: {
@@ -295,7 +329,8 @@ const loadDevices = useCallback(async () => {
           pending,
           error
         },
-        assignedEmployees: assigned
+        assignedEmployees: assigned,
+        biometricsCount
       })
     } catch (err) {
       console.error('[useBiometrics] Error cargando detalle de terminal:', err)
@@ -405,6 +440,7 @@ const loadDevices = useCallback(async () => {
     setDeviceDetailModal,
     handleSaveDevice,
     handleDeleteDevice,
+    handleToggleDeviceActive,
     handleOpenDeviceDetail,
     loadDevices,
 
