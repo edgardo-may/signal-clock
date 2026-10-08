@@ -7,6 +7,7 @@ const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
 const { testConnection } = require("./consolide-client");
 const { syncEmpleados } = require("./employee-sync-service");
+const { normalizeRequest } = require("./sync-request");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -93,22 +94,6 @@ async function verifySupabaseToken(authHeader) {
 
 function resolveClienteId({ clienteId, rol }, targetClienteId) {
   return rol === "superadmin" && targetClienteId ? targetClienteId : clienteId;
-}
-
-function normalizeRequest(body) {
-  let { fechaInicio, fechaFin, trabId, targetClienteId } = body || {};
-  if (trabId) {
-    fechaInicio = fechaInicio || "2000-01-01";
-    fechaFin = fechaFin || "2099-12-31";
-  } else if (!fechaInicio || !fechaFin) {
-    throw Object.assign(
-      new Error(
-        "fechaInicio y fechaFin son requeridos (formato YYYY-MM-DD) para consulta general",
-      ),
-      { statusCode: 400 },
-    );
-  }
-  return { fechaInicio, fechaFin, trabId, targetClienteId };
 }
 
 app.post("/api/sync/test", async (req, res, next) => {
