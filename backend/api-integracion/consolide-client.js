@@ -6,7 +6,7 @@ const BASE_URL = (
   .trim()
   .replace(/\/$/, "");
 const AUTH_URL = `${BASE_URL}/Consolide_ApiIdentity/v2/identity/authentication`;
-const EMP_URL = `${BASE_URL}/API_RelojesIncidencias/api/Empleados/PostListEmpleados`;
+const EMP_URL = `${BASE_URL}/API_RelojesIncidenciasv2/api/Empleados/PostListEmpleados`;
 const TIMEOUT_MS = parseInt(process.env.CONSOLIDE_TIMEOUT_MS || "30000", 10);
 
 class ConsolideApiError extends Error {
@@ -169,6 +169,12 @@ async function fetchEmpleados({
     throw new ConsolideApiError(
       502,
       "La API externa retornó una respuesta no válida (JSON inválido)",
+    );
+  }
+  if (String(body?.tipo_Estatus || "").trim().toLowerCase() === "error") {
+    throw new ConsolideApiError(
+      502,
+      "Consolide devolvió un error de negocio al consultar colaboradores; no es una respuesta sin datos.",
     );
   }
   if (!Array.isArray(body?.resultado)) {

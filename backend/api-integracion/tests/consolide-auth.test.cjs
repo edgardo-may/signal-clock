@@ -24,7 +24,7 @@ test('Every employee query authenticates and uses its new Bearer token', async t
       return json({ esExitosa: true, datos: { accessToken: `test-token-${++authCount}` } });
     }
     calls.push('employees');
-    assert.ok(url.endsWith('/API_RelojesIncidencias/api/Empleados/PostListEmpleados'));
+    assert.ok(url.endsWith('/API_RelojesIncidenciasv2/api/Empleados/PostListEmpleados'));
     assert.equal(options.headers.Authorization, `Bearer test-token-${authCount}`);
     assert.equal(options.headers.IDEmpresa, '39');
     assert.deepEqual(JSON.parse(options.body), {
@@ -72,4 +72,18 @@ test('Repeated 401 is reported instead of endlessly retrying', async t => {
   await assert.rejects(fetchEmpleados(query), error => error.statusCode === 401);
   assert.equal(authCount, 2);
   assert.equal(employeeCount, 2);
+});
+
+test('HTTP 200 with provider business error is not treated as no employees', async t => {
+  setup(t, async url => url.endsWith('/identity/authentication')
+    ? json({ esExitosa: true, datos: { accessToken: 'test-token' } })
+    : json({ resultado: [], noRegistros: 0, estatus_ID: 0, tipo_Estatus: 'Error', mensaje: 'Error en el API.' }));
+  await assert.rejects(fetchEmpleados(query), error => error.statusCode === 502 && error.message.includes('error de negocio'));
+});
+
+test('A successful empty provider response remains a legitimate empty list', async t => {
+  setup(t, async url => url.endsWith('/identity/authentication')
+    ? json({ esExitosa: true, datos: { accessToken: 'test-token' } })
+    : json({ resultado: [], noRegistros: 0, tipo_Estatus: 'Exito' }));
+  assert.deepEqual(await fetchEmpleados(query), []);
 });

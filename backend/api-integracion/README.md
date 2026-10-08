@@ -21,8 +21,10 @@ en `Authorization: Bearer ...`; no hay caché de tokens entre consultas.
 Si la consulta responde 401, se permite una sola renovación y repetición.
 Los tokens y las credenciales permanecen exclusivamente en el backend.
 El endpoint de consulta es
-`/API_RelojesIncidencias/api/Empleados/PostListEmpleados` (sin `v2`), según la
-URL confirmada por el operador en Postman. `CONSOLIDE_API_URL` debe contener
+`/API_RelojesIncidenciasv2/api/Empleados/PostListEmpleados`: la prueba de lectura
+contra QA encontró HTTP 404 en la ruta sin `v2` y HTTP 200 en esta ruta.
+Un body con `tipo_Estatus: "Error"` se reporta como error, aunque el HTTP sea 200;
+no se convierte en un resultado sin colaboradores. `CONSOLIDE_API_URL` debe contener
 únicamente la URL base, por ejemplo `https://qa.consolide.com.mx`.
 
 ## GitHub y Vercel
