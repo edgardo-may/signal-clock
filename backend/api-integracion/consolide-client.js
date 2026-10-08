@@ -6,7 +6,7 @@ const BASE_URL = (
   .trim()
   .replace(/\/$/, "");
 const AUTH_URL = `${BASE_URL}/Consolide_ApiIdentity/v2/identity/authentication`;
-const EMP_URL = `${BASE_URL}/API_RelojesIncidenciasv2/api/Empleados/PostListEmpleados`;
+const EMP_URL = `${BASE_URL}/API_RelojesIncidencias/api/Empleados/PostListEmpleados`;
 const TIMEOUT_MS = parseInt(process.env.CONSOLIDE_TIMEOUT_MS || "30000", 10);
 
 class ConsolideApiError extends Error {

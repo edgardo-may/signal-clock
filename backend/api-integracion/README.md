@@ -20,6 +20,10 @@ Cada consulta de colaboradores obtiene un token nuevo de Consolide y lo envía
 en `Authorization: Bearer ...`; no hay caché de tokens entre consultas.
 Si la consulta responde 401, se permite una sola renovación y repetición.
 Los tokens y las credenciales permanecen exclusivamente en el backend.
+El endpoint de consulta es
+`/API_RelojesIncidencias/api/Empleados/PostListEmpleados` (sin `v2`), según la
+URL confirmada por el operador en Postman. `CONSOLIDE_API_URL` debe contener
+únicamente la URL base, por ejemplo `https://qa.consolide.com.mx`.
 
 ## GitHub y Vercel
 

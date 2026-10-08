@@ -24,7 +24,7 @@ test('Every employee query authenticates and uses its new Bearer token', async t
       return json({ esExitosa: true, datos: { accessToken: `test-token-${++authCount}` } });
     }
     calls.push('employees');
-    assert.ok(url.endsWith('/API_RelojesIncidenciasv2/api/Empleados/PostListEmpleados'));
+    assert.ok(url.endsWith('/API_RelojesIncidencias/api/Empleados/PostListEmpleados'));
     assert.equal(options.headers.Authorization, `Bearer test-token-${authCount}`);
     assert.equal(options.headers.IDEmpresa, '39');
     assert.deepEqual(JSON.parse(options.body), {
