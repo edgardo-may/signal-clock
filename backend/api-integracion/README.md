@@ -16,6 +16,11 @@ UUID Signum en `targetClienteId`. El backend resuelve el ID numérico de Consoli
 desde `clientes.id_empresa`. Los usuarios de empresa conservan el tenant de su
 perfil autenticado; sólo superadmin puede elegir el destino.
 
+Cada consulta de colaboradores obtiene un token nuevo de Consolide y lo envía
+en `Authorization: Bearer ...`; no hay caché de tokens entre consultas.
+Si la consulta responde 401, se permite una sola renovación y repetición.
+Los tokens y las credenciales permanecen exclusivamente en el backend.
+
 ## GitHub y Vercel
 
 Conservar la configuración del proyecto Vercel existente y publicar los cambios

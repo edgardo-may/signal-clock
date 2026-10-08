@@ -9,9 +9,6 @@ const AUTH_URL = `${BASE_URL}/Consolide_ApiIdentity/v2/identity/authentication`;
 const EMP_URL = `${BASE_URL}/API_RelojesIncidenciasv2/api/Empleados/PostListEmpleados`;
 const TIMEOUT_MS = parseInt(process.env.CONSOLIDE_TIMEOUT_MS || "30000", 10);
 
-let cachedToken = null;
-let tokenExpiresAt = 0;
-
 class ConsolideApiError extends Error {
   constructor(statusCode, message, retryable = false) {
     super(message);
@@ -43,9 +40,8 @@ async function fetchWithTimeout(url, options, timeoutMs = TIMEOUT_MS) {
 }
 
 async function getAccessToken() {
-  const now = Date.now();
-  if (cachedToken && now < tokenExpiresAt - 5 * 60 * 1000) return cachedToken;
-
+  // Each employee query authenticates independently; no token is shared
+  // between requests, companies or warm Vercel invocations.
   const username = process.env.CONSOLIDE_USERNAME;
   const password = process.env.CONSOLIDE_PASSWORD;
   if (!username || !password) {
@@ -91,14 +87,7 @@ async function getAccessToken() {
     );
   }
 
-  cachedToken = body.datos.accessToken;
-  tokenExpiresAt = now + 60 * 60 * 1000;
-  return cachedToken;
-}
-
-function invalidateToken() {
-  cachedToken = null;
-  tokenExpiresAt = 0;
+  return body.datos.accessToken;
 }
 
 async function doFetchEmpleados(
@@ -147,7 +136,6 @@ async function fetchEmpleados({
   );
 
   if (response.status === 401) {
-    invalidateToken();
     token = await getAccessToken();
     response = await doFetchEmpleados(
       token,
