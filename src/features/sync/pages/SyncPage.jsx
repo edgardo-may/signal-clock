@@ -191,10 +191,10 @@ export default function SyncPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+          <div className="space-y-6">
             
-            {/* ── COLUMNA IZQUIERDA: Herramientas ── */}
-            <div className="xl:col-span-4 space-y-6">
+            {/* ── FILA SUPERIOR: Conexión y consulta ── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
               {/* Tarjeta de Estado de Conexión */}
               <div className="rounded-xl border border-slate-200 dark:border-[#2e3a4e] bg-white dark:bg-[#1c2434] shadow-sm p-5">
@@ -239,7 +239,7 @@ export default function SyncPage() {
                       Clave Externa (trab_ID) <span className="text-rose-500">*</span>
                     </label>
                     <div className="flex gap-2">
-                      <div className="relative flex-1">
+                      <div className="relative flex-1 min-w-0">
                         <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         <input
                           type="text"
@@ -265,8 +265,8 @@ export default function SyncPage() {
               </div>
             </div>
 
-            {/* ── COLUMNA DERECHA: Resultados Individuales ── */}
-            <div className="xl:col-span-8 space-y-6">
+            {/* ── FILA INFERIOR: Información del colaborador ── */}
+            <div className="space-y-6">
               
               {/* Resultado de Sincronización Individual (Aparece aquí al buscar) */}
               {individualPreviewData && (
