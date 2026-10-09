@@ -1,6 +1,11 @@
 // src/pages/Horarios.jsx — Catálogo y Configuración de Horarios / Turnos
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from '../../../lib/supabase';
+import CatalogIdentifier from '../../../shared/components/ui/CatalogIdentifier';
+import { applyScheduleCatalogRevision, archiveSchedule } from '../services/scheduleCatalogService';
+import { useAuth } from '../../auth/hooks/useAuth';
+import { normalizeRole } from '../../../shared/auth/permissions';
+import { cancunToday, nextScheduleEffectiveDate } from '../services/scheduleLocalDate';
 import Sidebar from '../../../shared/components/Layout/Sidebar';
 import Header from '../../../shared/components/Layout/Header';
 import toast from "react-hot-toast";
@@ -330,11 +335,12 @@ function ModalHorario({ horario, clienteId, onClose, onSaved }) {
   const [nombre, setNombre] = useState(horario?.nombre || "");
   const [descripcion, setDescripcion] = useState(horario?.descripcion || "");
   const [tolerancia, setTolerancia] = useState(
-    horario?.tolerancia_minutos ?? 10,
+    horario?.latest_revision?.config_snapshot?.tolerancia_minutos ?? horario?.tolerancia_minutos ?? 10,
   );
   const [color, setColor] = useState(horario?.color || "#4f46e5");
-  const [dias, setDias] = useState(horario?.dias_config || DIAS_DEFAULT);
-  const [activo, setActivo] = useState(horario?.activo ?? true);
+  const [dias, setDias] = useState(horario?.latest_revision?.config_snapshot?.dias_config || horario?.dias_config || DIAS_DEFAULT);
+  const [effectiveDate, setEffectiveDate] = useState(() => horario ? nextScheduleEffectiveDate(horario.latest_revision?.effective_from) : cancunToday());
+  const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
 
   const horasSemanales = useMemo(() => calcularHorasSemanales(dias), [dias]);
@@ -386,6 +392,10 @@ function ModalHorario({ horario, clienteId, onClose, onSaved }) {
       toast.error("El nombre del horario es requerido");
       return;
     }
+    if (!reason.trim() || effectiveDate < cancunToday() || (isEdit && effectiveDate === cancunToday())) {
+      toast.error(isEdit ? 'Indica un motivo y una fecha futura de vigencia' : 'Indica un motivo y una fecha de vigencia desde hoy');
+      return;
+    }
 
     if (!isEdit) {
       const ok = await confirmDialog({
@@ -400,28 +410,19 @@ function ModalHorario({ horario, clienteId, onClose, onSaved }) {
     setSaving(true);
     try {
       const payload = {
-        cliente_id: clienteId,
+        clienteId,
+        action: isEdit ? 'REVISE' : 'CREATE',
+        horarioId: horario?.id,
         nombre: nombre.trim(),
         descripcion: descripcion.trim() || null,
-        tolerancia_minutos: Number(tolerancia) || 0,
+        toleranciaMinutos: Number(tolerancia) || 0,
         color,
-        dias_config: dias,
-        activo,
-        actualizado_at: new Date().toISOString(),
+        diasConfig: dias,
+        effectiveDate,
+        reason: reason.trim(),
       };
-
-      if (isEdit) {
-        const { error } = await supabase
-          .from("horarios")
-          .update(payload)
-          .eq("id", horario.id);
-        if (error) throw error;
-        toast.success(`Horario "${nombre}" actualizado`);
-      } else {
-        const { error } = await supabase.from("horarios").insert(payload);
-        if (error) throw error;
-        toast.success(`Horario "${nombre}" creado`);
-      }
+      await applyScheduleCatalogRevision(payload);
+      toast.success(isEdit ? `Revisión futura de "${nombre}" creada` : `Horario "${nombre}" creado`);
 
       onSaved();
       onClose();
@@ -719,6 +720,14 @@ function ModalHorario({ horario, clienteId, onClose, onSaved }) {
           </div>
 
           {/* Footer de Acciones */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-slate-200">
+            <label className="text-xs font-semibold">Vigente desde
+              <input type="date" required min={isEdit ? nextScheduleEffectiveDate(horario?.latest_revision?.effective_from) : cancunToday()} value={effectiveDate} onChange={e => setEffectiveDate(e.target.value)} className="mt-1 w-full rounded border p-2" />
+            </label>
+            <label className="text-xs font-semibold">Motivo del cambio
+              <input required value={reason} onChange={e => setReason(e.target.value)} className="mt-1 w-full rounded border p-2" />
+            </label>
+          </div>
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800 ">
             <button
               type="button"
@@ -756,6 +765,8 @@ function ModalHorario({ horario, clienteId, onClose, onSaved }) {
 // COMPONENTE PRINCIPAL: HORARIOS
 // ═══════════════════════════════════════════════════════════════
 export default function Horarios() {
+  const { profile } = useAuth();
+  const canDeleteSchedule = ['admin', 'superadmin'].includes(normalizeRole(profile?.rol));
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth >= 1024 : true,
   );
@@ -777,28 +788,24 @@ export default function Horarios() {
 
   const { confirmDialog, ConfirmDialogNode } = useConfirm();
 
-  const handleDelete = async (horario) => {
+  const handleDisable = async (horario) => {
+    if (!canDeleteSchedule) return;
     const ok = await confirmDialog({
-      title: 'Eliminar Horario',
-      message: '¿Estás seguro de eliminar este turno? Los colaboradores que lo tengan asignado perderán su configuración de jornada.',
+      title: 'Eliminar horario del catálogo',
+      message: `Se retirará "${horario.nombre}" del catálogo. Las revisiones, asignaciones históricas y jornadas anteriores se conservarán.`,
       variant: 'danger',
-      confirmLabel: 'Confirmar Eliminación'
+      confirmLabel: 'Eliminar del catálogo'
     });
     if (!ok) return;
 
     try {
-      const { error } = await supabase
-        .from("horarios")
-        .delete()
-        .eq("id", horario.id);
-      if (error) throw error;
-
-      toast.success(`Horario "${horario.nombre}" eliminado`);
+      await archiveSchedule(horario.id, 'Eliminado del catálogo de Horarios por administrador');
+      toast.success(`Horario "${horario.nombre}" eliminado del catálogo`);
       fetchHorarios();
     } catch (err) {
       if (err?.code === "23503") {
         toast.error(
-          "Este horario tiene colaboradores asignados. Reasigna los turnos antes de eliminarlo.",
+          "No se pudo eliminar el horario porque tiene referencias incompatibles.",
         );
       } else {
         toast.error(err?.message || "Error al eliminar el horario");
@@ -814,16 +821,28 @@ export default function Horarios() {
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase
-      .from("horarios")
-      .select("*")
-      .eq("cliente_id", currentTenantId)
-      .order("creado_at", { ascending: true });
+    const [scheduleResult, revisionResult] = await Promise.all([
+      supabase.from('horarios').select('*').eq('cliente_id', currentTenantId).order('creado_at', { ascending: true }),
+      supabase.from('schedule_revisions').select('id,horario_id,version,effective_from,config_snapshot,created_by,reason').eq('cliente_id', currentTenantId).order('effective_from', { ascending: true }),
+    ]);
 
-    if (error) {
-      toast.error("Error al cargar horarios: " + error.message);
+    if (scheduleResult.error || revisionResult.error) {
+      toast.error('Error al cargar horarios: ' + (scheduleResult.error || revisionResult.error).message);
     } else {
-      setHorarios(data || []);
+      const today = cancunToday();
+      setHorarios((scheduleResult.data || []).filter(schedule => !schedule.archived_at).map(schedule => {
+        const revisions = (revisionResult.data || []).filter(revision => revision.horario_id === schedule.id);
+        const current = revisions.filter(revision => revision.effective_from <= today).at(-1) || null;
+        const latest = revisions.at(-1) || null;
+        return {
+          ...schedule,
+          current_revision: current,
+          latest_revision: latest,
+          dias_config: current?.config_snapshot?.dias_config || schedule.dias_config,
+          tolerancia_minutos: current?.config_snapshot?.tolerancia_minutos ?? schedule.tolerancia_minutos,
+          activo: current?.config_snapshot?.horario_activo ?? schedule.activo,
+        };
+      }));
     }
     setLoading(false);
   }, [currentTenantId]);
@@ -981,6 +1000,7 @@ export default function Horarios() {
                         </span>
                       </div>
 
+                      {h.folio != null && <div className="mb-3"><CatalogIdentifier folio={h.folio} /></div>}
                       {h.descripcion && (
                         <p className="text-xs text-slate-700 dark:text-slate-300  mb-4 line-clamp-2">
                           {h.descripcion}
@@ -1001,6 +1021,8 @@ export default function Horarios() {
                           días activos
                         </span>
                       </div>
+
+
 
                       {/* Badges de días */}
                       <div className="flex items-center justify-between gap-1 pt-3 border-t border-slate-200 dark:border-slate-800  mb-4">
@@ -1042,13 +1064,13 @@ export default function Horarios() {
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handleDelete(h)}
+                        {canDeleteSchedule && <button
+                          onClick={() => handleDisable(h)}
                           className="p-1.5 rounded hover:bg-blue-100 dark:bg-blue-900/40 dark:hover:bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:text-rose-600 transition-colors"
-                          title="Eliminar Horario"
+                          title="Eliminar horario del catálogo"
                         >
                           <Trash2 className="w-4 h-4" />
-                        </button>
+                        </button>}
                       </div>
                     </div>
                   </div>

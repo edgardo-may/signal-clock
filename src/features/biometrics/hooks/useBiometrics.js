@@ -226,8 +226,7 @@ const loadDevices = useCallback(async () => {
         await biometricsService.updateDevice(deviceData.id, deviceData)
         toast.success(`Dispositivo "${deviceData.name}" actualizado`)
       } else {
-        await biometricsService.createDevice({ ...deviceData, cliente_id: currentTenantId })
-        toast.success(`Dispositivo "${deviceData.name}" registrado`)
+        throw new Error('El alta requiere una solicitud y aprobación de Central.')
       }
 
       // Encolar comando canónico SET OPTIONS DateTime=...,TimeZone=... al checador

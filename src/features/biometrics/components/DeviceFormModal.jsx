@@ -49,7 +49,7 @@ const DEVICE_TYPES = [
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white outline-none focus:border-[#03363D] focus:ring-1 focus:ring-[#03363D]/30 transition-all placeholder:text-slate-400'
 const labelClass = 'block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5'
 
-export default function DeviceFormModal({ device, onClose, onSave }) {
+export default function DeviceFormModal({ device, onClose, onSave, requestMode = false }) {
   const isEditing = Boolean(device && device !== 'nuevo')
   const { isSuperAdmin } = useCurrentTenant()
 
@@ -61,7 +61,7 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
     port: '7660',
     timezone: 'America/Mexico_City',
     device_type: 'general',
-    is_active: true,
+    is_active: !requestMode,
     marca: 'zkteco',
     isup_key: '',
   })
@@ -72,9 +72,9 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
   useEffect(() => {
     if (isEditing && typeof device === 'object') {
       setFormData({
-        name:          device.name || '',
-        serial_number: device.serial_number || '',
-        location:      device.location || '',
+        name:          (device.name || '').toUpperCase(),
+        serial_number: (device.serial_number || '').toUpperCase(),
+        location:      (device.location || '').toUpperCase(),
         ip_address:    device.ip_address || '',
         port:          device.port ? String(device.port) : '7660',
         timezone:      device.timezone || 'America/Mexico_City',
@@ -86,11 +86,6 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
     }
   }, [device, isEditing])
 
-  const generateIsupKey = () => {
-    const randomHex = Math.random().toString(16).substring(2, 8).toUpperCase()
-    const prefix = formData.marca === 'hikvision' ? 'HK' : 'ZK'
-    setFormData(prev => ({ ...prev, isup_key: `SIG-${prefix}-${randomHex}` }))
-  }
 
   const validate = () => {
     const errs = {}
@@ -108,9 +103,15 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
     try {
       await onSave({
         ...(isEditing ? { id: device.id } : {}),
-        ...formData,
+        ...Object.fromEntries(Object.entries(formData).filter(([key]) => !['serial_number', 'is_active', 'marca', 'isup_key'].includes(key))),
+        name: formData.name.toUpperCase(),
+        location: formData.location.toUpperCase(),
+        ...(requestMode ? { serial_number: formData.serial_number.toUpperCase(), protocol: formData.marca === 'hikvision' ? 'HIKVISION_ISUP' : 'ZKTECO_ADMS' } : {}),
+        ...(!requestMode && isSuperAdmin ? { is_active: formData.is_active } : {}),
         port: formData.port ? parseInt(formData.port, 10) : 7660,
       })
+    } catch (error) {
+      setErrors(previous => ({ ...previous, submit: error.message || 'No se pudo guardar el dispositivo.' }))
     } finally {
       setSubmitting(false)
     }
@@ -150,7 +151,7 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
                   placeholder="Ej: Entrada Principal"
                   className={inputClass}
                 />
@@ -162,8 +163,9 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
                 <label className={labelClass}>Número de serie (SN) *</label>
                 <input
                   type="text"
+                  readOnly={isEditing}
                   value={formData.serial_number}
-                  onChange={(e) => setFormData({ ...formData, serial_number: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, serial_number: e.target.value.toUpperCase() })}
                   placeholder="Ej: XKHZ240800001"
                   className={`${inputClass} font-mono`}
                 />
@@ -187,7 +189,7 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
               <input
                 type="text"
                 value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, location: e.target.value.toUpperCase() })}
                 placeholder="Ej: Puerta Principal · Recepción"
                 className={inputClass}
               />
@@ -198,90 +200,14 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
           <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
             <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Protocolo y conexión</p>
 
-            {isSuperAdmin ? (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Marca */}
-                  <div>
-                    <label className={labelClass}>Marca del dispositivo</label>
-                    <select
-                      value={formData.marca}
-                      onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
-                      className={inputClass}
-                    >
-                      <option value="zkteco">ZKTeco (ADMS Push)</option>
-                      <option value="hikvision">Hikvision (ISUP 5.0)</option>
-                    </select>
-                  </div>
-
-                  {/* ISUP Key */}
-                  <div>
-                    <label className={labelClass}>Clave de sincronización</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={formData.isup_key}
-                        onChange={(e) => setFormData({ ...formData, isup_key: e.target.value })}
-                        placeholder="Autogenerar"
-                        className={`${inputClass} font-mono`}
-                      />
-                      <button
-                        type="button"
-                        onClick={generateIsupKey}
-                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors whitespace-nowrap"
-                      >
-                        Generar
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* IP / Puerto — solo visible si no es ZKTeco */}
-                {formData.marca !== 'zkteco' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className={labelClass}>Dirección IP</label>
-                      <input
-                        type="text"
-                        value={formData.ip_address}
-                        onChange={(e) => setFormData({ ...formData, ip_address: e.target.value })}
-                        placeholder="192.168.1.100"
-                        className={inputClass}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Puerto</label>
-                      <input
-                        type="text"
-                        value={formData.port}
-                        onChange={(e) => setFormData({ ...formData, port: e.target.value })}
-                        placeholder="7660"
-                        className={inputClass}
-                      />
-                      {errors.port && <p className="text-[11px] text-rose-500 mt-1">{errors.port}</p>}
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="px-4 py-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                <div className="flex items-start gap-2.5">
-                  <ShieldAlert className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Autorización pendiente</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      El administrador central asignará la clave de sincronización una vez autorizada la terminal.
-                    </p>
-                    {formData.isup_key && (
-                      <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-                        <p className="text-[10px] text-slate-400 mb-0.5">Clave asignada</p>
-                        <p className="text-xs font-mono font-bold text-[#03363D] dark:text-teal-400 select-all">{formData.isup_key}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+            {requestMode ? <div>
+              <label className={labelClass}>Marca del dispositivo</label>
+              <select value={formData.marca} onChange={event => setFormData({ ...formData, marca: event.target.value })} className={inputClass}>
+                <option value="zkteco">ZKTeco (ADMS Push)</option>
+                <option value="hikvision">Hikvision (ISUP 5.0)</option>
+              </select>
+              <p className="mt-2 text-xs text-slate-500">Central debe autorizar la asociación antes de habilitar esta terminal.</p>
+            </div> : <p className="text-xs text-slate-500">La identidad y asociación del dispositivo se autorizan en Central. Este formulario sólo edita sus parámetros operativos.</p>}
 
             {/* Zona horaria */}
             <div>
@@ -297,7 +223,7 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
               </select>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                <span>Al guardar o actualizar se emitirá el comando canónico <strong className="font-mono text-slate-700 dark:text-slate-300">SET OPTIONS TimeZone</strong> al checador.</span>
+                <span>La zona horaria del catálogo no sustituye la configuración física del checador. Usa la acción de sincronización para enviar su configuración.</span>
               </p>
             </div>
           </div>
@@ -364,6 +290,7 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
               <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
                 <input
                   type="checkbox"
+                  disabled={requestMode || !isSuperAdmin}
                   checked={formData.is_active}
                   onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                   className="sr-only peer"
@@ -374,6 +301,8 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
           </div>
 
           {/* ── Footer ─────────────────────────────────────────────────────── */}
+          {requestMode && <p className="text-xs text-amber-700 dark:text-amber-400">Pendiente de autorización. Central habilita la terminal al aprobar la solicitud.</p>}
+          {errors.submit && <p role="alert" className="text-sm text-rose-600">{errors.submit}</p>}
           <div className="flex items-center justify-end gap-3 pt-2">
             <button
               type="button"
@@ -388,7 +317,7 @@ export default function DeviceFormModal({ device, onClose, onSave }) {
               className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#03363D] hover:bg-[#03363D]/90 shadow-sm transition-all disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
-              {submitting ? 'Guardando...' : isEditing ? 'Guardar cambios' : 'Registrar terminal'}
+              {submitting ? 'Guardando...' : isEditing ? 'Guardar cambios' : 'Registrar'}
             </button>
           </div>
         </form>

@@ -33,6 +33,7 @@ import DashboardPage from "../features/dashboard/pages/DashboardPage";
 import EmpleadosPage from "../features/employees/pages/EmpleadosPage";
 import HorariosPage from "../features/schedules/pages/HorariosPage";
 import AsignacionHorariosPage from "../features/schedules/pages/AsignacionHorariosPage";
+import HistorialHorariosPage from "../features/schedules/pages/HistorialHorariosPage";
 import DiasFestivosPage from "../features/schedules/pages/DiasFestivosPage";
 import ChecadasManualesPage from "../features/attendance/pages/ChecadasManualesPage";
 import IncidenciasPage from "../features/attendance/pages/IncidenciasPage";
@@ -250,6 +251,14 @@ export function AppRouter() {
           }
         />
         <Route
+          path="/central/biometricos/solicitudes"
+          element={
+            <CentralAdminRoute>
+              <CentralBiometricsSummaryPage forcedSubview="requests" />
+            </CentralAdminRoute>
+          }
+        />
+        <Route
           path="/central/biometricos/dispositivos"
           element={
             <CentralAdminRoute>
@@ -413,6 +422,14 @@ export function AppRouter() {
           element={
             <ClientRoute permission={PERMISSION.SCHEDULES}>
               <HorariosPage />
+            </ClientRoute>
+          }
+        />
+        <Route
+          path="/historial-horarios"
+          element={
+            <ClientRoute permission={PERMISSION.SCHEDULES}>
+              <HistorialHorariosPage />
             </ClientRoute>
           }
         />

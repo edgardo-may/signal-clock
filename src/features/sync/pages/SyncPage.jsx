@@ -46,13 +46,6 @@ async function callSyncApi(endpoint, body = {}) {
   return data
 }
 
-function getDefaultDates() {
-  const now = new Date()
-  const inicio = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
-  const fin = now.toISOString().slice(0, 10)
-  return { inicio, fin }
-}
-
 function AccionBadge({ accion }) {
   const config = {
     crear:        { label: 'Nuevo',         className: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' },
@@ -112,8 +105,10 @@ export default function SyncPage() {
       setIndividualPreviewData(null)
       setLocalEmpleadoId(null)
       setLocalClienteId(null)
+
+      if (!currentTenantId) throw new Error('Selecciona una empresa antes de consultar colaboradores.')
       
-      const result = await callSyncApi('preview', { trabId: trabId.trim() })
+      const result = await callSyncApi('preview', { trabId: trabId.trim(), targetClienteId: currentTenantId })
       
       if (result.preview && result.preview.length > 0) {
         const emp = result.preview[0]
@@ -125,9 +120,11 @@ export default function SyncPage() {
           .from('empleados')
           .select('id, cliente_id')
           .eq('clave_empleado', searchId)
+          .eq('cliente_id', currentTenantId)
           .maybeSingle()
         if (dbEmp) {
           setLocalEmpleadoId(dbEmp.id)
+          setLocalClienteId(dbEmp.cliente_id)
         }
 
         if (emp.activo === false) {
@@ -135,6 +132,10 @@ export default function SyncPage() {
         } else {
           toast.success('Colaborador encontrado')
         }
+      } else if (result.consultados === 0) {
+        toast('Consolide no devolvió información para esta empresa y clave de empleado.', { icon: '⚠️' })
+      } else {
+        throw new Error(result.erroresList?.[0]?.error || 'Consolide devolvió registros, pero ninguno pudo prepararse para vista previa.')
       }
     } catch (err) {
       toast.error(`Error: ${err.message}`)
@@ -148,7 +149,8 @@ export default function SyncPage() {
 
     setLoadingIndividualSync(true)
     try {
-      const result = await callSyncApi('execute', { trabId: trabId.trim() })
+      if (!currentTenantId) throw new Error('Selecciona una empresa antes de sincronizar colaboradores.')
+      const result = await callSyncApi('execute', { trabId: trabId.trim(), targetClienteId: currentTenantId })
       if (result.errores > 0) {
         toast.error(`Error al sincronizar: ${result.erroresList[0]?.error || 'Error desconocido'}`)
       } else {
@@ -189,10 +191,10 @@ export default function SyncPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+          <div className="space-y-6">
             
-            {/* ── COLUMNA IZQUIERDA: Herramientas ── */}
-            <div className="xl:col-span-4 space-y-6">
+            {/* ── FILA SUPERIOR: Conexión y consulta ── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
               {/* Tarjeta de Estado de Conexión */}
               <div className="rounded-xl border border-slate-200 dark:border-[#2e3a4e] bg-white dark:bg-[#1c2434] shadow-sm p-5">
@@ -237,7 +239,7 @@ export default function SyncPage() {
                       Clave Externa (trab_ID) <span className="text-rose-500">*</span>
                     </label>
                     <div className="flex gap-2">
-                      <div className="relative flex-1">
+                      <div className="relative flex-1 min-w-0">
                         <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         <input
                           type="text"
@@ -263,8 +265,8 @@ export default function SyncPage() {
               </div>
             </div>
 
-            {/* ── COLUMNA DERECHA: Resultados Individuales ── */}
-            <div className="xl:col-span-8 space-y-6">
+            {/* ── FILA INFERIOR: Información del colaborador ── */}
+            <div className="space-y-6">
               
               {/* Resultado de Sincronización Individual (Aparece aquí al buscar) */}
               {individualPreviewData && (

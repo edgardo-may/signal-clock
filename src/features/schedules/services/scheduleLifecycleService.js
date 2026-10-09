@@ -1,4 +1,5 @@
 import { supabase } from '../../../lib/supabase'
+import { scheduleErrorMessage } from './scheduleCatalogService'
 
 function correlationId() {
   if (!globalThis.crypto?.randomUUID) {
@@ -21,7 +22,7 @@ async function invokeLifecycle(payload) {
     p_retroactive_confirmed: payload.retroactiveConfirmed ?? false,
     p_preview_only: payload.previewOnly ?? false,
   })
-  if (error) throw error
+  if (error) throw new Error(scheduleErrorMessage(error.message))
   return data
 }
 

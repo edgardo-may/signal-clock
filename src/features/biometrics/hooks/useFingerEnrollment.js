@@ -373,14 +373,19 @@ export function useFingerEnrollment(empleadoId, clienteId) {
 
     setSyncingEmployee(true)
     try {
-      await syncService.syncSingleEmployeeToDevice({
+      const result = await syncService.syncSingleEmployeeToDevice({
         clienteId,
         deviceId: selectedDeviceId,
         deviceSerial: selectedDeviceSerial,
-        employeeId,
+        employeeId: empleadoId,
         pin: String(pin).trim(),
         fullName: empleadoData.nombreCompleto
       })
+
+      if (!result?.success) {
+        toast.error(result?.message || 'No se pudo sincronizar al colaborador.')
+        return
+      }
 
       toast.success('Comando de sincronización encolado para la terminal.')
       setDeviceSyncStatus('PENDING')
@@ -394,6 +399,7 @@ export function useFingerEnrollment(empleadoId, clienteId) {
           .select('sync_status')
           .eq('device_id', selectedDeviceId)
           .eq('employee_id', empleadoId)
+          .eq('cliente_id', clienteId)
           .maybeSingle()
 
         if (updated?.sync_status === 'SYNCED') {

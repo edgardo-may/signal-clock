@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { scheduleLifecycleService } from '../services/scheduleLifecycleService'
+import { cancunToday } from '../services/scheduleLocalDate'
 import Sidebar from '../../../shared/components/Layout/Sidebar'
 import Header from '../../../shared/components/Layout/Header'
 import toast, { Toaster } from 'react-hot-toast'
@@ -56,7 +57,7 @@ function ModalAsignarHorario({
   onSaved,
 }) {
   const [horarioId, setHorarioId] = useState(horarios[0]?.id || '')
-  const [fechaInicio, setFechaInicio] = useState(() => new Date().toISOString().slice(0, 10))
+  const [fechaInicio, setFechaInicio] = useState(() => cancunToday())
   const [esPermanente, setEsPermanente] = useState(true)
   const [fechaFin, setFechaFin] = useState('')
   const [notas, setNotas] = useState('')
@@ -106,7 +107,7 @@ function ModalAsignarHorario({
         fechaFin: esPermanente ? null : fechaFin,
         reason: notas.trim(),
       }
-      const today = new Date().toISOString().slice(0, 10)
+      const today = cancunToday()
       if (fechaInicio < today) {
         const preview = await scheduleLifecycleService.assignOrReplace({ ...request, previewOnly: true })
         const approved = await confirmDialog({
@@ -397,7 +398,7 @@ export default function AsignacionHorarios() {
     if (asigRes.error) toast.error('Error al cargar asignaciones: ' + asigRes.error.message)
 
     setEmpleados(empRes.data || [])
-    setHorarios(horRes.data || [])
+    setHorarios((horRes.data || []).filter(horario => !horario.archived_at));
     setAsignaciones(asigRes.data || [])
     setLoading(false)
   }, [currentTenantId])
@@ -791,7 +792,7 @@ export default function AsignacionHorarios() {
                 </table>
               )}
             </div>
-            
+
             {/* Controles de Paginación Global */}
             {!loading && filtered.length > 0 && (
               <PaginationControl

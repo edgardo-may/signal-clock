@@ -9,13 +9,16 @@ import {
   Shield, Building2, Mail, Lock, UserCheck,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useSearchParams } from 'react-router-dom'
+import CreateCompanyUserDialog from '../components/CreateCompanyUserDialog'
 
 export default function CentralUsersPage() {
+  const [searchParams] = useSearchParams()
   const [usuarios, setUsuarios] = useState([])
   const [tenants, setTenants] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [filterTenant, setFilterTenant] = useState('todos')
+  const [filterTenant, setFilterTenant] = useState(() => searchParams.get('empresa') || 'todos')
   const [filterRol, setFilterRol] = useState('todos')
 
   const [modalForm, setModalForm] = useState(null)
@@ -91,6 +94,11 @@ export default function CentralUsersPage() {
           </p>
         </div>
 
+        <div className="flex items-center gap-2">
+        <button type="button" disabled={loading || !tenants.length} onClick={() => setModalForm('create')}
+          className="flex items-center gap-2 rounded-xl bg-[#03363D] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          <UserPlus className="w-4 h-4" /> Crear usuario
+        </button>
         <button
           onClick={fetchData}
           disabled={loading}
@@ -99,6 +107,7 @@ export default function CentralUsersPage() {
           <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${loading ? 'animate-spin' : ''}`} />
           <span>Refrescar</span>
         </button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -230,6 +239,9 @@ export default function CentralUsersPage() {
           </table>
         </div>
       </div>
+      {modalForm === 'create' && <CreateCompanyUserDialog tenants={tenants}
+        initialTenantId={tenants.some(tenant => tenant.id === filterTenant) ? filterTenant : ''}
+        onClose={() => setModalForm(null)} onCreated={fetchData} />}
     </CentralLayout>
   )
 }

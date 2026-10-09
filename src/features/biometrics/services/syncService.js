@@ -238,7 +238,7 @@ export const syncService = {
     if (empErr || !emp) throw new Error('No se encontró la información del colaborador.')
 
     // Actualizar o crear asignación evitando error de onConflict
-    const { data: existingAssign } = await supabase
+    const { data: existingAssign, error: assignmentReadError } = await supabase
       .from('device_employee_assignments')
       .select('id')
       .eq('device_id', deviceId)
@@ -246,8 +246,10 @@ export const syncService = {
       .eq('cliente_id', clienteId)
       .maybeSingle()
 
+    if (assignmentReadError) throw assignmentReadError
+
     if (existingAssign?.id) {
-      await supabase
+      const { error: assignmentError } = await supabase
         .from('device_employee_assignments')
         .update({
           biometric_user_id: cleanPin,
@@ -256,8 +258,10 @@ export const syncService = {
           last_attempt_at: new Date().toISOString()
         })
         .eq('id', existingAssign.id)
+        .eq('cliente_id', clienteId)
+      if (assignmentError) throw assignmentError
     } else {
-      await supabase
+      const { error: assignmentError } = await supabase
         .from('device_employee_assignments')
         .insert({
           cliente_id: clienteId,
@@ -268,16 +272,19 @@ export const syncService = {
           sync_status: 'PENDING',
           last_attempt_at: new Date().toISOString()
         })
+      if (assignmentError) throw assignmentError
     }
 
     // Templates biométricos — filtrados por device_id (mismo dispositivo que enroló).
     // CRITICAL: filtrar por device_id impide enviar un template de device A a device B.
-    const { data: empTemplates } = await supabase
+    const { data: empTemplates, error: templateReadError } = await supabase
       .from('biometric_templates')
       .select('tipo, indice, template_data')
       .eq('empleado_id', employeeId)
       .eq('cliente_id', clienteId)
       .eq('device_id', deviceId)
+
+    if (templateReadError) throw templateReadError
 
     // The assignment update above is the only USERINFO producer.
     const commandsToInsert = []

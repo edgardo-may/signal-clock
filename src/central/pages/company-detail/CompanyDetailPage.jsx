@@ -443,7 +443,11 @@ export default function CompanyDetailPage() {
           {activeTab === 'resumen'     && <TabResumen empresa={empresa} />}
           {activeTab === 'capacidades' && <TabCapacidades empresa={empresa} />}
           {activeTab === 'usuarios'    && (
-            <TabPlaceholder icon={Users} title="Usuarios de esta empresa" description="Lista de usuarios con acceso a esta empresa. Disponible en próxima fase." />
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
+              <h2 className="text-lg font-bold">Usuarios de esta empresa</h2>
+              <p className="mt-2 text-sm text-slate-500">Crea el primer acceso del administrador y consulta las cuentas de esta empresa.</p>
+              <Link to={`/central/usuarios?empresa=${empresa.id}`} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#03363D] px-4 py-2 text-sm font-semibold text-white"><Users className="w-4 h-4" /> Gestionar usuarios</Link>
+            </div>
           )}
           {activeTab === 'dispositivos' && (
             <TabPlaceholder icon={Cpu} title="Dispositivos de esta empresa" description="Terminales biométricas asociadas a esta empresa." />

@@ -571,123 +571,11 @@ export const biometricsService = {
    * IMPORTANTE:
    * Ya NO crea registros en `dispositivos`.
    */
-  async createDevice({
-    name,
-    serial_number,
-    location,
-    ip_address,
-    port = DEFAULT_PORT,
-    timezone = DEFAULT_TIMEZONE,
-    device_type = DEFAULT_DEVICE_TYPE,
-    is_active = true,
-    cliente_id
-  }) {
-    if (!cliente_id) {
-      throw new Error(
-        'Falta cliente_id para registrar el dispositivo.'
-      )
-    }
-
-    const normalizedSerial =
-      normalizeSerial(
-        serial_number
-      )
-
-    if (!normalizedSerial) {
-      throw new Error(
-        'El número de serie es obligatorio.'
-      )
-    }
-
-    // Verificar serial existente dentro del tenant
-    const {
-      data: existing,
-      error: existingErr
-    } = await supabase
-      .from('devices')
-      .select('*')
-      .eq(
-        'cliente_id',
-        cliente_id
-      )
-      .eq(
-        'serial_number',
-        normalizedSerial
-      )
-      .maybeSingle()
-
-    if (existingErr) {
-      throw existingErr
-    }
-
-    if (existing) {
-      throw new Error(
-        'Este número de serie ya está asignado a este cliente.'
-      )
-    }
-
-    const payload = {
-      name:
-        name?.trim() || null,
-
-      serial_number:
-        normalizedSerial,
-
-      location:
-        location?.trim() || null,
-
-      ip_address:
-        ip_address?.trim() || null,
-
-      port:
-        port
-          ? parseInt(port, 10)
-          : DEFAULT_PORT,
-
-      timezone:
-        timezone ||
-        DEFAULT_TIMEZONE,
-
-      device_type:
-        device_type ||
-        DEFAULT_DEVICE_TYPE,
-
-      is_active:
-        Boolean(is_active),
-
-      cliente_id,
-
-      last_activity:
-        null
-    }
-
-    const {
-      data,
-      error
-    } = await supabase
-      .from('devices')
-      .insert([payload])
-      .select()
-      .single()
-
-    if (error) {
-      // Carrera de inserción
-      if (error.code === '23505') {
-        throw new Error(
-          'El dispositivo ya existe.'
-        )
-      }
-
-      throw error
-    }
-
-    return normalizeDevice(data)
+  async createDevice() {
+    throw new Error('Usa Solicitar biométrico. Central debe autorizar la asociación.')
   },
 
-
-  /**
-   * Actualiza un device (admite actualización parcial).
-   */
+  // Actualiza únicamente metadatos; identidad y autorización pertenecen a Central.
   async updateDevice(
     id,
     fields = {}
@@ -698,16 +586,27 @@ export const biometricsService = {
 
     const payload = {}
     if (fields.name !== undefined) payload.name = fields.name?.trim() || null
-    if (fields.serial_number !== undefined) payload.serial_number = normalizeSerial(fields.serial_number)
     if (fields.location !== undefined) payload.location = fields.location?.trim() || null
     if (fields.ip_address !== undefined) payload.ip_address = fields.ip_address?.trim() || null
     if (fields.port !== undefined) payload.port = fields.port ? parseInt(fields.port, 10) : DEFAULT_PORT
     if (fields.timezone !== undefined) payload.timezone = fields.timezone || DEFAULT_TIMEZONE
     if (fields.device_type !== undefined) payload.device_type = fields.device_type || DEFAULT_DEVICE_TYPE
-    if (fields.is_active !== undefined) payload.is_active = Boolean(fields.is_active)
 
-    if (fields.serial_number !== undefined && !payload.serial_number) {
-      throw new Error('El número de serie no puede estar vacío.')
+    if (fields.is_active !== undefined) {
+      const { error } = await supabase.rpc('set_device_operational_state', { p_device_id: id, p_active: Boolean(fields.is_active) })
+      if (error) throw error
+    }
+
+    if (!Object.keys(payload).length) {
+      const { data, error } = await supabase.from('devices').select('*').eq('id', id).single()
+      if (error) throw error
+      return normalizeDevice(data)
+    }
+
+    if (!Object.keys(payload).length) {
+      const { data, error } = await supabase.from('devices').select('*').eq('id', id).single()
+      if (error) throw error
+      return normalizeDevice(data)
     }
 
     const {
@@ -731,7 +630,9 @@ export const biometricsService = {
    * Activa o desactiva un dispositivo biométrico.
    */
   async toggleDeviceActive(id, isActive) {
-    return this.updateDevice(id, { is_active: isActive })
+    const { data, error } = await supabase.rpc('set_device_operational_state', { p_device_id: id, p_active: isActive })
+    if (error) throw error
+    return normalizeDevice(data)
   },
 
 

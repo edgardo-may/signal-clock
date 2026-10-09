@@ -13,6 +13,7 @@ import BiometricsDashboard from '../components/BiometricsDashboard'
 import DevicesList from '../components/DevicesList'
 import DeviceDetailModal from '../components/DeviceDetailModal'
 import DeviceFormModal from '../components/DeviceFormModal'
+import DeviceRegistrationRequests from '../components/DeviceRegistrationRequests'
 import AttendanceLogsList from '../components/AttendanceLogsList'
 import DeviceCommandsList from '../components/DeviceCommandsList'
 import BiometricsSyncMonitor from '../components/BiometricsSyncMonitor'
@@ -51,13 +52,19 @@ export default function BiometricosPage({ forcedSubview, layout = 'client' }) {
   const isCentral = layout === 'central' || location.pathname.startsWith('/central')
   const basePath = isCentral ? '/central/biometricos' : '/biometricos'
 
-  const canMutate = isSuperAdmin || ['admin', 'rh', 'superadmin'].includes(profile?.rol?.toLowerCase())
   const canDeleteDevice = isCentral && (isSuperAdmin || profile?.rol?.toLowerCase() === 'superadmin')
+  const canRequestDevice = isSuperAdmin || profile?.rol?.toLowerCase() === 'admin'
+  const [openDeviceRequest, setOpenDeviceRequest] = useState(false)
+  const openNewDeviceRequest = () => {
+    setOpenDeviceRequest(true)
+    navigate(isCentral ? '/central/biometricos/solicitudes' : '/biometricos/dispositivos')
+  }
 
   // Determinar subvista activa a partir de la URL
   const determineSubview = () => {
     if (forcedSubview) return forcedSubview
     const p = location.pathname
+    if (p.includes('/solicitudes')) return 'requests'
     if (p.includes('/dispositivos')) return 'devices'
     if (p.includes('/colaboradores')) return 'colaboradores'
     if (p.includes('/asignaciones')) return 'asignaciones'
@@ -191,6 +198,7 @@ export default function BiometricosPage({ forcedSubview, layout = 'client' }) {
   }, [location.pathname, forcedSubview])
 
   const SUBVIEW_TITLES = {
+    requests: { title: 'Solicitudes de biométricos', subtitle: 'Autorización de asociaciones por empresa' },
     dashboard: {
       title: 'Resumen Biométrico',
       subtitle: 'Indicadores generales del sistema de asistencia y terminales',
@@ -336,9 +344,10 @@ export default function BiometricosPage({ forcedSubview, layout = 'client' }) {
           )}
 
           {/* Botón Agregar Dispositivo (Estilo Signum Brand) */}
-          {canMutate && subview === 'devices' && (
+          {canRequestDevice && ['devices', 'requests'].includes(subview) && (
             <button
-              onClick={() => setDeviceModalForm('nuevo')}
+              onClick={openNewDeviceRequest}
+              disabled={!currentTenantId}
               className="h-10 flex items-center gap-2 px-4 rounded-xl text-xs sm:text-sm font-semibold text-white bg-[#03363D] hover:bg-[#02252a] shadow-sm hover:shadow transition-all cursor-pointer whitespace-nowrap"
             >
               <Plus className="w-4 h-4" />
@@ -375,12 +384,17 @@ export default function BiometricosPage({ forcedSubview, layout = 'client' }) {
 
       {/* ── Contenido de la Subvista Activa ──────────────────────────────── */}
       <div>
+        {(subview === 'requests' || (!isCentral && subview === 'devices')) && (
+          <div className="mb-6"><DeviceRegistrationRequests central={isCentral && isSuperAdmin}
+            tenantId={currentTenantId} canRequest={canRequestDevice} openRequest={openDeviceRequest}
+            onRequestOpened={() => setOpenDeviceRequest(false)} /></div>
+        )}
         {subview === 'dashboard' && (
           <BiometricsDashboard
             stats={stats}
             loading={loading}
             onNavigateTab={(tab) => handleTabClick(tab, tab === 'logs' ? 'historial' : tab)}
-            onOpenNewDevice={() => setDeviceModalForm('nuevo')}
+            onOpenNewDevice={openNewDeviceRequest}
             onOpenSendCommand={(data) => setSendCommandModal(data || {})}
             onRefresh={refreshCurrentTab}
           />
@@ -396,7 +410,7 @@ export default function BiometricosPage({ forcedSubview, layout = 'client' }) {
             onFilterStatusChange={setDeviceFilterStatus}
             filterType={deviceFilterType}
             onFilterTypeChange={setDeviceFilterType}
-            onOpenNewDevice={() => setDeviceModalForm('nuevo')}
+            onOpenNewDevice={openNewDeviceRequest}
             onOpenEditDevice={(dev) => setDeviceModalForm(dev)}
             onOpenDeviceDetail={handleOpenDeviceDetail}
             onOpenSendCommand={(data) => setSendCommandModal(data)}

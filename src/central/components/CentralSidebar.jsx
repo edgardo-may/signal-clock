@@ -41,6 +41,7 @@ const NAV_STRUCTURE = [
     items: [
       { label: 'Resumen Biométrico',  to: '/central/biometricos-resumen', icon: Activity },
       { label: 'Dispositivos',        to: '/central/dispositivos',        icon: Cpu },
+      { label: 'Solicitudes de biométricos', to: '/central/biometricos/solicitudes', icon: ShieldCheck },
       { label: 'Colaboradores',       to: '/central/biometricos/colaboradores', icon: Users },
       { label: 'Asignaciones',        to: '/central/biometricos/asignaciones',  icon: CalendarDays },
       { label: 'Checadas (Logs)',     to: '/central/biometricos/historial',     icon: FileSpreadsheet },

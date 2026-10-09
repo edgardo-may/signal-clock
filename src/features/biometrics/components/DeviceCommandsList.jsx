@@ -155,13 +155,13 @@ export default function DeviceCommandsList({
                     {/* Estado */}
                     <td className="px-5 py-3.5">
                       <button
-                        onClick={() => onToggleCommand(cmd.id, cmd.is_executed)}
+                        disabled
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${
                           cmd.is_executed
                             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
                             : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20'
                         }`}
-                        title="Hacer clic para alternar estado"
+                        title="El estado se confirma mediante la respuesta del dispositivo"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         <span>{cmd.is_executed ? 'Ejecutado' : 'Pendiente'}</span>
@@ -171,9 +171,9 @@ export default function DeviceCommandsList({
                     {/* Acciones */}
                     <td className="px-5 py-3.5 text-right">
                       <button
-                        onClick={() => onDeleteCommand(cmd.id)}
+                        disabled
                         className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
-                        title="Eliminar comando de la cola"
+                        title="La cola operativa se conserva; no se elimina desde el navegador"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

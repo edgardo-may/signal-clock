@@ -1,6 +1,7 @@
 // src/features/biometrics/components/DeviceDetailModal.jsx
 import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
+import CatalogIdentifier from '../../../shared/components/ui/CatalogIdentifier'
 import { supabase } from '../../../lib/supabase'
 import { syncService } from '../services/syncService'
 import {
@@ -209,6 +210,7 @@ export default function DeviceDetailModal({ device, onClose, onOpenSendCommand, 
               <p className="text-xs text-slate-500 font-mono">
                 Serial Number: {device.serial_number}
               </p>
+              <CatalogIdentifier folio={device.folio} />
             </div>
           </div>
 

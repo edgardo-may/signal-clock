@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import CatalogIdentifier from '../../../shared/components/ui/CatalogIdentifier'
 import {
   Plus,
   Search,
@@ -42,7 +43,6 @@ const STATUS_CONFIG = {
 }
 
 function getDeviceStatus(d) {
-  if (!d.is_active) return 'disabled'
   if (!d.last_activity) return 'pending'
   if (new Date() - new Date(d.last_activity) < 5 * 60 * 1000) return 'online'
   return 'offline'
@@ -301,7 +301,7 @@ export default function DevicesList({
               <th className="px-4 py-3.5 w-[16%]">Tipo</th>
               <th className="px-4 py-3.5 w-[18%]">Ubicación</th>
               <th className="px-4 py-3.5 w-[17%]">Colaboradores</th>
-              <th className="px-4 py-3.5 w-[17%]">Estado &amp; Conexión</th>
+              <th className="px-4 py-3.5 w-[17%]">Operación / conexión</th>
               <th className="px-4 py-3.5 w-[11%] text-right">Acciones</th>
             </tr>
           </thead>
@@ -350,6 +350,7 @@ export default function DevicesList({
                               SN: {d.serial_number}
                             </span>
                           </div>
+                          <CatalogIdentifier folio={d.folio} />
                         </div>
                       </div>
                     </td>
@@ -416,6 +417,7 @@ export default function DevicesList({
                     {/* 5. Estado & Conexión */}
                     <td className="px-4 py-4">
                       <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-slate-700 dark:text-slate-300">{d.is_active ? 'Operativo' : 'Pausado por Central'}</p>
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border whitespace-nowrap ${status.badge}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${status.dot} flex-shrink-0`} />
                           {status.label}
@@ -478,7 +480,7 @@ export default function DevicesList({
           <div className="py-12 text-center">
             <HardDrive className="w-8 h-8 text-slate-200 mx-auto mb-3" />
             <p className="text-sm font-semibold text-slate-600">Aún no tienes dispositivos registrados</p>
-            <p className="text-xs text-slate-400 mt-1">Agrega tu primer biométrico para comenzar</p>
+            <p className="text-xs text-slate-400 mt-1">Solicita un biométrico para que Central autorice su asociación</p>
           </div>
         ) : (
           devices.map((d, index) => {
@@ -500,6 +502,8 @@ export default function DevicesList({
                         {d.name || 'Terminal sin nombre'}
                       </p>
                       <p className="text-[11px] font-mono text-slate-400 mt-0.5 truncate">{d.serial_number}</p>
+                      <CatalogIdentifier folio={d.folio} />
+                      <p className="mt-1 text-xs text-slate-500">{d.is_active ? 'Operativo' : 'Pausado por Central'}</p>
                     </div>
                   </div>
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border flex-shrink-0 ${status.badge}`}>

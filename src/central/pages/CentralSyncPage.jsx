@@ -5,6 +5,7 @@ import CentralLayout from '../components/CentralLayout'
 import toast from 'react-hot-toast'
 import { Users, Eye, Play, Loader2, AlertTriangle } from 'lucide-react'
 import { DatePicker } from '../../shared/components/ui'
+import { todayStr } from '../../shared/utils/dateUtils'
 
 // ── Llamada al backend proxy ──────────────────────────────────────────────────
 async function callSyncApi(endpoint, body = {}) {
@@ -30,10 +31,7 @@ async function callSyncApi(endpoint, body = {}) {
 }
 
 function getDefaultDates() {
-  const now = new Date()
-  const inicio = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
-  const fin = now.toISOString().slice(0, 10)
-  return { inicio, fin }
+  return { inicio: '2020-01-01', fin: todayStr() }
 }
 
 function AccionBadge({ accion }) {

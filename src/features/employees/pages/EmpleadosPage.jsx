@@ -266,8 +266,8 @@ function AvatarCircle({ empleado, size = 36 }) {
     />
   ) : (
     <div
-      className={`rounded-full flex items-center justify-center font-bold border ${pal.bg} ${pal.text} ${pal.border}`}
-      style={{ width: size, height: size, fontSize: size * 0.35 }}
+      className={`rounded-full flex items-center justify-center font-bold border shrink-0 ${pal.bg} ${pal.text} ${pal.border}`}
+      style={{ width: size, height: size, minWidth: size, minHeight: size, fontSize: size * 0.35 }}
     >
       {getInitials(empleado.nombre, empleado.apellido)}
     </div>
@@ -1109,7 +1109,7 @@ function ModalForm({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative w-[95%] sm:max-w-xl max-h-[90vh] overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-2xl">
+      <div className="relative w-[95%] sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white z-10">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
@@ -1289,106 +1289,6 @@ function ModalForm({
                 disabled={saving}
                 hint="Fecha de inicio de labores."
               />
-            </div>
-          </div>
-
-          {/* ── Sección 3: Acceso al Portal del Colaborador y Kiosco ── */}
-          <div className="rounded-lg p-4 bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-800/40 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-1 rounded bg-blue-600 text-white">
-                  <KeyRound className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                    Acceso al Portal del Colaborador y Kiosco
-                  </span>
-                  <span className="text-[11px] text-slate-500">
-                    Credenciales exclusivas configuradas por Recursos Humanos
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const prefix = "Colab";
-                  const randomNum = Math.floor(1000 + Math.random() * 9000);
-                  const suggested = `${prefix}${randomNum}`;
-                  setForm((f) => ({ ...f, pin: suggested }));
-                  setShowPin(true);
-                  toast.success(`Contraseña sugerida: ${suggested}`);
-                }}
-                className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-semibold flex items-center gap-1"
-              >
-                <Sparkles className="w-3 h-3" />
-                Sugerir contraseña
-              </button>
-            </div>
-
-            {/* Usuario asignado (Clave de colaborador) */}
-            <div className="p-3 rounded-md bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <BadgeCheck className="w-4 h-4 text-blue-600" />
-                <div>
-                  <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block">
-                    Usuario del Portal
-                  </span>
-                  <span className="text-xs font-semibold text-slate-900 dark:text-white font-mono">
-                    {form.clave_empleado
-                      ? form.clave_empleado
-                      : "(Requiere clave de colaborador)"}
-                  </span>
-                </div>
-              </div>
-              <span className="text-[11px] text-slate-500 hidden sm:inline">
-                {form.clave_empleado
-                  ? "Número oficial para login"
-                  : "Asigna una clave en datos laborales"}
-              </span>
-            </div>
-
-            {/* Contraseña asignada por RH */}
-            <div className="space-y-1.5">
-              <label
-                htmlFor="f-pin"
-                className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300"
-              >
-                Contraseña Asignada por RH (4 a 20 caracteres)
-              </label>
-              <div className="relative">
-                <input
-                  id="f-pin"
-                  type={showPin ? "text" : "password"}
-                  maxLength={20}
-                  value={form.pin || ""}
-                  onChange={set("pin")}
-                  placeholder="ej. Colab2026 o 1234"
-                  disabled={saving}
-                  className={`w-full py-2.5 px-3 text-xs sm:text-sm rounded-md border bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 outline-none font-mono ${
-                    errors.pin
-                      ? "border-rose-500"
-                      : "border-slate-200 dark:border-slate-700 focus:border-blue-500"
-                  }`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPin(!showPin)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-blue-600 dark:text-blue-400 font-semibold"
-                >
-                  {showPin ? "Ocultar" : "Ver"}
-                </button>
-              </div>
-              {errors.pin ? (
-                <p className="text-[11px] text-rose-500 font-medium">
-                  {errors.pin}
-                </p>
-              ) : (
-                <p className="text-[11px] text-slate-500">
-                  Esta contraseña la usará el colaborador para ingresar a su
-                  dashboard y checar asistencia.
-                </p>
-              )}
             </div>
           </div>
 
