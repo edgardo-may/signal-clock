@@ -694,34 +694,6 @@ export default function ClientLoginPage() {
                     )}
                   </button>
 
-                  {/* Link al Portal de Colaboradores */}
-                  <div
-                    style={{
-                      textAlign: 'center',
-                      marginTop: 14,
-                      paddingTop: 14,
-                      borderTop: '1px solid rgba(0,54,61,0.06)',
-                    }}
-                  >
-                    <p style={{ margin: 0, fontSize: 13, color: 'rgba(0,54,61,0.6)' }}>
-                      ¿Eres colaborador y necesitas checar?{' '}
-                      <Link
-                        to="/portal-colaborador/login"
-                        style={{
-                          fontWeight: 600,
-                          color: '#03363D',
-                          textDecoration: 'none',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          marginLeft: 4,
-                        }}
-                      >
-                        Ir al Portal de Checadas
-                        <ArrowRight size={13} />
-                      </Link>
-                    </p>
-                  </div>
                 </form>
               </>
             )}

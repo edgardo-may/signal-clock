@@ -28,7 +28,6 @@ import {
   Fingerprint,
   ShieldCheck,
   Coffee,
-  UserCheck,
 } from 'lucide-react'
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
@@ -74,7 +73,6 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
         name: 'MENÚ PRINCIPAL',
         items: [
           { label: 'Dashboard',           to: '/',                icon: LayoutDashboard, permission: PERMISSION.DASHBOARD },
-          { label: 'Portal Colaborador',  to: '/portal-colaborador', icon: UserCheck },
           { label: 'Empleados',           to: '/empleados',       icon: Users, permission: PERMISSION.EMPLOYEES },
           { label: 'Integraciones',       to: '/sincronizacion',  icon: RefreshCw, permission: PERMISSION.SYNCHRONIZATION },
           { label: 'Enrolamiento',        to: '/enrolamiento',    icon: Fingerprint, permission: PERMISSION.ENROLLMENT },
