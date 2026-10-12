@@ -1,4 +1,4 @@
-// src/features/collaborator/services/serverTimeService.js
+// src/features/employee/services/serverTimeService.js
 // Servicio de Sincronización de Hora del Servidor Anti-Manipulación y Resolución de Zona Horaria por Ubicación
 
 let serverOffsetMs = 0

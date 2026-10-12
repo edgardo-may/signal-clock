@@ -29,6 +29,15 @@ export interface AttendanceDeviceRecord {
   timezone: string | null
 }
 
+/** Obtained only from the backend-only canonical-source view, never raw_payload. */
+export interface CanonicalWebClockEvidence {
+  registro_id: string
+  source_event_id: string
+  cliente_id: string
+  empleado_id: string
+  device_id: string
+}
+
 export interface RegistroAttendanceDomainEvent {
   /** registro_asistencia.id: identity of the event used by the domain. */
   eventId: string
@@ -70,7 +79,14 @@ function requireNonBlank(value: string, field: string): void {
   }
 }
 
-function sourceFor(record: RegistroAsistenciaRecord): PunchSource {
+function sourceFor(record: RegistroAsistenciaRecord, evidence?: CanonicalWebClockEvidence | null): PunchSource {
+  if (evidence) {
+    if (record.es_manual || evidence.registro_id !== record.id || evidence.source_event_id !== record.source_event_id ||
+        evidence.cliente_id !== record.cliente_id || evidence.empleado_id !== record.empleado_id || evidence.device_id !== record.dispositivo_id) {
+      throw new InvalidPunchError('La evidencia canónica WEB_CLOCK no corresponde al registro.')
+    }
+    return 'WEB'
+  }
   // `metodo` is a verification method, not a trusted origin classification.
   // A physical device maps to ADMS until a source-specific adapter says otherwise.
   return record.es_manual ? 'MANUAL' : 'ADMS'
@@ -85,7 +101,8 @@ function sourceFor(record: RegistroAsistenciaRecord): PunchSource {
 export class RegistroAttendanceAdapter {
   public static fromRegistro(
     record: RegistroAsistenciaRecord,
-    device: AttendanceDeviceRecord | null | undefined
+    device: AttendanceDeviceRecord | null | undefined,
+    canonicalWebClock?: CanonicalWebClockEvidence | null
   ): RegistroAttendanceDomainEvent {
     requireNonBlank(record.id, 'id')
     requireNonBlank(record.cliente_id, 'cliente_id')
@@ -132,7 +149,7 @@ export class RegistroAttendanceAdapter {
         clienteId: record.cliente_id,
         empleadoId: record.empleado_id,
         timestamp: record.verificado_at,
-        source: sourceFor(record),
+        source: sourceFor(record, canonicalWebClock),
         inOutState: record.tipo_verificacion ?? undefined,
       },
     }

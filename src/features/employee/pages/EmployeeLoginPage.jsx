@@ -1,5 +1,5 @@
-// src/features/collaborator/pages/ColaboradorLoginPage.jsx
-// Login 100% Adaptable para Celulares, Tablets y Computadoras - Exclusivo para Colaboradores
+// src/features/employee/pages/EmployeeLoginPage.jsx
+// Login 100% Adaptable para Celulares, Tablets y Computadoras - Exclusivo para Empleados
 
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
@@ -20,12 +20,12 @@ import {
 import toast from 'react-hot-toast'
 import {
   getEmpresasDisponibles,
-  loginColaborador,
+  loginEmployee,
   getLastTenantId,
-  hasActiveCollaboratorSession,
-} from '../services/collaboratorAuthService'
+  hasActiveEmployeeSession,
+} from '../services/employeeAuthService'
 
-export default function ColaboradorLoginPage() {
+export default function EmployeeLoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -40,12 +40,12 @@ export default function ColaboradorLoginPage() {
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
-  // Redirigir de inmediato si ya hay sesión activa
   useEffect(() => {
-    if (hasActiveCollaboratorSession()) {
-      const from = location.state?.from?.pathname || '/portal-colaborador'
-      navigate(from, { replace: true })
-    }
+    let active = true
+    hasActiveEmployeeSession().then(verified => {
+      if (active && verified) navigate(location.state?.from?.pathname || '/employee-portal', { replace: true })
+    })
+    return () => { active = false }
   }, [navigate, location])
 
   // Cargar empresas disponibles
@@ -73,7 +73,7 @@ export default function ColaboradorLoginPage() {
   // Manejador del Teclado Numérico Virtual
   const handleKeypadPress = (digit) => {
     setErrorMsg('')
-    if (pin.length < 8) {
+    if (pin.length < 5) {
       setPin((prev) => prev + digit)
     }
   }
@@ -100,13 +100,13 @@ export default function ColaboradorLoginPage() {
     }
 
     if (!clave.trim()) {
-      setErrorMsg('Ingresa tu clave de colaborador.')
-      toast.error('Ingresa tu clave de colaborador')
+      setErrorMsg('Ingresa tu clave de empleado.')
+      toast.error('Ingresa tu clave de empleado')
       return
     }
 
-    if (!pin.trim()) {
-      setErrorMsg('Ingresa tu PIN de seguridad (4 a 8 dígitos).')
+    if (!/^[0-9]{5}$/.test(pin)) {
+      setErrorMsg('Ingresa tu PIN de seguridad (5 dígitos).')
       toast.error('Ingresa tu PIN')
       return
     }
@@ -115,7 +115,7 @@ export default function ColaboradorLoginPage() {
     const toastId = toast.loading('Verificando credenciales...')
 
     try {
-      const result = await loginColaborador({
+      const result = await loginEmployee({
         clienteId,
         clave: clave.trim(),
         pin: pin.trim(),
@@ -133,7 +133,7 @@ export default function ColaboradorLoginPage() {
         icon: '👋',
       })
 
-      const destination = location.state?.from?.pathname || '/portal-colaborador'
+      const destination = location.state?.from?.pathname || '/employee-portal'
       navigate(destination, { replace: true })
     } catch (err) {
       toast.error('Error al iniciar sesión', { id: toastId })
@@ -155,7 +155,7 @@ export default function ColaboradorLoginPage() {
               Signum Clock
             </span>
             <span className="text-[11px] font-semibold uppercase tracking-wider text-[#03363D] dark:text-[#3fa9a1] block">
-              Portal del Colaborador
+              Portal del Empleado
             </span>
           </div>
         </div>
@@ -177,7 +177,7 @@ export default function ColaboradorLoginPage() {
               <KeyRound className="w-6 h-6" />
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-[#272c3d] dark:text-white tracking-tight">
-              Ingreso de Colaboradores
+              Ingreso de Empleados
             </h1>
             <p className="text-xs text-[#707485] dark:text-slate-400 mt-1">
               Fichaje de asistencia con verificación GPS y foto de referencia
@@ -225,13 +225,13 @@ export default function ColaboradorLoginPage() {
               </div>
             </div>
 
-            {/* 2. Clave de Colaborador */}
+            {/* 2. Clave de Empleado */}
             <div className="space-y-1.5">
               <label
                 htmlFor="c-clave"
                 className="block text-xs font-semibold uppercase tracking-wider text-[#707485] dark:text-slate-400"
               >
-                Clave o ID de Colaborador
+                Clave o ID de Empleado
               </label>
               <div className="relative">
                 <User className="w-4 h-4 text-[#707485] dark:text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -258,7 +258,7 @@ export default function ColaboradorLoginPage() {
                   htmlFor="c-pin"
                   className="block text-xs font-semibold uppercase tracking-wider text-[#707485] dark:text-slate-400"
                 >
-                  PIN de Ingreso (4 a 8 dígitos)
+                  PIN de Ingreso (5 dígitos)
                 </label>
                 <button
                   type="button"
@@ -276,7 +276,7 @@ export default function ColaboradorLoginPage() {
                   type={showPin ? 'text' : 'password'}
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  maxLength={8}
+                  maxLength={5}
                   value={pin}
                   onChange={(e) => {
                     const onlyNums = e.target.value.replace(/\D/g, '')

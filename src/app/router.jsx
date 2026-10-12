@@ -50,9 +50,9 @@ import PermissionsPage from "../features/permissions/pages/PermissionsPage";
 import BiometricosPage from "../features/biometrics/pages/BiometricosPage";
 import EnrollmentPage from "../features/biometrics/pages/EnrollmentPage";
 import SyncPage from "../features/sync/pages/SyncPage";
-import ColaboradorDashboardPage from "../features/collaborator/pages/ColaboradorDashboardPage";
-import ColaboradorLoginPage from "../features/collaborator/pages/ColaboradorLoginPage";
-import ColaboradorRoute from "../features/collaborator/guards/ColaboradorRoute";
+import EmployeeDashboardPage from "../features/employee/pages/EmployeeDashboardPage";
+import EmployeeLoginPage from "../features/employee/pages/EmployeeLoginPage";
+import EmployeeRoute from "../features/employee/guards/EmployeeRoute";
 
 import { Clock } from "lucide-react";
 
@@ -94,7 +94,7 @@ function PublicClientRoute({ children }) {
   if (status === "authenticated") {
     if (isSuperAdmin(profile)) return <Navigate to="/central" replace />;
     if (profile?.rol?.toLowerCase() === "colaborador")
-      return <Navigate to="/portal-colaborador" replace />;
+      return <Navigate to="/employee-portal" replace />;
     return <Navigate to="/" replace />;
   }
 
@@ -384,30 +384,32 @@ export function AppRouter() {
             </ClientRoute>
           }
         />
-        {/* ── Rutas Exclusivas del Colaborador (Independientes de Clientes y Central) ── */}
+        {/* ── Rutas Exclusivas del Empleado (Independientes de Clientes y Central) ── */}
+        <Route path="/employee-portal/login" element={<EmployeeLoginPage />} />
+        <Route path="/employee-portal" element={<EmployeeRoute><EmployeeDashboardPage /></EmployeeRoute>} />
         <Route
           path="/portal-colaborador/login"
-          element={<ColaboradorLoginPage />}
+          element={<EmployeeLoginPage />}
         />
         <Route
           path="/colaborador/login"
-          element={<ColaboradorLoginPage />}
+          element={<EmployeeLoginPage />}
         />
         <Route
           path="/portal-colaborador"
           element={
-            <ColaboradorRoute>
-              <ColaboradorDashboardPage />
-            </ColaboradorRoute>
+            <EmployeeRoute>
+              <EmployeeDashboardPage />
+            </EmployeeRoute>
           }
         />
         <Route
           path="/colaborador"
-          element={<Navigate to="/portal-colaborador" replace />}
+          element={<Navigate to="/employee-portal" replace />}
         />
         <Route
           path="/mi-portal"
-          element={<Navigate to="/portal-colaborador" replace />}
+          element={<Navigate to="/employee-portal" replace />}
         />
         <Route
           path="/empleados"

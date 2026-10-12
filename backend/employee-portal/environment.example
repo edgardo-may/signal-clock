@@ -1,0 +1,7 @@
+# Server-only. NEVER prefix these secrets with VITE_.
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_SERVICE_ROLE_KEY=
+EMPLOYEE_ORIGIN=http://localhost:5173
+EMPLOYEE_RATE_PEPPER=
+# Local HTTP only. Production always requires HTTPS and Secure cookie.
+EMPLOYEE_ALLOW_INSECURE_LOOPBACK_COOKIE=true

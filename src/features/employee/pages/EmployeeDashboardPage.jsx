@@ -1,13 +1,14 @@
-// src/features/collaborator/pages/ColaboradorDashboardPage.jsx — Signum-Clock Portal del Colaborador
+// src/features/employee/pages/EmployeeDashboardPage.jsx — Signum-Clock Portal del Empleado
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../../../lib/supabase";
-import { useAuth } from "../../auth/hooks/useAuth";
-import { useCurrentTenant } from "../../../shared/hooks/useCurrentTenant";
 import {
-  getCollaboratorSession,
-  logoutColaborador,
-} from "../services/collaboratorAuthService";
+  getEmployeeSession,
+  logoutEmployee,
+  getEmployeeState,
+  registrarChecada,
+  getClockPreference,
+  setClockPreference,
+} from "../services/employeeAuthService";
 import {
   ensureServerTimeSync,
   getServerNow,
@@ -16,6 +17,7 @@ import {
   getDeviceClockDriftSeconds,
 } from "../services/serverTimeService";
 import toast from "react-hot-toast";
+import { getPunchDay, getNextPunch } from "../services/punchFlow";
 import {
   Clock,
   CheckCircle2,
@@ -105,26 +107,22 @@ const PUNCH_CONFIG = {
   },
 };
 
-export default function ColaboradorDashboardPage() {
+export default function EmployeeDashboardPage() {
   const navigate = useNavigate();
-  const { user, profile, signOut } = useAuth();
-  const { currentTenantId, currentTenant } = useCurrentTenant();
+  const employeeSession = getEmployeeSession();
+  const activeTenantId = employeeSession?.clienteId;
+  const [clockSlug, setClockSlug] = useState(getClockPreference);
+  const [availableClocks, setAvailableClocks] = useState([]);
+  const pendingPunch = useRef(null);
 
-  // Sesión del colaborador obtenida desde login con PIN o Supabase
-  const collaboratorSession = useMemo(() => getCollaboratorSession(), []);
-  const activeTenantId = collaboratorSession?.clienteId || currentTenantId;
-
-  // Estados del colaborador
+  // Estados del empleado
   const [loading, setLoading] = useState(true);
   const [empleado, setEmpleado] = useState(null);
   const [horarioAsignado, setHorarioAsignado] = useState(null);
   const [checadasHoy, setChecadasHoy] = useState([]);
+  const [punchDataReady, setPunchDataReady] = useState(false);
   const [historialReciente, setHistorialReciente] = useState([]);
   const [actionLoading, setActionLoading] = useState(false);
-
-  // Selector para admins/testers que visitan el portal
-  const [listaEmpleadosTenant, setListaEmpleadosTenant] = useState([]);
-  const [selectedEmpId, setSelectedEmpId] = useState("");
 
   // Estado y geolocalización GPS (Estricta)
   const [gpsUbicacion, setGpsUbicacion] = useState(null);
@@ -134,9 +132,10 @@ export default function ColaboradorDashboardPage() {
   // Hora del Servidor Sincronizada (Anti-manipulación de reloj local)
   const [serverTime, setServerTime] = useState(new Date());
   const [tenantTimezone, setTenantTimezone] = useState(
-    collaboratorSession?.timezone || resolveLocationTimezone()
+    employeeSession?.timezone || resolveLocationTimezone()
   );
   const [clockDrift, setClockDrift] = useState(0);
+  const punchDay = getPunchDay(serverTime, tenantTimezone);
 
   // ── Cámara y Foto de Referencia para Marcaje ─────────────────────
   // Modal de marcaje: cuando hacen clic en entrada/salida, se activa la cámara
@@ -199,14 +198,6 @@ export default function ColaboradorDashboardPage() {
           setGpsUbicacion(coords);
           setGpsCargando(false);
           setGpsError(null);
-
-          // Sincronizar zona horaria con la ubicación GPS real detectada (ej. Cancún / Quintana Roo)
-          const detectedTz = resolveLocationTimezone({
-            coords: { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
-          });
-          if (detectedTz) {
-            setTenantTimezone(detectedTz);
-          }
 
           if (!silent) {
             toast.success(
@@ -345,8 +336,8 @@ export default function ColaboradorDashboardPage() {
       if (videoRef.current && canvasRef.current) {
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
+        canvas.width = Math.min(video.videoWidth || 640, 640);
+        canvas.height = Math.round(canvas.width * (video.videoHeight || 480) / (video.videoWidth || 640));
         const ctx = canvas.getContext("2d");
 
         if (cameraFacing === "user") {
@@ -354,7 +345,7 @@ export default function ColaboradorDashboardPage() {
           ctx.scale(-1, 1);
         }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const snapshot = canvas.toDataURL("image/jpeg", 0.8);
+        const snapshot = canvas.toDataURL("image/jpeg", 0.65);
         setFotoCapturada(snapshot);
         return snapshot;
       }
@@ -370,188 +361,68 @@ export default function ColaboradorDashboardPage() {
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const base64 = event.target?.result;
-      setFotoCapturada(base64);
-      toast.success("Foto de referencia lista");
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.min(image.width, 640);
+        canvas.height = Math.round(canvas.width * image.height / image.width);
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        setFotoCapturada(canvas.toDataURL('image/jpeg', 0.65));
+        toast.success("Foto de referencia lista");
+      };
+      image.onerror = () => toast.error('No se pudo abrir la foto.');
+      image.src = event.target?.result;
     };
     reader.readAsDataURL(file);
   };
 
-  const isColaborador =
-    Boolean(collaboratorSession?.empleadoId) ||
-    profile?.rol?.toLowerCase() === "colaborador";
-
-  // ── 5. Cargar Datos del Colaborador ──────────────────────────────
-  const cargarDatosColaborador = useCallback(async () => {
-    if (!activeTenantId) return;
+  // All personal data comes from the verified HttpOnly session.
+  const cargarDatosEmpleado = useCallback(async () => {
     setLoading(true);
-
+    setPunchDataReady(false);
     try {
-      let emp = null;
-
-      // 1. Si inició sesión mediante el login de colaboradores con PIN
-      if (collaboratorSession?.empleadoId) {
-        emp = {
-          id: collaboratorSession.empleadoId,
-          cliente_id: collaboratorSession.clienteId || activeTenantId,
-          nombre: collaboratorSession.nombre,
-          apellido: collaboratorSession.apellido || "",
-          clave_empleado: collaboratorSession.claveEmpleado,
-          departamento: collaboratorSession.departamento || "General",
-          puesto: collaboratorSession.puesto || "Colaborador",
-          avatar_url: collaboratorSession.avatarUrl || null,
-          activo: true,
-        };
-
-        try {
-          const { data: empById } = await supabase
-            .from("empleados")
-            .select("*")
-            .eq("cliente_id", activeTenantId)
-            .eq("id", collaboratorSession.empleadoId)
-            .maybeSingle();
-          if (empById) emp = { ...emp, ...empById };
-        } catch (_) {}
+      let result = await getEmployeeState(clockSlug);
+      if (!result.success && clockSlug) {
+        result = await getEmployeeState('');
+        if (result.success) { setClockPreference(''); setClockSlug(''); }
       }
-
-      // 2. Si es sesión Supabase Auth con rol colaborador
-      if (!emp && isColaborador) {
-        if (profile?.empleado_id) {
-          const { data: empById } = await supabase
-            .from("empleados")
-            .select("*")
-            .eq("cliente_id", activeTenantId)
-            .eq("id", profile.empleado_id)
-            .maybeSingle();
-          if (empById) emp = empById;
-        }
-
-        if (!emp && user?.email) {
-          const emailPrefix = String(user.email).split("@")[0].split(".")[0];
-          const { data: empByClave } = await supabase
-            .from("empleados")
-            .select("*")
-            .eq("cliente_id", activeTenantId)
-            .ilike("clave_empleado", emailPrefix)
-            .maybeSingle();
-          if (empByClave) emp = empByClave;
-        }
-
-        if (!emp && user?.id) {
-          const { data: link } = await supabase
-            .from("employee_user_links")
-            .select("empleado_id, empleado:empleados(*)")
-            .eq("auth_user_id", user.id)
-            .eq("cliente_id", activeTenantId)
-            .eq("active", true)
-            .maybeSingle();
-          if (link?.empleado) emp = link.empleado;
-        }
-
-        setListaEmpleadosTenant([]);
-        setEmpleado(emp);
-      } else if (!emp) {
-        // Modo Admin / Tester en previsualización
-        if (user?.id && !selectedEmpId) {
-          const { data: link } = await supabase
-            .from("employee_user_links")
-            .select("empleado_id, empleado:empleados(*)")
-            .eq("auth_user_id", user.id)
-            .eq("cliente_id", activeTenantId)
-            .eq("active", true)
-            .maybeSingle();
-          if (link?.empleado) emp = link.empleado;
-        }
-
-        const { data: todosEmpleados } = await supabase
-          .from("empleados")
-          .select(
-            "id, nombre, apellido, clave_empleado, departamento, puesto, device_userid, avatar_url, activo"
-          )
-          .eq("cliente_id", activeTenantId)
-          .order("nombre", { ascending: true });
-
-        setListaEmpleadosTenant(todosEmpleados || []);
-
-        if (selectedEmpId) {
-          emp = (todosEmpleados || []).find((e) => e.id === selectedEmpId) || null;
-        }
-        if (!emp && (todosEmpleados || []).length > 0) {
-          emp = todosEmpleados[0];
-        }
-        setEmpleado(emp);
-      } else {
-        setEmpleado(emp);
+      if (!result.success) throw new Error(result.error);
+      const own = result.session;
+      setEmpleado({ id: own.empleadoId, cliente_id: own.clienteId, nombre: own.nombre,
+        apellido: own.apellido, clave_empleado: own.claveEmpleado, departamento: own.departamento,
+        puesto: own.puesto, avatar_url: own.avatarUrl, activo: true });
+      const timezone = own.timezone || 'UTC';
+      setTenantTimezone(timezone);
+      setServerTime(new Date(result.server_time));
+      setAvailableClocks(result.clocks || []);
+      if (result.clock && result.clock !== clockSlug) {
+        setClockPreference(result.clock);
+        setClockSlug(result.clock);
       }
-
-
-      if (emp) {
-        // Cargar Horario Asignado
-        try {
-          const { data: asig } = await supabase
-            .from("empleados_horarios")
-            .select("*, horario:horarios(*)")
-            .eq("empleado_id", emp.id)
-            .eq("activo", true)
-            .maybeSingle();
-
-          setHorarioAsignado(asig?.horario || null);
-        } catch (_) {}
-
-        // Cargar Checadas de Hoy (en horario del servidor)
-        try {
-          const todayStr = getServerNow().toISOString().slice(0, 10);
-          const startDay = `${todayStr}T00:00:00.000Z`;
-          const endDay = `${todayStr}T23:59:59.999Z`;
-
-          const { data: hoyLogs } = await supabase
-            .from("registro_asistencia")
-            .select("*")
-            .eq("empleado_id", emp.id)
-            .gte("verificado_at", startDay)
-            .lte("verificado_at", endDay)
-            .order("verificado_at", { ascending: false });
-
-          setChecadasHoy(hoyLogs || []);
-        } catch (_) {}
-
-        // Cargar Historial Reciente (últimos 7 días)
-        try {
-          const sevenDaysAgo = new Date(
-            getServerNow().getTime() - 7 * 24 * 60 * 60 * 1000
-          ).toISOString();
-          const { data: historialLogs } = await supabase
-            .from("registro_asistencia")
-            .select("*")
-            .eq("empleado_id", emp.id)
-            .gte("verificado_at", sevenDaysAgo)
-            .order("verificado_at", { ascending: false })
-            .limit(20);
-
-          setHistorialReciente(historialLogs || []);
-        } catch (_) {}
-      }
+      const day = getPunchDay(new Date(result.server_time), timezone);
+      const rows = result.attendance || [];
+      setChecadasHoy(rows.filter(row => row.verificado_at >= day.start && row.verificado_at < day.end));
+      setHistorialReciente(rows.slice(0, 20));
+      setHorarioAsignado(result.horario);
+      setPunchDataReady(Boolean(result.clock));
     } catch (err) {
-      console.error("Error al cargar datos del colaborador:", err);
-      toast.error("No se pudo cargar la información del colaborador");
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    activeTenantId,
-    collaboratorSession,
-    isColaborador,
-    profile,
-    user,
-    selectedEmpId,
-  ]);
+      setChecadasHoy([]);
+      setHistorialReciente([]);
+      toast.error(err.message || 'No se pudo consultar tu información.');
+    } finally { setLoading(false); }
+  }, [clockSlug, punchDay.localDate]);
 
   useEffect(() => {
-    cargarDatosColaborador();
-  }, [cargarDatosColaborador]);
+    cargarDatosEmpleado();
+  }, [cargarDatosEmpleado]);
 
   // ── 6. Determinar Estado Operativo Actual de la Jornada ────────
   const ultimoMarcaje = checadasHoy[0] || null;
+  const hasScheduledBreak = Boolean(
+    horarioAsignado?.dias_config?.[punchDay.weekday]?.tiene_descanso ??
+    horarioAsignado?.tiene_descanso
+  );
+  const nextPunch = punchDataReady ? getNextPunch(checadasHoy, hasScheduledBreak) : null;
 
   const estadoJornada = useMemo(() => {
     if (!ultimoMarcaje) {
@@ -575,7 +446,7 @@ export default function ColaboradorDashboardPage() {
         label: "En jornada activa",
         sub: `Entrada registrada a las ${horaFmt}`,
         tone: "success",
-        nextRecommended: "salida",
+        nextRecommended: tipo === "entrada" && hasScheduledBreak ? "descanso_inicio" : "salida",
       };
     }
 
@@ -593,7 +464,7 @@ export default function ColaboradorDashboardPage() {
         label: "Jornada concluida",
         sub: `Salida registrada a las ${horaFmt}`,
         tone: "neutral",
-        nextRecommended: "entrada",
+        nextRecommended: null,
       };
     }
 
@@ -601,15 +472,16 @@ export default function ColaboradorDashboardPage() {
       label: "En servicio",
       sub: `Marcaje registrado a las ${horaFmt}`,
       tone: "success",
-      nextRecommended: "salida",
+      nextRecommended: null,
     };
-  }, [ultimoMarcaje, tenantTimezone]);
+  }, [ultimoMarcaje, tenantTimezone, hasScheduledBreak]);
 
   // ── 7. Iniciar Marcaje: Activar Cámara y Abrir Modal ────────────
   // "cuando marquen entrada se active la camara y puedan tomar la foto de referencia"
   const handleIniciarMarcaje = (tipoVerificacion) => {
+    if (actionLoading || loading || tipoVerificacion !== nextPunch) return;
     if (!empleado || !activeTenantId) {
-      toast.error("No hay colaborador activo seleccionado.");
+      toast.error("No hay empleado activo seleccionado.");
       return;
     }
 
@@ -618,6 +490,7 @@ export default function ColaboradorDashboardPage() {
       obtenerUbicacionGPS(false);
     }
 
+    pendingPunch.current = crypto.randomUUID();
     const cfg = PUNCH_CONFIG[tipoVerificacion];
     setModalMarcaje({ tipo: tipoVerificacion, config: cfg });
     setFotoCapturada(null);
@@ -639,10 +512,11 @@ export default function ColaboradorDashboardPage() {
   const handleGuardarMarcaje = async () => {
     if (!modalMarcaje) return;
     const tipoVerificacion = modalMarcaje.tipo;
+    if (actionLoading || loading || tipoVerificacion !== nextPunch) return;
 
     // VALIDACIÓN ESTRICTA DE GPS
     let coords = gpsUbicacion;
-    if (!coords || !coords.latitud || !coords.longitud) {
+    if (!coords || !Number.isFinite(coords.latitud) || !Number.isFinite(coords.longitud)) {
       toast.loading("Obteniendo coordenadas GPS obligatorias...", {
         id: "check-gps",
       });
@@ -650,7 +524,7 @@ export default function ColaboradorDashboardPage() {
       toast.dismiss("check-gps");
     }
 
-    if (!coords || !coords.latitud || !coords.longitud) {
+    if (!coords || !Number.isFinite(coords.latitud) || !Number.isFinite(coords.longitud)) {
       toast.error(
         "📍 Marcaje Rechazado: Es obligatorio activar la ubicación GPS en tu dispositivo.",
         { duration: 5000, icon: "⚠️" }
@@ -668,71 +542,13 @@ export default function ColaboradorDashboardPage() {
         snapshot = capturarSnapshot();
       }
 
-      // 2. Tomar la hora del servidor autoritativa (anti-manipulación de reloj)
-      const punchServerDate = getServerNow();
-      const punchIso = punchServerDate.toISOString();
-
-      const payload = {
-        cliente_id: activeTenantId,
-        empleado_id: empleado.id,
-        dispositivo_id: null,
-        verificado_at: punchIso,
-        tipo_verificacion: tipoVerificacion,
-        metodo: "web",
-        es_manual: false,
-        raw_payload: {
-          origen: "portal_colaborador",
-          snapshot: snapshot || null,
-          foto_tomada: Boolean(snapshot),
-          ubicacion_gps: coords,
-          gps_activo: true,
-          hora_servidor: punchIso,
-          timezone: tenantTimezone,
-          drift_segundos: getDeviceClockDriftSeconds(),
-          reloj_manipulado: Math.abs(getDeviceClockDriftSeconds()) > 60,
-          agente_usuario:
-            typeof navigator !== "undefined"
-              ? navigator.userAgent
-              : "Web Client",
-        },
-      };
-
-      let nuevoRegistro = null;
-      try {
-        const { data: rpcRes, error: rpcErr } = await supabase.rpc(
-          "fn_registrar_asistencia_colaborador",
-          {
-            p_cliente_id: activeTenantId,
-            p_empleado_id: empleado.id,
-            p_tipo_verificacion: tipoVerificacion,
-            p_verificado_at: punchIso,
-            p_raw_payload: payload.raw_payload,
-          }
-        );
-        if (!rpcErr && rpcRes?.success) {
-          nuevoRegistro = {
-            id: rpcRes.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
-            ...payload,
-          };
-        } else if (rpcRes && !rpcRes.success) {
-          throw new Error(rpcRes.error || "Error al registrar asistencia");
-        }
-      } catch (rpcEx) {
-        if (rpcEx?.message && !rpcEx.message.includes("Could not find")) {
-          throw rpcEx;
-        }
-      }
-
-      if (!nuevoRegistro) {
-        const { data: insertData, error } = await supabase
-          .from("registro_asistencia")
-          .insert(payload)
-          .select()
-          .single();
-
-        if (error) throw error;
-        nuevoRegistro = insertData;
-      }
+      const result = await registrarChecada({ direction: tipoVerificacion, clockSlug,
+        requestId: pendingPunch.current, evidence: { snapshot: snapshot || null,
+          foto_tomada: Boolean(snapshot), ubicacion_gps: coords } });
+      if (!result.success) throw new Error(result.error);
+      const nuevoRegistro = result.registro;
+      const punchServerDate = new Date(nuevoRegistro.verificado_at);
+      pendingPunch.current = null;
 
       // ¡APAGAR LA CÁMARA COMPLETAMENTE SIN DEJAR RASTROS!
       stopCamera();
@@ -766,14 +582,12 @@ export default function ColaboradorDashboardPage() {
     }
   };
 
-  // Cerrar Sesión del Colaborador
+  // Cerrar Sesión del Empleado
   const handleCerrarSesion = async () => {
     stopCamera();
-    logoutColaborador();
-    try {
-      await signOut();
-    } catch (_) {}
-    navigate("/portal-colaborador/login", { replace: true });
+    const result = await logoutEmployee();
+    if (!result.success) { toast.error(result.error); return; }
+    navigate("/employee-portal/login", { replace: true });
   };
 
   // Formato de hora y fecha del servidor para el Hero Clock
@@ -804,37 +618,26 @@ export default function ColaboradorDashboardPage() {
                 Signum Clock
               </span>
               <span className="text-[11px] font-semibold text-[#03363D] dark:text-[#BDD9D7] uppercase tracking-wider block mt-0.5">
-                Portal del Colaborador
+                Portal del Empleado
               </span>
             </div>
           </div>
 
           {/* Empresa / Selector de prueba / Sesión */}
           <div className="flex items-center gap-2 sm:gap-4">
-            {!isColaborador && listaEmpleadosTenant.length > 1 && (
-              <div className="relative hidden md:block">
-                <select
-                  value={empleado?.id || ""}
-                  onChange={(e) => setSelectedEmpId(e.target.value)}
-                  className="appearance-none pl-3 pr-8 py-1.5 text-xs font-medium rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-[#03363D]"
-                >
-                  {listaEmpleadosTenant.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.nombre} {emp.apellido}{" "}
-                      {emp.clave_empleado ? `(${emp.clave_empleado})` : ""}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              </div>
+            {availableClocks.length > 1 && (
+              <select aria-label="Punto de checada" value={clockSlug}
+                onChange={e => { setClockPreference(e.target.value); setClockSlug(e.target.value); }}
+                className="max-w-40 rounded-lg border p-2 text-xs dark:bg-slate-800">
+                <option value="">Selecciona un punto</option>
+                {availableClocks.map(clock => <option key={clock.slug} value={clock.slug}>{clock.name}</option>)}
+              </select>
             )}
 
-            {(currentTenant?.nombre_empresa ||
-              collaboratorSession?.nombreEmpresa) && (
+            {employeeSession?.nombreEmpresa && (
               <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                 <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                {collaboratorSession?.nombreEmpresa ||
-                  currentTenant?.nombre_empresa}
+                {employeeSession?.nombreEmpresa}
               </span>
             )}
 
@@ -867,19 +670,19 @@ export default function ColaboradorDashboardPage() {
               Perfil no vinculado
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-4">
-              Tu cuenta de usuario no está asociada a un colaborador de la
+              Tu cuenta de usuario no está asociada a un empleado de la
               empresa. Contacta al administrador de Recursos Humanos.
             </p>
             <button
               onClick={handleCerrarSesion}
               className="px-4 py-2 rounded-xl bg-[#03363D] text-white text-xs font-bold"
             >
-              Ir al Login de Colaboradores
+              Ir al Login de Empleados
             </button>
           </div>
         ) : (
           <>
-            {/* ── SECCIÓN 1: Ficha del Colaborador & Horario ──────── */}
+            {/* ── SECCIÓN 1: Ficha del Empleado & Horario ──────── */}
             <section className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 sm:p-6 transition-all shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-5">
                 {/* Info Personal */}
@@ -1059,9 +862,6 @@ export default function ColaboradorDashboardPage() {
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         <span>Hora Oficial Servidor ({tenantTimezone})</span>
                       </span>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                        🔒 Reloj inalterable por dispositivo
-                      </span>
                     </div>
 
                     {Math.abs(clockDrift) > 60 && (
@@ -1088,14 +888,14 @@ export default function ColaboradorDashboardPage() {
                     {Object.entries(PUNCH_CONFIG).map(([key, cfg]) => {
                       const Icon = cfg.icon;
                       const isRecommended =
-                        estadoJornada.nextRecommended === key;
+                        nextPunch === key;
 
                       return (
                         <button
                           key={key}
-                          disabled={actionLoading}
+                          disabled={actionLoading || loading || !isRecommended}
                           onClick={() => handleIniciarMarcaje(key)}
-                          className={`flex flex-col items-center justify-center p-3 sm:p-3.5 rounded-xl border transition-all duration-200 text-center group disabled:opacity-50 cursor-pointer ${
+                          className={`flex flex-col items-center justify-center p-3 sm:p-3.5 rounded-xl border transition-all duration-200 text-center group disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
                             isRecommended
                               ? `${cfg.btnCls} border-transparent ring-2 ring-offset-2 ring-[#03363D] dark:ring-offset-slate-900`
                               : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-750"
@@ -1375,7 +1175,7 @@ export default function ColaboradorDashboardPage() {
                     {modalMarcaje.config?.actionText || "Registrar Fichaje"}
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Captura tu foto de referencia para validar
+                    Tomar foto
                   </p>
                 </div>
               </div>
@@ -1519,7 +1319,7 @@ export default function ColaboradorDashboardPage() {
                 className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Camera className="w-4 h-4 text-[#3fa9a1]" />
-                <span>Tomar Foto de Referencia</span>
+                <span>Tomar foto</span>
               </button>
             )}
 
@@ -1554,7 +1354,7 @@ export default function ColaboradorDashboardPage() {
                 ) : (
                   <>
                     <Save className="w-4 h-4" />
-                    <span>Guardar y Finalizar</span>
+                    <span>Guardar</span>
                   </>
                 )}
               </button>

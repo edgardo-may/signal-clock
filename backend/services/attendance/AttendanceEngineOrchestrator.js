@@ -164,6 +164,18 @@ class SupabaseAttendanceReadRepository {
     )
   }
 
+  async loadCanonicalWebClockSource(record) {
+    const source = await this._single(this.client.from('attendance_source_events')
+      .select('source_type').eq('id',record.source_event_id).eq('cliente_id',record.cliente_id).eq('employee_id',record.empleado_id), 'source classification')
+    if (source?.source_type !== 'WEB') return null
+    const proof = await this._single(this.client.from('web_clock_canonical_sources')
+      .select('registro_id,source_event_id,cliente_id,empleado_id,device_id')
+      .eq('registro_id',record.id).eq('source_event_id',record.source_event_id)
+      .eq('cliente_id',record.cliente_id).eq('empleado_id',record.empleado_id), 'WEB_CLOCK evidence')
+    if (!proof) throw new AttendanceOrchestratorError('WEB sin evidencia canónica WEB_CLOCK.', 'PERSIST_SOURCE_EVENT_DENIED')
+    return proof
+  }
+
   async loadCurrentWorkday({ clienteId, empleadoId, workdayDate }) {
     return this._single(this.client.from('workday_records')
       .select('current_revision_id,calculation_version')
@@ -445,7 +457,14 @@ class AttendanceEngineOrchestrator {
         throw new AttendanceOrchestratorError('Employee inexistente o de otra Empresa.', 'TENANT_MISMATCH')
       }
 
-      const anchorEvent = domain.RegistroAttendanceAdapter.fromRegistro(sourceRegistro, device)
+      const adapt = async (record, eventDevice) => {
+        let proof = null
+        if (record.es_manual !== true && record.source_event_id && typeof this.repository.loadCanonicalWebClockSource === 'function') {
+          proof = await this.repository.loadCanonicalWebClockSource(record)
+        }
+        return domain.RegistroAttendanceAdapter.fromRegistro(record, eventDevice, proof)
+      }
+      const anchorEvent = await adapt(sourceRegistro, device)
       const scheduleContext = await this.repository.loadScheduleContext({ clienteId: tenant, empleadoId: employeeId })
       const selection = await this._selectWorkday(domain, anchorEvent, scheduleContext)
       const currentWorkday = typeof this.repository.loadCurrentWorkday === 'function'
@@ -484,17 +503,17 @@ class AttendanceEngineOrchestrator {
       const deviceIds = [...new Set(events.map((event) => event.dispositivo_id).filter(Boolean))]
       const windowDevices = await this.repository.loadDevices({ clienteId: tenant, deviceIds })
       const devicesById = new Map(windowDevices.map((row) => [row.id, row]))
-      const domainEvents = events.map((event) => {
+      const domainEvents = await Promise.all(events.map(async (event) => {
         const eventDevice = devicesById.get(event.dispositivo_id)
         if (!eventDevice || eventDevice.cliente_id !== tenant) {
           throw new AttendanceOrchestratorError('Device de evento inexistente o cross-tenant.', 'TENANT_MISMATCH')
         }
-        const adapted = domain.RegistroAttendanceAdapter.fromRegistro(event, eventDevice)
+        const adapted = await adapt(event, eventDevice)
         if (adapted.timezone !== anchorEvent.timezone) {
           throw new AttendanceOrchestratorError('La ventana contiene devices con zonas horarias incompatibles.', 'EVENT_TIMEZONE_MISMATCH')
         }
         return adapted
-      })
+      }))
 
       const normalization = domain.AttendanceNormalizer.normalize(
         domainEvents.map((event) => event.rawPunch), anchorEvent.timezone, tenant, employeeId
