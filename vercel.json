@@ -1,10 +1,6 @@
 {
   "rewrites": [
     {
-      "source": "/api/employee",
-      "destination": "/api/employee"
-    },
-    {
       "source": "/api/sync/:path*",
       "destination": "https://signal-clock-api-integracion-test.vercel.app/api/sync/:path*"
     },

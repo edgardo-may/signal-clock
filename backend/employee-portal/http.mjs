@@ -64,7 +64,7 @@ export function createEmployeeHandler({env=process.env,client,random=randomBytes
       if(action==='login'){
         const body=await readBody(req);
         onlyKeys(body,['clienteId','clave','pin','clockSlug']);
-        if(typeof body.clienteId!=='string'||!/^[a-f0-9-]{36}$/i.test(body.clienteId)||typeof body.clave!=='string'||body.clave.trim().length<1||body.clave.length>100||typeof body.pin!=='string'||body.pin.length>20) throw bad('LOGIN_DENIED',401);
+        if(typeof body.clienteId!=='string'||!/^[a-f0-9-]{36}$/i.test(body.clienteId)||typeof body.clave!=='string'||body.clave.trim().length<1||body.clave.length>100||typeof body.pin!=='string'||!/^[0-9]{5}$/.test(body.pin)) throw bad('LOGIN_DENIED',401);
         createdToken=random(32).toString('hex');
         // Vercel supplies this protected header; local server trusts socket only.
         const remote=env.VERCEL?String(req.headers['x-vercel-forwarded-for']||'unknown'):String(req.socket?.remoteAddress||'unknown');
