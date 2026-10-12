@@ -41,6 +41,11 @@ export function createEmployeeHandler({env=process.env,client,random=randomBytes
     res.setHeader('Content-Type','application/json; charset=utf-8');
     const send=(status,value)=>{res.statusCode=status;res.end(JSON.stringify(value));};
     try{
+      // This deployment-time gate is independent of the Employee schema, so it
+      // can be enabled before the release migrations are applied.
+      if(env.EMPLOYEE_PORTAL_MAINTENANCE==='true'){
+        return send(503,{success:false,error:'EMPLOYEE_PORTAL_MAINTENANCE',message:'El Portal del Empleado está temporalmente en mantenimiento.'});
+      }
       const origin=new URL(env.EMPLOYEE_ORIGIN);
       const loopback=['localhost','127.0.0.1','[::1]'].includes(origin.hostname);
       const insecure=env.EMPLOYEE_ALLOW_INSECURE_LOOPBACK_COOKIE==='true' && loopback && env.NODE_ENV!=='production';

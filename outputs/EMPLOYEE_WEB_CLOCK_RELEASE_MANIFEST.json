@@ -1,0 +1,42 @@
+{
+  "manifest": "EMPLOYEE_WEB_CLOCK_RELEASE_V1",
+  "source_base_commit": "1036706522c41c09683dc4a9e8d3c238ad894a1c",
+  "historical_four_file_bundle_sha256": "4D33FE26724817B8E34A9EF271EE6A34DFAEB2C20A05E8D55C6E338491070A97",
+  "included_sql": [
+    {
+      "order": 1,
+      "path": "database/live-schema/proposals/global_security_minimum_candidate.sql",
+      "sha256": "54A857EC2F494048A6CAA9D1D31F9CE9F213C159261D7E937553B3F47080BF48"
+    },
+    {
+      "order": 2,
+      "path": "database/live-schema/proposals/employee_web_clock_candidate.sql",
+      "sha256": "F1C0A27143DC5FC8A0D1DD2BA4C4AAF21EE5A476D047866C05990242D44A8B52"
+    },
+    {
+      "order": 3,
+      "path": "database/live-schema/proposals/web_clock_canonical_source_delta.sql",
+      "sha256": "EC954271070701A0E85962DC08600777652A64B2A45BF9BB09506B64045ACF6A"
+    }
+  ],
+  "bundle_hash_algorithm": "SHA256 over UTF-8 bytes of ordered lines: order|relative_path|uppercase_file_sha256 followed by LF, including final LF",
+  "bundle_sha256": "D26B02BEBBDC304059FDB9F4F4702A868F5DCDEEB78BDCD92D6A8555C2873B15",
+  "pin_migration": {
+    "path": "database/live-schema/proposals/employee_pin_conversion_candidate.sql",
+    "sha256": "DC5B2DB38EC8BB04574B6AFF1E2AD66E113454EA6CC11063A77E8890E1E3F22A",
+    "excluded_from_structural_bundle": true
+  },
+  "excluded_sql": [
+    {
+      "status": "HOLD_SEPARATE_DEFAULT_PRIVILEGES_WORKSTREAM",
+      "path": "database/live-schema/proposals/global_security_hardening_v2_defaults.sql"
+    }
+  ],
+  "maintenance": {
+    "api_env": "EMPLOYEE_PORTAL_MAINTENANCE=true",
+    "frontend_build_env": "VITE_EMPLOYEE_PORTAL_MAINTENANCE=true",
+    "default": "OFF",
+    "employee_routes_only": true
+  },
+  "business_data_changes_expected": 0
+}

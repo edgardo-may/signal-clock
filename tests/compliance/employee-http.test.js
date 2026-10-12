@@ -3,12 +3,20 @@ import assert from 'node:assert/strict';
 import {createEmployeeHandler} from '../../backend/employee-portal/http.mjs';
 const env={EMPLOYEE_ORIGIN:'https://clock.example',EMPLOYEE_RATE_PEPPER:'test-only-pepper-with-at-least-32-characters'};
 const company='11111111-1111-4111-8111-111111111111';
-async function invoke(action,{body,method='POST',headers={},result={success:true},cookie}={}){
+async function invoke(action,{body,method='POST',headers={},result={success:true},cookie,overrides={}}={}){
  const calls=[],response={headers:{},setHeader(k,v){this.headers[k]=v;},end(value){this.body=JSON.parse(value);}};
- const handler=createEmployeeHandler({env,random:n=>Buffer.alloc(n,7),client:{rpc:async(name,args)=>{calls.push({name,args});return {data:result};}}});
+ const handler=createEmployeeHandler({env:{...env,...overrides},random:n=>Buffer.alloc(n,7),client:{rpc:async(name,args)=>{calls.push({name,args});return {data:result};}}});
  await handler({url:'/api/employee?action='+action,method,headers:{origin:env.EMPLOYEE_ORIGIN,'content-type':'application/json',...(cookie?{cookie}:{}),...headers},body,socket:{remoteAddress:'127.0.0.1'}},response);
  return {...response,calls};
 }
+test('maintenance blocks Employee API actions before database access',async()=>{
+ for(const [action,method] of [['directory','GET'],['session','GET'],['login','POST'],['punch','POST'],['logout','POST']]){
+  const r=await invoke(action,{method,overrides:{EMPLOYEE_PORTAL_MAINTENANCE:'true'}});
+  assert.equal(r.statusCode,503,action);
+  assert.equal(r.body.error,'EMPLOYEE_PORTAL_MAINTENANCE',action);
+  assert.equal(r.calls.length,0,action);
+ }
+});
 test('login creates secure HttpOnly cookie and sends only token hash to DB',async()=>{
  const res=await invoke('login',{body:{clienteId:company,clave:'EMP',pin:'12345'}});
  assert.equal(res.statusCode,200);assert.match(res.headers['Set-Cookie'],/HttpOnly; SameSite=Strict; Max-Age=28800; Secure/);

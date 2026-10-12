@@ -3,5 +3,7 @@ SUPABASE_URL=http://127.0.0.1:54321
 SUPABASE_SERVICE_ROLE_KEY=
 EMPLOYEE_ORIGIN=http://localhost:5173
 EMPLOYEE_RATE_PEPPER=
+# Set true on the API deployment during a coordinated Employee release window.
+EMPLOYEE_PORTAL_MAINTENANCE=false
 # Local HTTP only. Production always requires HTTPS and Secure cookie.
 EMPLOYEE_ALLOW_INSECURE_LOOPBACK_COOKIE=true

@@ -4,6 +4,8 @@ Candidate code + rollback-only DBREAL SQL. WEB_CLOCK passed the local closure ma
 
 The Portal Empresa keeps Supabase Auth. This endpoint uses a separate opaque HttpOnly cookie, hashed sessions in a private schema, and a backend-only RPC. Do not expose service credentials or the rate pepper through VITE variables. The JSON response contains display data, never the cookie token or PIN.
 
+For a coordinated Employee release window, set `EMPLOYEE_PORTAL_MAINTENANCE=true` on the API deployment and `VITE_EMPLOYEE_PORTAL_MAINTENANCE=true` for the frontend build. The API returns a maintenance response before reading Employee schema or calling Supabase; the frontend replaces Employee Portal routes, including legacy aliases, with a maintenance view. Leave both values unset or set them to `false` to restore access in a subsequent deployment. This gate does not affect tenant administration, Central, physical device ingestion, Attendance, or Workday routes. Deploy the maintenance-enabled frontend/API before applying Employee SQL so the gate is active before SQL 1.
+
 For local development, copy `environment.example` to `.env.employee.local`, fill the local service key and a random pepper of at least 32 characters, and run:
 
 ```powershell

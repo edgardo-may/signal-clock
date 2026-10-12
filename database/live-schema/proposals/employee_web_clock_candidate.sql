@@ -39,16 +39,25 @@ DO $rls$ DECLARE n text; BEGIN
  END LOOP;
 END $rls$;
 
--- Capture only future credential changes. No plaintext backfill during installation.
+-- Capture future credentials without replacing an existing hash. No plaintext backfill during installation.
 -- BEFORE the existing AFTER audit trigger: NEW.pin is already NULL when audited.
 CREATE FUNCTION employee_private.capture_pin() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $fn$
 BEGIN
  IF NEW.pin IS NOT NULL AND btrim(NEW.pin)<>'' THEN
+  -- A private credential is authoritative. A legacy PIN edit only clears the
+  -- plaintext column and must never replace the hash or its version.
+  IF EXISTS(SELECT 1 FROM employee_private.credentials WHERE empleado_id=NEW.id) THEN
+   NEW.pin:=NULL;
+   RETURN NEW;
+  END IF;
   IF NEW.pin !~ '^[0-9]{5}$' THEN RAISE EXCEPTION 'PIN_REQUIRES_FIVE_DIGITS' USING ERRCODE='22023'; END IF;
   INSERT INTO employee_private.credentials(empleado_id,pin_hash)
   VALUES(NEW.id,extensions.crypt(NEW.pin,extensions.gen_salt('bf',10)))
-  ON CONFLICT(empleado_id) DO UPDATE SET pin_hash=EXCLUDED.pin_hash,version=gen_random_uuid(),updated_at=clock_timestamp();
+  ON CONFLICT(empleado_id) DO NOTHING;
+  IF NOT EXISTS(SELECT 1 FROM employee_private.credentials WHERE empleado_id=NEW.id) THEN
+   RAISE EXCEPTION 'PIN_CREDENTIAL_CAPTURE_FAILED' USING ERRCODE='23514';
+  END IF;
  END IF;
  NEW.pin:=NULL;
  RETURN NEW;

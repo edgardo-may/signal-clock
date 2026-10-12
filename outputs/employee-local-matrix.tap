@@ -1,0 +1,1127 @@
+TAP version 13
+# Subtest: Attendance Engine - Suite de Cumplimiento Laboral 2027
+    # Subtest: Caso A: Entrada y salida normales -> PRESENT sin retardo ni salida anticipada
+    ok 1 - Caso A: Entrada y salida normales -> PRESENT sin retardo ni salida anticipada
+      ---
+      duration_ms: 106.1223
+      type: 'test'
+      ...
+    # Subtest: Caso B: Retardo en entrada -> LATE y late_minutes = 15
+    ok 2 - Caso B: Retardo en entrada -> LATE y late_minutes = 15
+      ---
+      duration_ms: 89.4498
+      type: 'test'
+      ...
+    # Subtest: Caso C: Salida anticipada -> EARLY_LEAVE y early_leave_minutes = 30
+    ok 3 - Caso C: Salida anticipada -> EARLY_LEAVE y early_leave_minutes = 30
+      ---
+      duration_ms: 86.0216
+      type: 'test'
+      ...
+    # Subtest: Caso D: Entrada sin salida -> INCOMPLETE con missingExit = true
+    ok 4 - Caso D: Entrada sin salida -> INCOMPLETE con missingExit = true
+      ---
+      duration_ms: 2.3714
+      type: 'test'
+      ...
+    # Subtest: Caso E: Sin marcajes en jornada programada -> ABSENT
+    ok 5 - Caso E: Sin marcajes en jornada programada -> ABSENT
+      ---
+      duration_ms: 1.9447
+      type: 'test'
+      ...
+    # Subtest: Caso F: Turno partido (4 checadas) -> 2 segmentos de trabajo y 1h de descanso
+    ok 6 - Caso F: Turno partido (4 checadas) -> 2 segmentos de trabajo y 1h de descanso
+      ---
+      duration_ms: 81.9099
+      type: 'test'
+      ...
+    # Subtest: Caso G: Turno nocturno que cruza medianoche -> Operative date es día de inicio
+    ok 7 - Caso G: Turno nocturno que cruza medianoche -> Operative date es día de inicio
+      ---
+      duration_ms: 78.0414
+      type: 'test'
+      ...
+    # Subtest: Caso H: Cruce de medianoche no fragmenta erróneamente la jornada
+    ok 8 - Caso H: Cruce de medianoche no fragmenta erróneamente la jornada
+      ---
+      duration_ms: 87.981
+      type: 'test'
+      ...
+    # Subtest: Caso I: Checada duplicada exacta -> Deduplicada sin corromper tiempos
+    ok 9 - Caso I: Checada duplicada exacta -> Deduplicada sin corromper tiempos
+      ---
+      duration_ms: 137.8872
+      type: 'test'
+      ...
+    # Subtest: Caso J: Ráfaga de checadas en 4 segundos -> Agrupadas como 1 solo marcaje
+    ok 10 - Caso J: Ráfaga de checadas en 4 segundos -> Agrupadas como 1 solo marcaje
+      ---
+      duration_ms: 117.6233
+      type: 'test'
+      ...
+    # Subtest: Caso K: 6 checadas -> 3 segmentos de trabajo y 2 descansos
+    ok 11 - Caso K: 6 checadas -> 3 segmentos de trabajo y 2 descansos
+      ---
+      duration_ms: 101.7685
+      type: 'test'
+      ...
+    # Subtest: Caso L: Checada a las 03:00 AM fuera de ventana -> Incident OUT_OF_WINDOW_PUNCH
+    ok 12 - Caso L: Checada a las 03:00 AM fuera de ventana -> Incident OUT_OF_WINDOW_PUNCH
+      ---
+      duration_ms: 94.5752
+      type: 'test'
+      ...
+    # Subtest: Caso M: Dos turnos consecutivos -> Marcajes se asignan a su respectiva fecha
+    ok 13 - Caso M: Dos turnos consecutivos -> Marcajes se asignan a su respectiva fecha
+      ---
+      duration_ms: 160.4458
+      type: 'test'
+      ...
+    # Subtest: Caso N: Timezone explícito en Cancún (UTC-5 sin DST) vs CDMX (UTC-6)
+    ok 14 - Caso N: Timezone explícito en Cancún (UTC-5 sin DST) vs CDMX (UTC-6)
+      ---
+      duration_ms: 83.5579
+      type: 'test'
+      ...
+    # Subtest: Caso O: Dos tenants con mismo código de empleado -> No se mezclan y arroja error si se cruzan
+    ok 15 - Caso O: Dos tenants con mismo código de empleado -> No se mezclan y arroja error si se cruzan
+      ---
+      duration_ms: 2.0302
+      type: 'test'
+      ...
+    # Subtest: Caso P: Idempotencia -> Ejecutar 10 veces genera exactamente el mismo hash y métricas
+    ok 16 - Caso P: Idempotencia -> Ejecutar 10 veces genera exactamente el mismo hash y métricas
+      ---
+      duration_ms: 896.6474
+      type: 'test'
+      ...
+    # Subtest: Caso Q: Proveedor de reglas inyectado -> Controla límite ordinario sin hardcode
+    ok 17 - Caso Q: Proveedor de reglas inyectado -> Controla límite ordinario sin hardcode
+      ---
+      duration_ms: 151.7218
+      type: 'test'
+      ...
+    # Subtest: Caso R: Día festivo laborado -> HOLIDAY_WORK y todo el tiempo es overtime/adicional
+    ok 18 - Caso R: Día festivo laborado -> HOLIDAY_WORK y todo el tiempo es overtime/adicional
+      ---
+      duration_ms: 81.981
+      type: 'test'
+      ...
+    # Subtest: Caso S: Día de descanso laborado -> REST_DAY_WORK
+    ok 19 - Caso S: Día de descanso laborado -> REST_DAY_WORK
+      ---
+      duration_ms: 29.9997
+      type: 'test'
+      ...
+    # Subtest: Caso T: Llegada 08:08 con tolerancia de 10 min -> PRESENT sin penalización de retardo
+    ok 20 - Caso T: Llegada 08:08 con tolerancia de 10 min -> PRESENT sin penalización de retardo
+      ---
+      duration_ms: 84.9735
+      type: 'test'
+      ...
+    # Subtest: Caso U: Salida registrada pero sin entrada -> INCOMPLETE y missingEntry = true
+    ok 21 - Caso U: Salida registrada pero sin entrada -> INCOMPLETE y missingEntry = true
+      ---
+      duration_ms: 1.7927
+      type: 'test'
+      ...
+    # Subtest: Caso V: Zona horaria inválida arroja InvalidTimezoneError
+    ok 22 - Caso V: Zona horaria inválida arroja InvalidTimezoneError
+      ---
+      duration_ms: 1.2013
+      type: 'test'
+      ...
+    1..22
+ok 1 - Attendance Engine - Suite de Cumplimiento Laboral 2027
+  ---
+  duration_ms: 2482.1386
+  type: 'suite'
+  ...
+# Subtest: ACTIVE READ_ONLY remains read-only while v3 PERSIST is explicit
+ok 2 - ACTIVE READ_ONLY remains read-only while v3 PERSIST is explicit
+  ---
+  duration_ms: 2.498
+  type: 'test'
+  ...
+# Subtest: SHADOW and non-ACTIVE tenants cannot persist
+ok 3 - SHADOW and non-ACTIVE tenants cannot persist
+  ---
+  duration_ms: 0.8519
+  type: 'test'
+  ...
+# Subtest: missing persistence authorization fails closed before the engine
+ok 4 - missing persistence authorization fails closed before the engine
+  ---
+  duration_ms: 0.3218
+  type: 'test'
+  ...
+# Subtest: authorization is tenant and identity scoped
+ok 5 - authorization is tenant and identity scoped
+  ---
+  duration_ms: 0.2338
+  type: 'test'
+  ...
+# Subtest: isolated INSERTED then exact replay UNCHANGED are both accepted
+ok 6 - isolated INSERTED then exact replay UNCHANGED are both accepted
+  ---
+  duration_ms: 0.3205
+  type: 'test'
+  ...
+# Subtest: existing production-shaped canary is UNCHANGED on every replay
+ok 7 - existing production-shaped canary is UNCHANGED on every replay
+  ---
+  duration_ms: 0.7246
+  type: 'test'
+  ...
+# Subtest: revision mismatch and assignment ambiguity fail through the engine before persistence
+ok 8 - revision mismatch and assignment ambiguity fail through the engine before persistence
+  ---
+  duration_ms: 0.5276
+  type: 'test'
+  ...
+# Subtest: v3 exposes PERSIST only under ACTIVE_PERSIST_CAPABLE and v2 capability is rejected by config
+ok 9 - v3 exposes PERSIST only under ACTIVE_PERSIST_CAPABLE and v2 capability is rejected by config
+  ---
+  duration_ms: 88.5543
+  type: 'test'
+  ...
+# Subtest: PERSIST runtime route is authenticated and never accepts tenant authority from request
+ok 10 - PERSIST runtime route is authenticated and never accepts tenant authority from request
+  ---
+  duration_ms: 112.0637
+  type: 'test'
+  ...
+# Subtest: persistence boundary permits INSERTED, UPDATED, UNCHANGED, and deterministic STALE only
+ok 11 - persistence boundary permits INSERTED, UPDATED, UNCHANGED, and deterministic STALE only
+  ---
+  duration_ms: 0.8586
+  type: 'test'
+  ...
+# Subtest: unbranded persistence wrapper reproduces the old orchestrator rejection; v3 passes the real brand
+ok 12 - unbranded persistence wrapper reproduces the old orchestrator rejection; v3 passes the real brand
+  ---
+  duration_ms: 0.6142
+  type: 'test'
+  ...
+# Subtest: Candidate DBREAL biometric regression: known production body fixture; no replay
+    # Subtest: I01 known production trigger body preserved under candidate
+    ok 1 - I01 known production trigger body preserved under candidate
+      ---
+      duration_ms: 2.5497
+      type: 'test'
+      ...
+    # Subtest: I02 duplicated employee key across tenants resolves exclusively to device tenant
+    ok 2 - I02 duplicated employee key across tenants resolves exclusively to device tenant
+      ---
+      duration_ms: 62.4609
+      type: 'test'
+      ...
+    # Subtest: I03 original terminal PIN resolves through active assignment
+    ok 3 - I03 original terminal PIN resolves through active assignment
+      ---
+      duration_ms: 53.1125
+      type: 'test'
+      ...
+    # Subtest: I04 unassigned identity rejects atomically
+    ok 4 - I04 unassigned identity rejects atomically
+      ---
+      duration_ms: 51.9004
+      type: 'test'
+      ...
+    # Subtest: I05 inactive employee rejected
+    ok 5 - I05 inactive employee rejected
+      ---
+      duration_ms: 63.2818
+      type: 'test'
+      ...
+    # Subtest: I06 inactive device rejected
+    ok 6 - I06 inactive device rejected
+      ---
+      duration_ms: 7.2227
+      type: 'test'
+      ...
+    # Subtest: I07 employee key from another tenant cannot resolve
+    ok 7 - I07 employee key from another tenant cannot resolve
+      ---
+      duration_ms: 53.4145
+      type: 'test'
+      ...
+    # Subtest: I08 conflicting key and PIN inside same tenant rejected instead of LIMIT 1
+    ok 8 - I08 conflicting key and PIN inside same tenant rejected instead of LIMIT 1
+      ---
+      duration_ms: 63.7847
+      type: 'test'
+      ...
+    # Subtest: I09 explicit IN/OUT and AUTO cycle remain deterministic
+    ok 9 - I09 explicit IN/OUT and AUTO cycle remain deterministic
+      ---
+      duration_ms: 376.6758
+      type: 'test'
+      ...
+    # Subtest: I10 canonical source link succeeds with gate OFF; no persistence outbox
+    ok 10 - I10 canonical source link succeeds with gate OFF; no persistence outbox
+      ---
+      duration_ms: 62.2725
+      type: 'test'
+      ...
+    # Subtest: I11 AUTO outside 18 hours starts a new cycle
+    ok 11 - I11 AUTO outside 18 hours starts a new cycle
+      ---
+      duration_ms: 98.3425
+      type: 'test'
+      ...
+    # Subtest: I13 physical ZKTECO remains canonical with productive gate ON
+    ok 12 - I13 physical ZKTECO remains canonical with productive gate ON
+      ---
+      duration_ms: 54.356
+      type: 'test'
+      ...
+    # Subtest: I12 AUTO rejects reverse arrival atomically
+    ok 13 - I12 AUTO rejects reverse arrival atomically
+      ---
+      duration_ms: 100.1042
+      type: 'test'
+      ...
+    1..13
+ok 13 - Candidate DBREAL biometric regression: known production body fixture; no replay
+  ---
+  duration_ms: 1267.0756
+  type: 'test'
+  ...
+# Subtest: Minimum candidate + separate defaults MODEL: DBREAL rollback, no skips
+    # Subtest: core changes no business rows, row grants, device contracts or policies
+    ok 1 - core changes no business rows, row grants, device contracts or policies
+      ---
+      duration_ms: 70.4109
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE attendance_logs, including CASCADE
+    ok 2 - anon cannot TRUNCATE attendance_logs, including CASCADE
+      ---
+      duration_ms: 12.1504
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE attendance_logs, including CASCADE
+    ok 3 - authenticated cannot TRUNCATE attendance_logs, including CASCADE
+      ---
+      duration_ms: 10.3413
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE attendance_source_events, including CASCADE
+    ok 4 - anon cannot TRUNCATE attendance_source_events, including CASCADE
+      ---
+      duration_ms: 11.9989
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE attendance_source_events, including CASCADE
+    ok 5 - authenticated cannot TRUNCATE attendance_source_events, including CASCADE
+      ---
+      duration_ms: 12.1725
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE audit_logs, including CASCADE
+    ok 6 - anon cannot TRUNCATE audit_logs, including CASCADE
+      ---
+      duration_ms: 11.5585
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE audit_logs, including CASCADE
+    ok 7 - authenticated cannot TRUNCATE audit_logs, including CASCADE
+      ---
+      duration_ms: 9.4631
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE biometric_templates, including CASCADE
+    ok 8 - anon cannot TRUNCATE biometric_templates, including CASCADE
+      ---
+      duration_ms: 9.6085
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE biometric_templates, including CASCADE
+    ok 9 - authenticated cannot TRUNCATE biometric_templates, including CASCADE
+      ---
+      duration_ms: 10.2606
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE cliente_modulos, including CASCADE
+    ok 10 - anon cannot TRUNCATE cliente_modulos, including CASCADE
+      ---
+      duration_ms: 10.045
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE cliente_modulos, including CASCADE
+    ok 11 - authenticated cannot TRUNCATE cliente_modulos, including CASCADE
+      ---
+      duration_ms: 11.4192
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE clientes, including CASCADE
+    ok 12 - anon cannot TRUNCATE clientes, including CASCADE
+      ---
+      duration_ms: 10.913
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE clientes, including CASCADE
+    ok 13 - authenticated cannot TRUNCATE clientes, including CASCADE
+      ---
+      duration_ms: 10.6951
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE dias_festivos, including CASCADE
+    ok 14 - anon cannot TRUNCATE dias_festivos, including CASCADE
+      ---
+      duration_ms: 12.1979
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE dias_festivos, including CASCADE
+    ok 15 - authenticated cannot TRUNCATE dias_festivos, including CASCADE
+      ---
+      duration_ms: 9.6495
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE empleados, including CASCADE
+    ok 16 - anon cannot TRUNCATE empleados, including CASCADE
+      ---
+      duration_ms: 10.6647
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE empleados, including CASCADE
+    ok 17 - authenticated cannot TRUNCATE empleados, including CASCADE
+      ---
+      duration_ms: 11.9062
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE incidencias, including CASCADE
+    ok 18 - anon cannot TRUNCATE incidencias, including CASCADE
+      ---
+      duration_ms: 10.4903
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE incidencias, including CASCADE
+    ok 19 - authenticated cannot TRUNCATE incidencias, including CASCADE
+      ---
+      duration_ms: 9.8422
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE login_attempts, including CASCADE
+    ok 20 - anon cannot TRUNCATE login_attempts, including CASCADE
+      ---
+      duration_ms: 11.1464
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE login_attempts, including CASCADE
+    ok 21 - authenticated cannot TRUNCATE login_attempts, including CASCADE
+      ---
+      duration_ms: 10.5614
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE module_catalog, including CASCADE
+    ok 22 - anon cannot TRUNCATE module_catalog, including CASCADE
+      ---
+      duration_ms: 9.8245
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE module_catalog, including CASCADE
+    ok 23 - authenticated cannot TRUNCATE module_catalog, including CASCADE
+      ---
+      duration_ms: 9.8691
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE periodos_nomina, including CASCADE
+    ok 24 - anon cannot TRUNCATE periodos_nomina, including CASCADE
+      ---
+      duration_ms: 11.0906
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE periodos_nomina, including CASCADE
+    ok 25 - authenticated cannot TRUNCATE periodos_nomina, including CASCADE
+      ---
+      duration_ms: 10.9472
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE rate_limits_logs, including CASCADE
+    ok 26 - anon cannot TRUNCATE rate_limits_logs, including CASCADE
+      ---
+      duration_ms: 9.7525
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE rate_limits_logs, including CASCADE
+    ok 27 - authenticated cannot TRUNCATE rate_limits_logs, including CASCADE
+      ---
+      duration_ms: 9.2243
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE registro_asistencia, including CASCADE
+    ok 28 - anon cannot TRUNCATE registro_asistencia, including CASCADE
+      ---
+      duration_ms: 9.4535
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE registro_asistencia, including CASCADE
+    ok 29 - authenticated cannot TRUNCATE registro_asistencia, including CASCADE
+      ---
+      duration_ms: 11.1526
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE user_module_permissions, including CASCADE
+    ok 30 - anon cannot TRUNCATE user_module_permissions, including CASCADE
+      ---
+      duration_ms: 11.0899
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE user_module_permissions, including CASCADE
+    ok 31 - authenticated cannot TRUNCATE user_module_permissions, including CASCADE
+      ---
+      duration_ms: 9.1588
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE usuarios_perfiles, including CASCADE
+    ok 32 - anon cannot TRUNCATE usuarios_perfiles, including CASCADE
+      ---
+      duration_ms: 11.0871
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE usuarios_perfiles, including CASCADE
+    ok 33 - authenticated cannot TRUNCATE usuarios_perfiles, including CASCADE
+      ---
+      duration_ms: 10.028
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE workday_records, including CASCADE
+    ok 34 - anon cannot TRUNCATE workday_records, including CASCADE
+      ---
+      duration_ms: 11.0853
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE workday_records, including CASCADE
+    ok 35 - authenticated cannot TRUNCATE workday_records, including CASCADE
+      ---
+      duration_ms: 11.9364
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE empleados_horarios, including CASCADE
+    ok 36 - anon cannot TRUNCATE empleados_horarios, including CASCADE
+      ---
+      duration_ms: 10.7595
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE empleados_horarios, including CASCADE
+    ok 37 - authenticated cannot TRUNCATE empleados_horarios, including CASCADE
+      ---
+      duration_ms: 9.3757
+      type: 'test'
+      ...
+    # Subtest: anon cannot TRUNCATE horarios, including CASCADE
+    ok 38 - anon cannot TRUNCATE horarios, including CASCADE
+      ---
+      duration_ms: 10.4151
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot TRUNCATE horarios, including CASCADE
+    ok 39 - authenticated cannot TRUNCATE horarios, including CASCADE
+      ---
+      duration_ms: 10.285
+      type: 'test'
+      ...
+    # Subtest: anon denied privileged RPC: select public.fn_employee_insert_sync
+    ok 40 - anon denied privileged RPC: select public.fn_employee_insert_sync
+      ---
+      duration_ms: 5.1234
+      type: 'test'
+      ...
+    # Subtest: anon denied privileged RPC: select public.fn_generar_faltas_diarias
+    ok 41 - anon denied privileged RPC: select public.fn_generar_faltas_diarias
+      ---
+      duration_ms: 5.7274
+      type: 'test'
+      ...
+    # Subtest: authenticated denied privileged RPC: select public.fn_employee_insert_sync
+    ok 42 - authenticated denied privileged RPC: select public.fn_employee_insert_sync
+      ---
+      duration_ms: 5.2551
+      type: 'test'
+      ...
+    # Subtest: authenticated denied privileged RPC: select public.fn_generar_faltas_diarias
+    ok 43 - authenticated denied privileged RPC: select public.fn_generar_faltas_diarias
+      ---
+      duration_ms: 4.7987
+      type: 'test'
+      ...
+    # Subtest: service_role retains tables and RPC boundary; fixed search_path
+    ok 44 - service_role retains tables and RPC boundary; fixed search_path
+      ---
+      duration_ms: 164.1013
+      type: 'test'
+      ...
+    # Subtest: service_role positive sync CREATED/EXISTS/LIMIT preserves tenant and capacity
+    ok 45 - service_role positive sync CREATED/EXISTS/LIMIT preserves tenant and capacity
+      ---
+      duration_ms: 14.4995
+      type: 'test'
+      ...
+    # Subtest: V2-B MODEL ONLY: defaults on both creators, rolled back and excluded from core
+    ok 46 - V2-B MODEL ONLY: defaults on both creators, rolled back and excluded from core
+      ---
+      duration_ms: 93.675
+      type: 'test'
+      ...
+    # Subtest: core is idempotent and frozen migrations untouched
+    ok 47 - core is idempotent and frozen migrations untouched
+      ---
+      duration_ms: 8.4074
+      type: 'test'
+      ...
+    # Subtest: rollback restores all pre-existing public data and removes probe objects
+    ok 48 - rollback restores all pre-existing public data and removes probe objects
+      ---
+      duration_ms: 59.2148
+      type: 'test'
+      ...
+    1..48
+ok 14 - Minimum candidate + separate defaults MODEL: DBREAL rollback, no skips
+  ---
+  duration_ms: 1066.1566
+  type: 'test'
+  ...
+# Subtest: Horarios installed contract: no migration replay; rollback-only fixtures
+    # Subtest: installed function bodies/modes/paths match supplied production catalog
+    ok 1 - installed function bodies/modes/paths match supplied production catalog
+      ---
+      duration_ms: 14.1616
+      type: 'test'
+      ...
+    # Subtest: create future schedule atomically with revision and company folio
+    ok 2 - create future schedule atomically with revision and company folio
+      ---
+      duration_ms: 15.8386
+      type: 'test'
+      ...
+    # Subtest: edit creates immutable next revision and preserves original calculation configuration
+    ok 3 - edit creates immutable next revision and preserves original calculation configuration
+      ---
+      duration_ms: 14.03
+      type: 'test'
+      ...
+    # Subtest: assign attaches the applicable immutable revision; active archive denied
+    ok 4 - assign attaches the applicable immutable revision; active archive denied
+      ---
+      duration_ms: 21.0104
+      type: 'test'
+      ...
+    # Subtest: inactive employee and employee from another company rejected
+    ok 5 - inactive employee and employee from another company rejected
+      ---
+      duration_ms: 14.3105
+      type: 'test'
+      ...
+    # Subtest: same-day creation and assignment before entry; elapsed entry rejected
+    ok 6 - same-day creation and assignment before entry; elapsed entry rejected
+      ---
+      duration_ms: 44.3757
+      type: 'test'
+      ...
+    # Subtest: 122 same-start replacement preserves the previous assignment row and revisions
+    ok 7 - 122 same-start replacement preserves the previous assignment row and revisions
+      ---
+      duration_ms: 18.9462
+      type: 'test'
+      ...
+    # Subtest: archive retains old assignment and revisions, is idempotent; archived edit denied
+    ok 8 - archive retains old assignment and revisions, is idempotent; archived edit denied
+      ---
+      duration_ms: 25.6072
+      type: 'test'
+      ...
+    # Subtest: permissions preserve RH editing and restrict archive, foreign users and suspended accounts
+    ok 9 - permissions preserve RH editing and restrict archive, foreign users and suspended accounts
+      ---
+      duration_ms: 51.7441
+      type: 'test'
+      ...
+    # Subtest: no Attendance, Workday, gates, device data or catalog modification
+    ok 10 - no Attendance, Workday, gates, device data or catalog modification
+      ---
+      duration_ms: 37.4818
+      type: 'test'
+      ...
+    # Subtest: all public data and catalog restored exactly after rollback
+    ok 11 - all public data and catalog restored exactly after rollback
+      ---
+      duration_ms: 59.4904
+      type: 'test'
+      ...
+    1..11
+ok 15 - Horarios installed contract: no migration replay; rollback-only fixtures
+  ---
+  duration_ms: 590.8336
+  type: 'test'
+  ...
+# Subtest: maintenance blocks Employee API actions before database access
+ok 16 - maintenance blocks Employee API actions before database access
+  ---
+  duration_ms: 2.2661
+  type: 'test'
+  ...
+# Subtest: login creates secure HttpOnly cookie and sends only token hash to DB
+ok 17 - login creates secure HttpOnly cookie and sends only token hash to DB
+  ---
+  duration_ms: 1.6984
+  type: 'test'
+  ...
+# Subtest: cross-origin login denied before database call
+ok 18 - cross-origin login denied before database call
+  ---
+  duration_ms: 0.3098
+  type: 'test'
+  ...
+# Subtest: arbitrary anonymous caller has no verified session
+ok 19 - arbitrary anonymous caller has no verified session
+  ---
+  duration_ms: 0.2905
+  type: 'test'
+  ...
+# Subtest: browser identity and authoritative timestamp keys rejected
+ok 20 - browser identity and authoritative timestamp keys rejected
+  ---
+  duration_ms: 0.7918
+  type: 'test'
+  ...
+# Subtest: punch uses session cookie and strips untrusted GPS time
+ok 21 - punch uses session cookie and strips untrusted GPS time
+  ---
+  duration_ms: 0.9884
+  type: 'test'
+  ...
+# Subtest: invalid GPS and duplicate cookies denied
+ok 22 - invalid GPS and duplicate cookies denied
+  ---
+  duration_ms: 0.4999
+  type: 'test'
+  ...
+# Subtest: failed login has generic response and no session cookie
+ok 23 - failed login has generic response and no session cookie
+  ---
+  duration_ms: 0.3428
+  type: 'test'
+  ...
+# Subtest: logout revokes server session and clears cookie
+ok 24 - logout revokes server session and clears cookie
+  ---
+  duration_ms: 0.3123
+  type: 'test'
+  ...
+# Subtest: Con descanso recorre los cuatro pasos y no permite otra entrada después de salir
+ok 25 - Con descanso recorre los cuatro pasos y no permite otra entrada después de salir
+  ---
+  duration_ms: 2.3489
+  type: 'test'
+  ...
+# Subtest: Sin descanso pasa directamente de entrada a salida
+ok 26 - Sin descanso pasa directamente de entrada a salida
+  ---
+  duration_ms: 0.1847
+  type: 'test'
+  ...
+# Subtest: Restaura el paso desde registros guardados sin depender del orden recibido
+ok 27 - Restaura el paso desde registros guardados sin depender del orden recibido
+  ---
+  duration_ms: 0.23
+  type: 'test'
+  ...
+# Subtest: Un descanso iniciado se termina aunque el horario actual no indique descanso
+ok 28 - Un descanso iniciado se termina aunque el horario actual no indique descanso
+  ---
+  duration_ms: 0.1857
+  type: 'test'
+  ...
+# Subtest: Marcaje desconocido no habilita una acción incorrecta
+ok 29 - Marcaje desconocido no habilita una acción incorrecta
+  ---
+  duration_ms: 0.204
+  type: 'test'
+  ...
+# Subtest: Cancún conserva el día y las checadas al pasar medianoche UTC
+ok 30 - Cancún conserva el día y las checadas al pasar medianoche UTC
+  ---
+  duration_ms: 24.3286
+  type: 'test'
+  ...
+# Subtest: El siguiente día comienza a medianoche local
+ok 31 - El siguiente día comienza a medianoche local
+  ---
+  duration_ms: 1.3877
+  type: 'test'
+  ...
+# Subtest: Employee candidate: local DBREAL only, transactional restoration
+    # Subtest: installation changes zero business rows
+    ok 1 - installation changes zero business rows
+      ---
+      duration_ms: 65.8386
+      type: 'test'
+      ...
+    # Subtest: separate scoped legacy credential conversion hashes and removes plaintext
+    ok 2 - separate scoped legacy credential conversion hashes and removes plaintext
+      ---
+      duration_ms: 112.1005
+      type: 'test'
+      ...
+    # Subtest: PIN captured as hash, not returned or audited
+    ok 3 - PIN captured as hash, not returned or audited
+      ---
+      duration_ms: 4.1282
+      type: 'test'
+      ...
+    # Subtest: legitimate login and verified state
+    ok 4 - legitimate login and verified state
+      ---
+      duration_ms: 51.5641
+      type: 'test'
+      ...
+    # Subtest: wrong PIN denied
+    ok 5 - wrong PIN denied
+      ---
+      duration_ms: 45.7494
+      type: 'test'
+      ...
+    # Subtest: wrong Empresa denied
+    ok 6 - wrong Empresa denied
+      ---
+      duration_ms: 2.6339
+      type: 'test'
+      ...
+    # Subtest: inactive employee denied
+    ok 7 - inactive employee denied
+      ---
+      duration_ms: 6.6028
+      type: 'test'
+      ...
+    # Subtest: tampered token denied
+    ok 8 - tampered token denied
+      ---
+      duration_ms: 2.1856
+      type: 'test'
+      ...
+    # Subtest: browser IDs cannot change session employee or Empresa
+    ok 9 - browser IDs cannot change session employee or Empresa
+      ---
+      duration_ms: 4.6404
+      type: 'test'
+      ...
+    # Subtest: foreign terminal denied
+    ok 10 - foreign terminal denied
+      ---
+      duration_ms: 3.3872
+      type: 'test'
+      ...
+    # Subtest: multiple authorized terminals in own Empresa
+    ok 11 - multiple authorized terminals in own Empresa
+      ---
+      duration_ms: 2.2054
+      type: 'test'
+      ...
+    # Subtest: own WEB_CLOCK punch and server timestamp
+    ok 12 - own WEB_CLOCK punch and server timestamp
+      ---
+      duration_ms: 10.0929
+      type: 'test'
+      ...
+    # Subtest: idempotent retry creates exactly one punch
+    ok 13 - idempotent retry creates exactly one punch
+      ---
+      duration_ms: 3.9087
+      type: 'test'
+      ...
+    # Subtest: invalid direction denied server-side
+    ok 14 - invalid direction denied server-side
+      ---
+      duration_ms: 1.9665
+      type: 'test'
+      ...
+    # Subtest: own attendance only
+    ok 15 - own attendance only
+      ---
+      duration_ms: 49.336
+      type: 'test'
+      ...
+    # Subtest: two employees share one terminal; same employee uses own second terminal
+    ok 16 - two employees share one terminal; same employee uses own second terminal
+      ---
+      duration_ms: 11.1567
+      type: 'test'
+      ...
+    # Subtest: WEB_CLOCK must enter productive outbox with existing gate active
+        # Subtest: raw WEB_CLOCK label cannot create productive attendance without receipt
+        ok 1 - raw WEB_CLOCK label cannot create productive attendance without receipt
+          ---
+          duration_ms: 34.5879
+          type: 'test'
+          ...
+        # Subtest: DB and runtime deny unprocessed
+        ok 2 - DB and runtime deny unprocessed
+          ---
+          duration_ms: 51.6063
+          type: 'test'
+          ...
+        # Subtest: DB and runtime deny foreign employee
+        ok 3 - DB and runtime deny foreign employee
+          ---
+          duration_ms: 45.2367
+          type: 'test'
+          ...
+        # Subtest: DB and runtime deny foreign Empresa
+        ok 4 - DB and runtime deny foreign Empresa
+          ---
+          duration_ms: 43.7647
+          type: 'test'
+          ...
+        # Subtest: DB and runtime deny inactive terminal
+        ok 5 - DB and runtime deny inactive terminal
+          ---
+          duration_ms: 61.4272
+          type: 'test'
+          ...
+        # Subtest: DB and runtime deny inactive device
+        ok 6 - DB and runtime deny inactive device
+          ---
+          duration_ms: 60.4535
+          type: 'test'
+          ...
+        # Subtest: DB and runtime deny unauthorized Empresa
+        ok 7 - DB and runtime deny unauthorized Empresa
+          ---
+          duration_ms: 61.5441
+          type: 'test'
+          ...
+        # Subtest: DB and runtime deny missing receipt
+        ok 8 - DB and runtime deny missing receipt
+          ---
+          duration_ms: 48.1894
+          type: 'test'
+          ...
+        # Subtest: DB and runtime deny fabricated time
+        ok 9 - DB and runtime deny fabricated time
+          ---
+          duration_ms: 62.6643
+          type: 'test'
+          ...
+        # Subtest: DB and runtime deny session revoked before receipt
+        ok 10 - DB and runtime deny session revoked before receipt
+          ---
+          duration_ms: 63.8656
+          type: 'test'
+          ...
+        # Subtest: actual runtime -> unchanged orchestrator/calculator -> existing RPC20 -> versioned Workday
+        ok 11 - actual runtime -> unchanged orchestrator/calculator -> existing RPC20 -> versioned Workday
+          ---
+          duration_ms: 330.1154
+          type: 'test'
+          ...
+        1..11
+    ok 17 - WEB_CLOCK must enter productive outbox with existing gate active
+      ---
+      duration_ms: 967.3828
+      type: 'test'
+      ...
+    # Subtest: anon old RPC denied before body
+    ok 18 - anon old RPC denied before body
+      ---
+      duration_ms: 5.5403
+      type: 'test'
+      ...
+    # Subtest: anon direct attendance read denied
+    ok 19 - anon direct attendance read denied
+      ---
+      duration_ms: 5.7273
+      type: 'test'
+      ...
+    # Subtest: anon direct insert denied
+    ok 20 - anon direct insert denied
+      ---
+      duration_ms: 5.9023
+      type: 'test'
+      ...
+    # Subtest: authenticated cannot call backend session RPC
+    ok 21 - authenticated cannot call backend session RPC
+      ---
+      duration_ms: 5.4421
+      type: 'test'
+      ...
+    # Subtest: browser cannot forge receipt, inspect canonical view or invoke RPC20
+    ok 22 - browser cannot forge receipt, inspect canonical view or invoke RPC20
+      ---
+      duration_ms: 28.7634
+      type: 'test'
+      ...
+    # Subtest: cross-Empresa authenticated read denied; own staff read preserved
+    ok 23 - cross-Empresa authenticated read denied; own staff read preserved
+      ---
+      duration_ms: 28.023
+      type: 'test'
+      ...
+    # Subtest: service_role read preserved
+    ok 24 - service_role read preserved
+      ---
+      duration_ms: 5.807
+      type: 'test'
+      ...
+    # Subtest: inactive terminal and revoked capability denied
+    ok 25 - inactive terminal and revoked capability denied
+      ---
+      duration_ms: 8.903
+      type: 'test'
+      ...
+    # Subtest: expired and revoked sessions denied
+    ok 26 - expired and revoked sessions denied
+      ---
+      duration_ms: 4.935
+      type: 'test'
+      ...
+    # Subtest: brute force limited per employee, not whole Empresa
+    ok 27 - brute force limited per employee, not whole Empresa
+      ---
+      duration_ms: 144.9316
+      type: 'test'
+      ...
+    # Subtest: DBREAL data restored
+    ok 28 - DBREAL data restored
+      ---
+      duration_ms: 37.2056
+      type: 'test'
+      ...
+    # Subtest: DBREAL catalog restored
+    ok 29 - DBREAL catalog restored
+      ---
+      duration_ms: 37.1109
+      type: 'test'
+      ...
+    1..29
+ok 32 - Employee candidate: local DBREAL only, transactional restoration
+  ---
+  duration_ms: 2406.1343
+  type: 'test'
+  ...
+# Subtest: GLOBAL SECURITY closure gate against known production contracts + frozen base + employee delta
+    # Subtest: anon MUST be denied employee write RPC before entering body
+    ok 1 - anon MUST be denied employee write RPC before entering body
+      ---
+      duration_ms: 6.5445
+      type: 'test'
+      ...
+    # Subtest: anon MUST NOT read attendance without a server credential
+    ok 2 - anon MUST NOT read attendance without a server credential
+      ---
+      duration_ms: 6.041
+      type: 'test'
+      ...
+    # Subtest: authenticated admin of Empresa B MUST NOT read attendance of A
+    ok 3 - authenticated admin of Empresa B MUST NOT read attendance of A
+      ---
+      duration_ms: 6.5851
+      type: 'test'
+      ...
+    # Subtest: all pre-existing public rows restored after failed acceptance gate
+    ok 4 - all pre-existing public rows restored after failed acceptance gate
+      ---
+      duration_ms: 47.5375
+      type: 'test'
+      ...
+    1..4
+ok 33 - GLOBAL SECURITY closure gate against known production contracts + frozen base + employee delta
+  ---
+  duration_ms: 246.9482
+  type: 'test'
+  ...
+# Subtest: 1. ZKTeco physical record resolves timezone from its same-tenant device
+ok 34 - 1. ZKTeco physical record resolves timezone from its same-tenant device
+  ---
+  duration_ms: 18.7513
+  type: 'test'
+  ...
+# Subtest: 2. a device from another Empresa fails closed
+ok 35 - 2. a device from another Empresa fails closed
+  ---
+  duration_ms: 0.4342
+  type: 'test'
+  ...
+# Subtest: 3. an employee with no applicable schedule is UNSCHEDULED
+ok 36 - 3. an employee with no applicable schedule is UNSCHEDULED
+  ---
+  duration_ms: 0.8426
+  type: 'test'
+  ...
+# Subtest: 4. one valid schedule resolves horarios.id as the persisted schedule id
+ok 37 - 4. one valid schedule resolves horarios.id as the persisted schedule id
+  ---
+  duration_ms: 1.6951
+  type: 'test'
+  ...
+# Subtest: 5. more than one valid schedule fails closed as AMBIGUOUS_SCHEDULE
+ok 38 - 5. more than one valid schedule fails closed as AMBIGUOUS_SCHEDULE
+  ---
+  duration_ms: 0.8351
+  type: 'test'
+  ...
+# Subtest: 6. an assignment outside its validity period is not used
+ok 39 - 6. an assignment outside its validity period is not used
+  ---
+  duration_ms: 0.9385
+  type: 'test'
+  ...
+# Subtest: 7. a schedule belonging to another Empresa fails closed
+ok 40 - 7. a schedule belonging to another Empresa fails closed
+  ---
+  duration_ms: 0.4668
+  type: 'test'
+  ...
+# Subtest: 8. a normal 08:00–17:00 schedule keeps its requested operative date
+ok 41 - 8. a normal 08:00–17:00 schedule keeps its requested operative date
+  ---
+  duration_ms: 3.0574
+  type: 'test'
+  ...
+# Subtest: 9. a 22:00–06:00 shift assigns both events to the entry date
+ok 42 - 9. a 22:00–06:00 shift assigns both events to the entry date
+  ---
+  duration_ms: 1.933
+  type: 'test'
+  ...
+# Subtest: 10. a reprocess preserves the same logical identity even when schedule evidence changes
+ok 43 - 10. a reprocess preserves the same logical identity even when schedule evidence changes
+  ---
+  duration_ms: 1.8977
+  type: 'test'
+  ...
+# Subtest: 11. workday persistence maps WorkdayState and never deprecated WorkdayStatus
+ok 44 - 11. workday persistence maps WorkdayState and never deprecated WorkdayStatus
+  ---
+  duration_ms: 0.887
+  type: 'test'
+  ...
+# Subtest: raw WEB_CLOCK label and metodo cannot authorize WEB classification
+ok 45 - raw WEB_CLOCK label and metodo cannot authorize WEB classification
+  ---
+  duration_ms: 16.8621
+  type: 'test'
+  ...
+# Subtest: verified canonical context classifies WEB without changing punch direction/time
+ok 46 - verified canonical context classifies WEB without changing punch direction/time
+  ---
+  duration_ms: 0.3324
+  type: 'test'
+  ...
+# Subtest: canonical adapter context rejects every mismatched identity
+ok 47 - canonical adapter context rejects every mismatched identity
+  ---
+  duration_ms: 1.3279
+  type: 'test'
+  ...
+1..47
+# tests 184
+# suites 1
+# pass 184
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 10502.1908
