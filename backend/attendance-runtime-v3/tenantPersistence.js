@@ -15,7 +15,13 @@ async function loadPersistAuthorization(client, { tenantId, registroId, employee
   if (typeof sourceEventId !== 'string' || sourceEventId.length === 0) throw new PersistAuthorizationError('El registro no tiene source event canonico.', 'PERSIST_SOURCE_EVENT_REQUIRED')
   const source = await client.from('attendance_source_events').select('id,cliente_id,employee_id,source_type,processing_status').eq('id', sourceEventId).eq('cliente_id', tenantId).eq('employee_id', employeeId).maybeSingle()
   if (source.error) throw new PersistAuthorizationError('No se pudo validar el source event.', 'PERSIST_SOURCE_EVENT_READ_FAILED')
-  if (!source.data || source.data.id !== sourceEventId || source.data.cliente_id !== tenantId || source.data.employee_id !== employeeId || source.data.source_type !== 'ZKTECO' || source.data.processing_status !== 'PROCESSED') throw new PersistAuthorizationError('El source event no es una checada fisica canonica procesada.', 'PERSIST_SOURCE_EVENT_DENIED')
+  if (!source.data || source.data.id !== sourceEventId || source.data.cliente_id !== tenantId || source.data.employee_id !== employeeId || source.data.processing_status !== 'PROCESSED') throw new PersistAuthorizationError('El source event no es canonico procesado.', 'PERSIST_SOURCE_EVENT_DENIED')
+  if (source.data.source_type !== 'ZKTECO') {
+    if (source.data.source_type !== 'WEB') throw new PersistAuthorizationError('Fuente productiva no admitida.', 'PERSIST_SOURCE_EVENT_DENIED')
+    const proof = await client.from('web_clock_canonical_sources').select('registro_id,source_event_id,cliente_id,empleado_id').eq('registro_id', registroId).eq('source_event_id', sourceEventId).eq('cliente_id', tenantId).eq('empleado_id', employeeId).maybeSingle()
+    if (proof.error) throw new PersistAuthorizationError('No se pudo verificar la evidencia WEB_CLOCK.', 'PERSIST_SOURCE_EVENT_READ_FAILED')
+    if (!proof.data || proof.data.registro_id !== registroId || proof.data.source_event_id !== sourceEventId || proof.data.cliente_id !== tenantId || proof.data.empleado_id !== employeeId) throw new PersistAuthorizationError('WEB_CLOCK sin evidencia canonica verificada.', 'PERSIST_SOURCE_EVENT_DENIED')
+  }
   return Object.freeze({ tenantId, registroId, employeeId, sourceEventId })
 }
 
