@@ -23,7 +23,6 @@ import TenantSelector from "../../../shared/components/Layout/TenantSelector";
 import PaginationControl from "../../../shared/components/ui/PaginationControl";
 import { DatePicker } from "../../../shared/components/ui";
 import { useAuth } from "../../auth/hooks/useAuth";
-import { buildCollaboratorEmail } from "../../auth/services/authService";
 import {
   Users,
   UserPlus,
@@ -883,7 +882,7 @@ function ModalForm({
           clave_empleado: empleado?.clave_empleado || "",
           departamento: empleado?.departamento || "",
           puesto: empleado?.puesto || "",
-          pin: empleado?.pin || "",
+          pin: "",
           device_userid:
             empleado?.device_userid != null
               ? String(empleado.device_userid)
@@ -937,8 +936,8 @@ function ModalForm({
     } else if (!/^\d+$/.test(devUserId)) {
       e.device_userid = "Solo dígitos numéricos";
     }
-    if (pin && (pin.length < 4 || pin.length > 20)) {
-      e.pin = "La contraseña o PIN debe tener entre 4 y 20 caracteres";
+    if (pin && !/^[0-9]{5}$/.test(pin)) {
+      e.pin = "El PIN debe contener exactamente 5 dígitos";
     }
     if (isSuperAdmin && !isEdit && !targetClienteId) {
       e.cliente_id = "Debes seleccionar una empresa destino";
@@ -1046,44 +1045,6 @@ function ModalForm({
         toast.success(
           `${payload.nombre} ${payload.apellido} registrado exitosamente`,
         );
-      }
-
-      // Sincronizar credenciales de portal si tiene clave_empleado y pin/password >= 6
-      if (
-        payload.clave_empleado &&
-        payload.pin &&
-        payload.pin.length >= 6 &&
-        finalClienteId
-      ) {
-        try {
-          const {
-            data: { session },
-          } = await supabase.auth.getSession();
-          if (session?.access_token) {
-            const virtualEmail = buildCollaboratorEmail(
-              payload.clave_empleado,
-              finalClienteId,
-            );
-            fetch(
-              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${session.access_token}`,
-                  apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-                },
-                body: JSON.stringify({
-                  email: virtualEmail,
-                  password: payload.pin,
-                  nombre: `${payload.nombre} ${payload.apellido}`.trim(),
-                  rol: "colaborador",
-                  estatus_cuenta: payload.activo ? "activo" : "suspendido",
-                }),
-              },
-            ).catch(() => {});
-          }
-        } catch (_) {}
       }
 
       onSaved();
@@ -1401,7 +1362,7 @@ function ModalForm({
 // MODAL: CAMBIO RÁPIDO DE CONTRASEÑA / PIN DE COLABORADOR
 // ═══════════════════════════════════════════════════════════════
 function ModalCambiarPassword({ empleado, onClose, onSaved }) {
-  const [pin, setPin] = useState(empleado?.pin || "");
+  const [pin, setPin] = useState("");
   const [showPin, setShowPin] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1411,7 +1372,7 @@ function ModalCambiarPassword({ empleado, onClose, onSaved }) {
     setError("");
 
     const cleanPin = pin ? String(pin).trim() : "";
-    if (cleanPin && (cleanPin.length < 4 || cleanPin.length > 20)) {
+    if (!/^[0-9]{5}$/.test(cleanPin)) {
       setError("La contraseña o PIN debe tener entre 4 y 20 caracteres.");
       return;
     }
@@ -1428,31 +1389,6 @@ function ModalCambiarPassword({ empleado, onClose, onSaved }) {
 
       if (updateErr) throw updateErr;
 
-      // Sincronizar credenciales de cuenta virtual si tiene clave_empleado y longitud >= 6
-      if (cleanPin && cleanPin.length >= 6 && empleado.clave_empleado && empleado.cliente_id) {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.access_token) {
-            const virtualEmail = buildCollaboratorEmail(empleado.clave_empleado, empleado.cliente_id);
-            fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${session.access_token}`,
-                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-              },
-              body: JSON.stringify({
-                email: virtualEmail,
-                password: cleanPin,
-                nombre: `${empleado.nombre} ${empleado.apellido || ""}`.trim(),
-                rol: "colaborador",
-                estatus_cuenta: empleado.activo ? "activo" : "suspendido",
-              }),
-            }).catch(() => {});
-          }
-        } catch (_) {}
-      }
-
       toast.success(
         cleanPin
           ? `Contraseña asignada correctamente a ${empleado.nombre}`
@@ -1468,21 +1404,12 @@ function ModalCambiarPassword({ empleado, onClose, onSaved }) {
     }
   };
 
-  const generarPinNumerico = (digitos = 4) => {
-    const min = Math.pow(10, digitos - 1);
-    const max = Math.pow(10, digitos) - 1;
-    const nuevoPin = String(Math.floor(min + Math.random() * (max - min + 1)));
-    setPin(nuevoPin);
+  const generarPinNumerico = () => {
+    const values = new Uint32Array(1);
+    do { crypto.getRandomValues(values); } while (values[0] >= 4294900000);
+    setPin(String(values[0] % 100000).padStart(5, '0'));
     setShowPin(true);
-    setError("");
-  };
-
-  const sugerirAlfanumerica = () => {
-    const num = Math.floor(1000 + Math.random() * 9000);
-    const sugerida = `Colab${num}`;
-    setPin(sugerida);
-    setShowPin(true);
-    setError("");
+    setError('');
   };
 
   return (
@@ -1537,7 +1464,7 @@ function ModalCambiarPassword({ empleado, onClose, onSaved }) {
                   : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
               }`}
             >
-              {empleado?.pin ? "Tiene Contraseña" : "Sin Contraseña"}
+              PIN protegido
             </span>
           </div>
 
@@ -1547,7 +1474,7 @@ function ModalCambiarPassword({ empleado, onClose, onSaved }) {
                 htmlFor="quick-pin"
                 className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300"
               >
-                Nueva Contraseña / PIN (4 a 20 caracteres)
+                Nuevo PIN (5 dígitos)
               </label>
               <button
                 type="button"
@@ -1561,13 +1488,14 @@ function ModalCambiarPassword({ empleado, onClose, onSaved }) {
               <input
                 id="quick-pin"
                 type={showPin ? "text" : "password"}
-                maxLength={20}
+                maxLength={5}
+                inputMode="numeric"
                 value={pin}
                 onChange={(e) => {
-                  setPin(e.target.value);
+                  setPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 5));
                   setError("");
                 }}
-                placeholder="ej. 1234 o Colab2026"
+                placeholder="5 dígitos"
                 disabled={saving}
                 autoFocus
                 className={`w-full py-2.5 px-3 text-sm rounded-lg border bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 outline-none font-mono ${
@@ -1589,25 +1517,10 @@ function ModalCambiarPassword({ empleado, onClose, onSaved }) {
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               type="button"
-              onClick={() => generarPinNumerico(4)}
+              onClick={generarPinNumerico}
               className="text-xs px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium transition-colors"
             >
-              PIN de 4 dígitos
-            </button>
-            <button
-              type="button"
-              onClick={() => generarPinNumerico(6)}
-              className="text-xs px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium transition-colors"
-            >
-              PIN de 6 dígitos
-            </button>
-            <button
-              type="button"
-              onClick={sugerirAlfanumerica}
-              className="text-xs px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-300 font-medium transition-colors flex items-center gap-1"
-            >
-              <Sparkles className="w-3 h-3" />
-              Contraseña Alfanumérica
+              Generar PIN de 5 dígitos
             </button>
           </div>
 
@@ -1788,9 +1701,7 @@ function ModalDetalle({ empleado, onClose, onReactivate, onDelete, onEdit, onCam
                       Contraseña Portal / Kiosco
                     </p>
                     <p className="text-xs sm:text-sm font-semibold text-slate-900 font-mono">
-                      {empleado.pin
-                        ? "•••••••• (Asignada por RH)"
-                        : "Sin contraseña asignada"}
+                      El PIN existente no se muestra
                     </p>
                   </div>
                 </div>
@@ -1804,7 +1715,7 @@ function ModalDetalle({ empleado, onClose, onReactivate, onDelete, onEdit, onCam
                     className="px-2.5 py-1.5 rounded-md text-xs font-bold text-blue-700 bg-white hover:bg-blue-100 border border-blue-300 transition-colors flex items-center gap-1 shadow-sm"
                   >
                     <KeyRound className="w-3.5 h-3.5" />
-                    {empleado.pin ? "Modificar" : "Asignar"}
+                    Asignar nuevo PIN
                   </button>
                 )}
               </div>

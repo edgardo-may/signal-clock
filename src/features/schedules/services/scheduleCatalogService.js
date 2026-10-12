@@ -24,6 +24,8 @@ export async function applyScheduleCatalogRevision({ clienteId, action, horarioI
 }
 
 export function scheduleErrorMessage(message = '') {
+  if (message.includes('SCHEDULE_LIFECYCLE_REPLACEMENT_HAS_EVIDENCE')) return 'Ya existen checadas o jornadas para la fecha afectada. Elige una fecha futura para conservar el historial.'
+  if (message.includes('SCHEDULE_LIFECYCLE_HISTORICAL_REPLACEMENT_UNSUPPORTED')) return 'No se puede reemplazar una asignación histórica desde su fecha de inicio.'
   if (message.includes('SCHEDULE_DELETE_FORBIDDEN')) return 'Sólo admin de la empresa y superadmin pueden eliminar horarios.'
   if (message.includes('SCHEDULE_DELETE_HAS_ACTIVE_ASSIGNMENTS')) return 'El horario tiene asignaciones vigentes o futuras. Ciérralas antes de eliminarlo del catálogo.'
   if (message.includes('SCHEDULE_ARCHIVED')) return 'Este horario fue eliminado del catálogo y se conserva únicamente para el historial.'
