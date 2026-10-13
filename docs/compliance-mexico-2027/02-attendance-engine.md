@@ -12,7 +12,7 @@
 | `AttendanceTypes.ts` | Definiciones de tipos, interfaces de dominio, segmentos, incidencias y resultado consolidado `WorkdayCalculationResult`. |
 | `AttendanceErrors.ts` | Jerarquía de errores tipados (`InvalidTimezoneError`, `TenantMismatchError`, `InvalidPunchError`, `ShiftConfigurationError`). |
 | `timezoneUtils.ts` | Conversión y cálculo de componentes temporales locales y UTC independientes del host/servidor. |
-| `AttendanceNormalizer.ts` | Normalización de marcajes de distintas fuentes (ADMS, ISUP, Kiosko, Web, Manual), ordenamiento cronológico y deduplicación inteligente anti-ráfaga. |
+| `AttendanceNormalizer.ts` | Normalización de marcajes de distintas fuentes (ADMS, Kiosko, Web, Manual y evidencia histórica), ordenamiento cronológico y deduplicación inteligente anti-ráfaga. |
 | `ShiftMatcher.ts` | Algoritmo de emparejamiento con ventana operativa del turno, soporte de cruce de medianoche y turnos nocturnos. |
 | `WorkdayCalculator.ts` | Cálculo de segmentos (`WORK`, `BREAK`), tiempos efectivos, retardos según tolerancia, salidas anticipadas y minutos nocturnos. |
 | `IncidentDetector.ts` | Detección automática e idempotente de incidencias (`LATE`, `ABSENT`, `INCOMPLETE`, `OVERTIME_DETECTED`, `HOLIDAY_WORK`, `REST_DAY_WORK`). |

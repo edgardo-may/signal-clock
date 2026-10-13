@@ -62,8 +62,6 @@ export default function DeviceFormModal({ device, onClose, onSave, requestMode =
     timezone: 'America/Mexico_City',
     device_type: 'general',
     is_active: !requestMode,
-    marca: 'zkteco',
-    isup_key: '',
   })
 
   const [errors, setErrors] = useState({})
@@ -80,8 +78,6 @@ export default function DeviceFormModal({ device, onClose, onSave, requestMode =
         timezone:      device.timezone || 'America/Mexico_City',
         device_type:   device.device_type || 'general',
         is_active:     device.is_active !== undefined ? device.is_active : true,
-        marca:         device.marca || 'zkteco',
-        isup_key:      device.isup_key || '',
       })
     }
   }, [device, isEditing])
@@ -103,10 +99,10 @@ export default function DeviceFormModal({ device, onClose, onSave, requestMode =
     try {
       await onSave({
         ...(isEditing ? { id: device.id } : {}),
-        ...Object.fromEntries(Object.entries(formData).filter(([key]) => !['serial_number', 'is_active', 'marca', 'isup_key'].includes(key))),
+        ...Object.fromEntries(Object.entries(formData).filter(([key]) => !['serial_number', 'is_active'].includes(key))),
         name: formData.name.toUpperCase(),
         location: formData.location.toUpperCase(),
-        ...(requestMode ? { serial_number: formData.serial_number.toUpperCase(), protocol: formData.marca === 'hikvision' ? 'HIKVISION_ISUP' : 'ZKTECO_ADMS' } : {}),
+        ...(requestMode ? { serial_number: formData.serial_number.toUpperCase(), protocol: 'ZKTECO_ADMS' } : {}),
         ...(!requestMode && isSuperAdmin ? { is_active: formData.is_active } : {}),
         port: formData.port ? parseInt(formData.port, 10) : 7660,
       })
@@ -174,14 +170,12 @@ export default function DeviceFormModal({ device, onClose, onSave, requestMode =
             </div>
 
             {/* Hint ZKTeco */}
-            {formData.marca === 'zkteco' && (
               <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-[#BDD9D7]/20 border border-[#BDD9D7]/40">
                 <Info className="w-3.5 h-3.5 text-[#03363D]/60 dark:text-teal-400 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-[#03363D]/80 dark:text-teal-300/80 leading-relaxed">
                   Registra el número de serie del biométrico. Cuando el dispositivo se conecte al servidor, Signum Clock lo reconocerá automáticamente.
                 </p>
               </div>
-            )}
 
             {/* Ubicación */}
             <div>
@@ -201,11 +195,7 @@ export default function DeviceFormModal({ device, onClose, onSave, requestMode =
             <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Protocolo y conexión</p>
 
             {requestMode ? <div>
-              <label className={labelClass}>Marca del dispositivo</label>
-              <select value={formData.marca} onChange={event => setFormData({ ...formData, marca: event.target.value })} className={inputClass}>
-                <option value="zkteco">ZKTeco (ADMS Push)</option>
-                <option value="hikvision">Hikvision (ISUP 5.0)</option>
-              </select>
+              <p className="text-sm font-medium">ZKTeco ADMS</p>
               <p className="mt-2 text-xs text-slate-500">Central debe autorizar la asociación antes de habilitar esta terminal.</p>
             </div> : <p className="text-xs text-slate-500">La identidad y asociación del dispositivo se autorizan en Central. Este formulario sólo edita sus parámetros operativos.</p>}
 

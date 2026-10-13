@@ -59,7 +59,7 @@ const groups = {
     'employee-deactivation-device-removal','employee-module-matrix','central-user-creation','hardening',
   ],
   attendance: [
-    'attendance-engine','attendance-runtime-host','attendance-runtime-v3-persist',
+    'attendance-engine','attendance-runtime-v3-host','attendance-runtime-v3-persist',
     'attendance-device-tenant-identity-dbreal','attendance-entry-identity-repair-dbreal',
     'phase-99-source-event-link-order','phase-a-multi-pair-canonical',
     'phase-b-canonical-pairing','phase-b-dbreal-pairing',

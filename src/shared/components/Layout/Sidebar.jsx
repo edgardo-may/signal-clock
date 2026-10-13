@@ -360,7 +360,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-200 whitespace-nowrap">
                     <Activity className="w-3.5 h-3.5 text-blue-400" />
-                    Terminales ISUP
+                    Terminales ZKTeco ADMS
                   </span>
                   <span className="flex h-2 w-2 relative">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -372,7 +372,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
                 </p>
               </div>
             ) : (
-              <div className="flex justify-center" title="Receptor ISUP Activo">
+              <div className="flex justify-center" title="Receptor ZKTeco ADMS Activo">
                 <span className="flex h-2.5 w-2.5 relative">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>

@@ -8,7 +8,7 @@
 
 const { createClient } = require('@supabase/supabase-js')
 const { AttendanceEngineOrchestrator, SupabaseAttendanceReadRepository } = require('../services/attendance/AttendanceEngineOrchestrator.js')
-const { createReadOnlyClient } = require('../attendance-runtime/readOnlySupabase.js')
+const { createReadOnlyClient } = require('../attendance-runtime-v3/readOnlySupabase.js')
 const {
   APPROVED_REVISION_CANARY,
   EXPECTED_RUNTIME,

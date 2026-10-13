@@ -232,7 +232,7 @@ function PreviewSidebar({ open, onClose }) {
               <div className="flex items-center justify-between mb-1">
                 <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: C.champagne }}>
                   <ActivityIcon size={14} className="" style={{ color: C.emeraldMuted }} />
-                  Terminales ISUP
+                  Terminales ZKTeco ADMS
                 </span>
                 <span className="flex h-2 w-2 relative">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: C.emeraldMuted }} />
@@ -481,7 +481,7 @@ function AnalyticsChart() {
           className="self-start sm:self-auto px-2.5 py-1 rounded-lg text-xs font-semibold"
           style={{ backgroundColor: C.champagne, color: C.emerald, border: `1px solid ${C.champagneDark}` }}
         >
-          Terminales ISUP 5.0
+          Terminales ZKTeco ADMS
         </span>
       </div>
 
@@ -595,7 +595,7 @@ function RealtimeTable() {
             Últimos Marcajes en Tiempo Real
           </h2>
           <p className="text-xs mt-0.5" style={{ color: 'rgba(6,78,59,0.55)' }}>
-            Recepción instantánea · ISUP 5.0
+            Recepción instantánea · ZKTeco ADMS
           </p>
         </div>
         <span

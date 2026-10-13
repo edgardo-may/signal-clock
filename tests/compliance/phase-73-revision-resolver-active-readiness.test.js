@@ -5,7 +5,6 @@ import { readFile } from 'node:fs/promises'
 
 const require = createRequire(import.meta.url)
 const { ACTIVE_READINESS: E, evaluateActiveReadiness } = require('../../backend/scripts/revision-resolver-active-readiness-contract.js')
-const { checkActiveRuntimeReadiness } = require('../../backend/attendance-runtime/active-readiness-runtime-check.js')
 
 function ready(overrides = {}) {
   return {
@@ -44,22 +43,6 @@ test('73.3 unexpected runtime version/build or unhealthy runtime fails closed', 
     assert.equal(result.runtimePass, false)
     assert.equal(result.activeReadiness, false)
   }
-})
-
-test('73.4 runtime HTTP check is read-only and requires exact version/build/SHADOW_ONLY', async () => {
-  const calls = []
-  const fetchImplementation = async (url) => {
-    calls.push(url)
-    const body = url.endsWith('/health')
-      ? { status: 'ok', execution_mode: 'SHADOW_ONLY', runtime_version: E.runtime_version, build_sha: E.runtime_build_sha }
-      : { status: 'ok', database: 'reachable' }
-    return { ok: true, json: async () => body }
-  }
-  const report = await checkActiveRuntimeReadiness({ ATTENDANCE_RUNTIME_URL: 'https://runtime.example' }, { fetchImplementation })
-  assert.equal(report.runtime_readiness_pass, true)
-  assert.equal(report.databaseWrites, 0)
-  assert.equal(report.rpcWriteCalls, 0)
-  assert.deepEqual(calls.sort(), ['https://runtime.example/health', 'https://runtime.example/ready'])
 })
 
 test('73.5 readiness SQL is read-only and avoids live horarios fallback', async () => {

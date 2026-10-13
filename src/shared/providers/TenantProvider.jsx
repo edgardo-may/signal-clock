@@ -61,7 +61,7 @@ export function TenantProvider({ children }) {
           .select('id', { count: 'exact', head: true })
           .eq('cliente_id', clienteId),
         supabase
-          .from('dispositivos')
+          .from('devices')
           .select('id', { count: 'exact', head: true })
           .eq('cliente_id', clienteId),
       ])

@@ -1,3 +1,20 @@
+## Stack vigente — limpieza local ZKTeco-only (2026-10-12)
+
+Referencia de partida: 95718495fbbb93f9b736d5e835320e6214f4a0a5.
+Arquitectura: [current-stack-zkteco.md](current-stack-zkteco.md).
+Employee mantiene api/employee.js → backend/employee-portal/http.mjs en Vercel.
+Consolide: backend/api-integracion; CRUD empleados: backend/signum-api.
+Runtime vigente de código: backend/attendance-runtime-v3 y dispatcher separado.
+Gateway físico ADMS: repositorio independiente zkteco-push-ta.
+Se retiraron gateway raíz, sync duplicado, SDK proveedor, runtime v1/v2 y snapshots.
+No se alteró el motor matemático, Workday, RPC20 ni SQL históricos/aprobados.
+Propuesta 125 en proposals: NO APLICADA; las lecturas devices deben liberarse
+coordinadamente con su precheck/cambio DB y validación de compatibilidad.
+Los reportes archivados conservan bytes originales y describen estados anteriores.
+Sin commit, push, deploy ni cambios productivos.
+
+---
+
 # Signum Clock — Estado actual
 
 La base real de producción es la fuente de verdad. No usar migraciones históricas
@@ -160,7 +177,7 @@ con cliente backend dedicado/configurado, verificar runtime y variables del
 despliegue, validar la ventana de eventos contra DB real y aprobar un candidato
 del precheck. PERSIST y activación del engine siguen en NO.
 
-Ver `phase-31-local-shadow-canary.md`.
+Ver `archive/pre-zkteco-only/phase-31-local-shadow-canary.md`.
 
 ## Fase 32.1 — audit de operative date
 

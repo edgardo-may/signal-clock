@@ -35,7 +35,7 @@ export default function CentralDashboardPage() {
       ] = await Promise.all([
         supabase.from('clientes').select('*').order('creado_at', { ascending: false }),
         supabase.from('empleados').select('cliente_id'),
-        supabase.from('dispositivos').select('cliente_id'),
+        supabase.from('devices').select('cliente_id'),
       ])
 
       if (clientErr) throw clientErr

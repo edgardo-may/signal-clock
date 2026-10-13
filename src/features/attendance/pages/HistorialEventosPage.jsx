@@ -52,8 +52,8 @@ function processEventos(asistencias, empleados, dispositivos) {
       'Hora de fichaje': formatDateTime(a.verificado_at),
       'Zona horaria': '-05:00', // Hardcoded for Cancún/Bogotá/CDMX
       'Modo de verificación': modoVerificacion,
-      'Dispositivo SN': dev.device_id_hikvision || '—',
-      'Nombre del dispositivo': dev.nombre || '—',
+      'Dispositivo SN': dev.serial_number || '—',
+      'Nombre del dispositivo': dev.name || '—',
       'Hora de carga': formatDateTime(a.created_at || a.verificado_at)
     }
   }).sort((a, b) => new Date(b['Hora de fichaje']) - new Date(a['Hora de fichaje']))
@@ -77,7 +77,7 @@ export default function HistorialEventosPage() {
     try {
       const [empRes, devRes] = await Promise.all([
         supabase.from('empleados').select('id, nombre, apellido, departamento, clave_empleado, device_userid').eq('cliente_id', currentTenantId),
-        supabase.from('dispositivos').select('id, nombre, device_id_hikvision').eq('cliente_id', currentTenantId)
+        supabase.from('devices').select('id, name, serial_number').eq('cliente_id', currentTenantId)
       ])
       
       if (empRes.error) throw empRes.error

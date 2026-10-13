@@ -5,7 +5,6 @@ import { readFile } from 'node:fs/promises'
 
 const require = createRequire(import.meta.url)
 const { FINAL_ACTIVE: E, evaluateFinalActiveReadiness } = require('../../backend/scripts/revision-resolver-final-active-contract.js')
-const { runtimeSourceSha256 } = require('../../backend/attendance-runtime/postdeploy-readonly-check.js')
 
 function exactState(overrides = {}) {
   return {
@@ -36,11 +35,6 @@ test('75.2 approved SHADOW_ONLY runtime is blocked even when all database eviden
   assert.equal(result.activeReadiness, false)
 })
 
-test('75.2b v2 runtime release hash is deterministic and matches the candidate contract', async () => {
-  assert.equal(E.runtime_version, 'attendance-runtime-v2')
-  assert.equal(await runtimeSourceSha256(), E.runtime_build_sha)
-})
-
 test('75.3 every database invariant fails closed', () => {
   for (const change of [
     { featureMode: 'OFF' }, { featureEnabled: false }, { activeTenantCount: 1 }, { persistAuthorizationRows: 1 },
@@ -52,20 +46,6 @@ test('75.3 every database invariant fails closed', () => {
   ]) {
     assert.equal(evaluateFinalActiveReadiness(exactState(change)).activeReadiness, false)
   }
-})
-
-test('75.4 candidate runtime source exposes explicit ACTIVE capability without persistence', async () => {
-  const [app, service] = await Promise.all([
-    readFile(new URL('../../backend/attendance-runtime/app.js', import.meta.url), 'utf8'),
-    readFile(new URL('../../backend/attendance-runtime/AttendanceRuntimeService.js', import.meta.url), 'utf8'),
-  ])
-  assert.match(app, /\/internal\/attendance\/active/)
-  assert.match(service, /RUNTIME_EXECUTION_MODE/)
-  assert.match(service, /executeActive/)
-  assert.match(app, /\/internal\/attendance\/shadow/)
-  assert.match(service, /executionMode: feature\.mode/)
-  assert.match(service, /persistenceMode: READ_ONLY_PERSISTENCE_MODE/)
-  assert.doesNotMatch(service, /WorkdayPersistenceService|PERSIST_MODE/)
 })
 
 test('75.5 final precheck and postchecks are read-only; blocked change contains no UPDATE', async () => {

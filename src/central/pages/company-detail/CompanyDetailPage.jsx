@@ -274,7 +274,7 @@ export default function CompanyDetailPage() {
       ] = await Promise.all([
         supabase.from('clientes').select('*').eq('id', id).single(),
         supabase.from('empleados').select('*', { count: 'exact', head: true }).eq('cliente_id', id),
-        supabase.from('dispositivos').select('*', { count: 'exact', head: true }).eq('cliente_id', id),
+        supabase.from('devices').select('*', { count: 'exact', head: true }).eq('cliente_id', id),
       ])
       if (clientErr) throw clientErr
       setEmpresa({

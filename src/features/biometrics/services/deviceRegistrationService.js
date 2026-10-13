@@ -16,7 +16,7 @@ export const deviceRegistrationService = {
   },
   request(form, targetClienteId) {
     return result(supabase.rpc('request_device_registration', {
-      p_serial: form.serial_number, p_name: form.name, p_protocol: form.protocol,
+      p_serial: form.serial_number, p_name: form.name, p_protocol: 'ZKTECO_ADMS',
       p_timezone: form.timezone, p_location: form.location || null,
       p_device_type: form.device_type || 'general', p_target_cliente_id: targetClienteId || null,
     }))

@@ -92,7 +92,7 @@ export default function DeviceRegistrationRequests({ central, tenantId, canReque
         {modal.kind === 'create' ? <>
           <label className="block text-sm">Nombre<input autoFocus required maxLength={120} className={input} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label>
           <label className="block text-sm">Número de serie<input required maxLength={50} pattern="[A-Za-z0-9_-]+" className={input} value={form.serial_number} onChange={e => setForm({ ...form, serial_number: e.target.value })} /></label>
-          <label className="block text-sm">Protocolo<select className={input} value={form.protocol} onChange={e => setForm({ ...form, protocol: e.target.value })}><option value="ZKTECO_ADMS">ZKTeco ADMS</option><option value="HIKVISION_ISUP">Hikvision ISUP</option></select></label>
+          <p className="text-sm">Tecnología: ZKTeco ADMS</p>
           <label className="block text-sm">Ubicación<input maxLength={240} className={input} value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} /></label>
           <label className="block text-sm">Motivo de la solicitud<textarea maxLength={1000} className={input} value={form.request_reason} onChange={e => setForm({ ...form, request_reason: e.target.value })} /></label>
           <label className="block text-sm">Zona horaria<select className={input} value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}><option>America/Cancun</option><option>America/Mexico_City</option><option>America/Tijuana</option><option>America/Hermosillo</option><option>UTC</option></select></label>

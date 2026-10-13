@@ -841,7 +841,6 @@ export function useFingerEnrollment(empleadoId, clienteId) {
       //
       // IMPORTANTE:
       //
-      // Ya NO usamos hikvision_device_userid.
       //
       // Primero intentamos:
       //   biometric_user_id
@@ -852,8 +851,7 @@ export function useFingerEnrollment(empleadoId, clienteId) {
       // Después:
       //   clave_empleado
       //
-      // Esto permite trabajar con el esquema actual sin depender
-      // de Hikvision.
+      // Se utiliza la identidad biométrica del esquema actual.
       // ───────────────────────────────────────────────────────────────────
 
       const biometricPin =

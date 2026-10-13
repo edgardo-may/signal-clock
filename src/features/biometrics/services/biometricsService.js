@@ -668,71 +668,7 @@ export const biometricsService = {
       throw new Error('Permiso denegado: Solo el usuario superadmin en el panel Central puede eliminar biométricos.')
     }
 
-    console.warn('[deleteDevice] RPC falló o no existe aún, intentando vía backend sync-server:', rpcError.message)
-
-    // 2. Fallback vía backend sync-server (/api/sync/device/delete)
-    try {
-      const session = (await supabase.auth.getSession())?.data?.session
-      if (session?.access_token) {
-        const response = await fetch('/api/sync/device/delete', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`
-          },
-          body: JSON.stringify({ deviceId: id })
-        })
-        const resData = await response.json().catch(() => ({}))
-        if (response.ok && resData.ok) {
-          return true
-        }
-        if (resData.error) {
-          throw new Error(resData.error)
-        }
-      }
-    } catch (backendErr) {
-      console.warn('[deleteDevice] Error en backend sync-server:', backendErr.message)
-      if (backendErr.message?.includes('superadmin') || backendErr.message?.includes('Permiso')) {
-        throw backendErr
-      }
-    }
-
-    // 3. Fallback directo a Supabase con desacoplamiento seguro de checadas (dispositivo_id = null)
-    // Desvincular checadas de registro_asistencia para no romper integridad ni perder datos de colaboradores
-    await supabase
-      .from('registro_asistencia')
-      .update({ dispositivo_id: null })
-      .eq('dispositivo_id', id)
-
-    // Desvincular templates biométricos
-    await supabase
-      .from('biometric_templates')
-      .update({ device_id: null })
-      .eq('device_id', id)
-
-    // Eliminar comandos de la cola de este dispositivo
-    await supabase
-      .from('device_commands')
-      .delete()
-      .eq('device_id', id)
-
-    // Eliminar asignaciones empleado-dispositivo
-    await supabase
-      .from('device_employee_assignments')
-      .delete()
-      .eq('device_id', id)
-
-    // Eliminar el hardware terminal
-    const { error } = await supabase
-      .from('devices')
-      .delete()
-      .eq('id', id)
-
-    if (error) {
-      throw new Error('Error al eliminar terminal: ' + (error.message || 'Requiere permisos de superadmin.'))
-    }
-
-    return true
+    throw rpcError
   },
 
 
@@ -1754,14 +1690,6 @@ export const biometricsService = {
     // DEVICES
     //
     // ESTA ES LA PARTE CLAVE.
-    //
-    // Antes:
-    //
-    // dispositivos
-    //   -> device_id_hikvision
-    //   -> devices
-    //
-    // Ahora:
     //
     // devices
     //   -> cliente_id

@@ -117,7 +117,7 @@ export default function CentralTenantsPage() {
       ] = await Promise.all([
         supabase.from('clientes').select('*').order('creado_at', { ascending: false }),
         supabase.from('empleados').select('cliente_id'),
-        supabase.from('dispositivos').select('cliente_id'),
+        supabase.from('devices').select('cliente_id'),
       ])
 
       if (clientErr) throw clientErr
@@ -706,7 +706,7 @@ function ModalFormEmpresa({ empresa, onClose, onSaved }) {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Límite Terminales ISUP
+                  Límite Terminales ZKTeco ADMS
                 </label>
                 <input
                   type="number"

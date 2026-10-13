@@ -1,0 +1,727 @@
+{
+  "reference_commit": "95718495fbbb93f9b736d5e835320e6214f4a0a5",
+  "branch": "main",
+  "counts": {
+    "files_before": 682,
+    "files_after": 629,
+    "tracked_bytes_before": 27138199,
+    "tracked_bytes_after": 5221958,
+    "deleted": 61,
+    "moved": 15,
+    "modified": 28,
+    "added": 8
+  },
+  "changes": [
+    {
+      "status": "D",
+      "path": ".runtime-evidence/vercel-audit-1eba261/source/backend/api-integracion/consolide-client.js"
+    },
+    {
+      "status": "D",
+      "path": ".runtime-evidence/vercel-audit-1eba261/source/backend/api-integracion/employee-sync-service.js"
+    },
+    {
+      "status": "D",
+      "path": ".runtime-evidence/vercel-audit-1eba261/source/backend/api-integracion/server.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/Dockerfile"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/.env.example"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/AttendanceRuntimeService.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/Dockerfile"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/Dockerfile.dockerignore"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/active-readiness-runtime-check.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/app.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/cloud-shell-active-runtime-live-check.sh"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/cloud-shell-build-only.sh"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/cloud-shell-runtime-live-evidence.sh"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/cloudbuild-build-only.yaml"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/config.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/package.json"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/postdeploy-readonly-check.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/readOnlySupabase.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/server.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/tenantFeature.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/attendance-runtime/verify-package-closure.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/consolide-client.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/employee-sync-service.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/inc/AudioIntercom.h"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/inc/HCEHomeAlarm.h"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/inc/HCEHomeCMS.h"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/inc/HCEHomePSS.h"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/inc/HCEHomePublic.h"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/inc/HCEHomeStream.h"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/AudioIntercom.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/AudioIntercom.lib"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/AudioRender.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/EHomeDemo.xml"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCAapSDKCom/OpenAL32.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCAapSDKCom/SystemTransform.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCAapSDKCom/libiconv2.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCAapSDKCom/msvcr90.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCEHomeAlarm.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCEHomeAlarm.lib"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCEHomeCMS.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCEHomeCMS.lib"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCEHomePSS.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCEHomePSS.lib"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCEHomeStream.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCEHomeStream.lib"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCNetUtils.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/HCNetUtils.lib"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/OpenAL32.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/PlayCtrl.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/PlayCtrl.lib"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/SuperRender.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/d3dx9_43.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/msvcr90.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/sqlite3.dll"
+    },
+    {
+      "status": "D",
+      "path": "backend/isup_sdk/lib/sqlite3.lib"
+    },
+    {
+      "status": "D",
+      "path": "backend/migrate-emails.js"
+    },
+    {
+      "status": "M",
+      "path": "backend/package-lock.json"
+    },
+    {
+      "status": "M",
+      "path": "backend/package.json"
+    },
+    {
+      "status": "M",
+      "path": "backend/scripts/generate-persist-canary-revision-shadow-manifest.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/server.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/sync-server.js"
+    },
+    {
+      "status": "D",
+      "path": "backend/sync.test.js"
+    },
+    {
+      "status": "A",
+      "path": "database/live-schema/proposals/125_retire_hikvision_zkteco_only.sql"
+    },
+    {
+      "status": "A",
+      "path": "database/live-schema/proposals/125_retire_hikvision_zkteco_only_precheck.sql"
+    },
+    {
+      "status": "M",
+      "path": "docs/CURRENT_STATE.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/archive/pre-zkteco-only/README.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/attendance-runtime-v2-active-rollout.md",
+      "to": "docs/archive/pre-zkteco-only/attendance-runtime-v2-active-rollout.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/compliance-mexico-2027-audit.md",
+      "to": "docs/archive/pre-zkteco-only/compliance-mexico-2027-audit.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/compliance-mexico-2027/01-architecture.md",
+      "to": "docs/archive/pre-zkteco-only/compliance-mexico-2027/01-architecture.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/compliance-mexico-2027/11-security.md",
+      "to": "docs/archive/pre-zkteco-only/compliance-mexico-2027/11-security.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/compliance-mexico-2027/phase-1-hardening.md",
+      "to": "docs/archive/pre-zkteco-only/compliance-mexico-2027/phase-1-hardening.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/compliance-mexico-2027/phase-1-validation.md",
+      "to": "docs/archive/pre-zkteco-only/compliance-mexico-2027/phase-1-validation.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/compliance-mexico-2027/phase-2-independent-validation.md",
+      "to": "docs/archive/pre-zkteco-only/compliance-mexico-2027/phase-2-independent-validation.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/compliance-mexico-2027/phase-2-workday-records.md",
+      "to": "docs/archive/pre-zkteco-only/compliance-mexico-2027/phase-2-workday-records.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/phase-26-engine-integration-contract.md",
+      "to": "docs/archive/pre-zkteco-only/phase-26-engine-integration-contract.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/phase-31-local-shadow-canary.md",
+      "to": "docs/archive/pre-zkteco-only/phase-31-local-shadow-canary.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/phase-59-revision-resolver-activation-gate.md",
+      "to": "docs/archive/pre-zkteco-only/phase-59-revision-resolver-activation-gate.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/phase-60-attendance-runtime-host.md",
+      "to": "docs/archive/pre-zkteco-only/phase-60-attendance-runtime-host.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/phase-61-attendance-runtime-container-gate.md",
+      "to": "docs/archive/pre-zkteco-only/phase-61-attendance-runtime-container-gate.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/signum-api-current-architecture-map.md",
+      "to": "docs/archive/pre-zkteco-only/signum-api-current-architecture-map.md"
+    },
+    {
+      "status": "R100",
+      "from": "docs/signum-api-phase-api-1-report.md",
+      "to": "docs/archive/pre-zkteco-only/signum-api-phase-api-1-report.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/compliance-mexico-2027/02-attendance-engine.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/current-stack-cleanup-inventory.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/current-stack-cleanup-report.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/current-stack-zkteco.md"
+    },
+    {
+      "status": "D",
+      "path": "ehome_docs"
+    },
+    {
+      "status": "M",
+      "path": "index.html"
+    },
+    {
+      "status": "M",
+      "path": "scripts/validate-device-security-local.mjs"
+    },
+    {
+      "status": "M",
+      "path": "src/central/pages/CentralDashboardPage.jsx"
+    },
+    {
+      "status": "M",
+      "path": "src/central/pages/CentralTenantsPage.jsx"
+    },
+    {
+      "status": "M",
+      "path": "src/central/pages/company-detail/CompanyDetailPage.jsx"
+    },
+    {
+      "status": "M",
+      "path": "src/features/attendance/pages/ChecadasManualesPage.jsx"
+    },
+    {
+      "status": "M",
+      "path": "src/features/attendance/pages/HistorialEventosPage.jsx"
+    },
+    {
+      "status": "M",
+      "path": "src/features/biometrics/components/DeviceDetailModal.jsx"
+    },
+    {
+      "status": "M",
+      "path": "src/features/biometrics/components/DeviceFormModal.jsx"
+    },
+    {
+      "status": "M",
+      "path": "src/features/biometrics/components/DeviceRegistrationRequests.jsx"
+    },
+    {
+      "status": "M",
+      "path": "src/features/biometrics/components/SendCommandModal.jsx"
+    },
+    {
+      "status": "M",
+      "path": "src/features/biometrics/hooks/useFingerEnrollment.js"
+    },
+    {
+      "status": "M",
+      "path": "src/features/biometrics/services/biometricsService.js"
+    },
+    {
+      "status": "M",
+      "path": "src/features/biometrics/services/deviceRegistrationService.js"
+    },
+    {
+      "status": "M",
+      "path": "src/features/biometrics/services/enrollmentService.js"
+    },
+    {
+      "status": "M",
+      "path": "src/features/dashboard/components/DashboardPreview.jsx"
+    },
+    {
+      "status": "M",
+      "path": "src/features/tenants/pages/EmpresasPage.jsx"
+    },
+    {
+      "status": "M",
+      "path": "src/shared/components/Layout/Sidebar.jsx"
+    },
+    {
+      "status": "M",
+      "path": "src/shared/hooks/useTenantLimits.js"
+    },
+    {
+      "status": "M",
+      "path": "src/shared/providers/TenantProvider.jsx"
+    },
+    {
+      "status": "D",
+      "path": "tests/compliance/attendance-runtime-host.test.js"
+    },
+    {
+      "status": "A",
+      "path": "tests/compliance/attendance-runtime-v3-host.test.js"
+    },
+    {
+      "status": "M",
+      "path": "tests/compliance/phase-73-revision-resolver-active-readiness.test.js"
+    },
+    {
+      "status": "M",
+      "path": "tests/compliance/phase-74-runtime-live-evidence.test.js"
+    },
+    {
+      "status": "M",
+      "path": "tests/compliance/phase-75-final-active-readiness.test.js"
+    },
+    {
+      "status": "A",
+      "path": "tests/compliance/zkteco-only-cleanup.test.js"
+    }
+  ],
+  "remaining_references": [
+    {
+      "file": "CLAUDE.MD",
+      "count": 2,
+      "classification": "DOC_ONLY"
+    },
+    {
+      "file": "backend/api-integracion/package-lock.json",
+      "count": 1,
+      "classification": "LOCKFILE_INTEGRITY_FALSE_POSITIVE"
+    },
+    {
+      "file": "backend/package-lock.json",
+      "count": 1,
+      "classification": "LOCKFILE_INTEGRITY_FALSE_POSITIVE"
+    },
+    {
+      "file": "backend/signum-api/package-lock.json",
+      "count": 1,
+      "classification": "LOCKFILE_INTEGRITY_FALSE_POSITIVE"
+    },
+    {
+      "file": "database/live-schema/100_employee_security_and_audit_precheck.sql",
+      "count": 3,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "database/live-schema/107_fix_empleados_audit_trigger_device_userid.sql",
+      "count": 2,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "database/live-schema/117_device_registration_requests_authorization.sql",
+      "count": 8,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "database/live-schema/CURRENT_DATABASE_CONTRACT.md",
+      "count": 1,
+      "classification": "DOC_ONLY"
+    },
+    {
+      "file": "database/live-schema/proposals/125_retire_hikvision_zkteco_only.sql",
+      "count": 1,
+      "classification": "RETIREMENT_PROPOSAL / PRECHECK_ONLY"
+    },
+    {
+      "file": "database/live-schema/proposals/125_retire_hikvision_zkteco_only_precheck.sql",
+      "count": 4,
+      "classification": "RETIREMENT_PROPOSAL / PRECHECK_ONLY"
+    },
+    {
+      "file": "docs/archive/pre-zkteco-only/compliance-mexico-2027-audit.md",
+      "count": 4,
+      "classification": "DOC_ONLY / HISTORICAL_ARCHIVE"
+    },
+    {
+      "file": "docs/archive/pre-zkteco-only/compliance-mexico-2027/01-architecture.md",
+      "count": 2,
+      "classification": "DOC_ONLY / HISTORICAL_ARCHIVE"
+    },
+    {
+      "file": "docs/archive/pre-zkteco-only/compliance-mexico-2027/11-security.md",
+      "count": 1,
+      "classification": "DOC_ONLY / HISTORICAL_ARCHIVE"
+    },
+    {
+      "file": "docs/archive/pre-zkteco-only/compliance-mexico-2027/phase-1-hardening.md",
+      "count": 1,
+      "classification": "DOC_ONLY / HISTORICAL_ARCHIVE"
+    },
+    {
+      "file": "docs/archive/pre-zkteco-only/compliance-mexico-2027/phase-1-validation.md",
+      "count": 2,
+      "classification": "DOC_ONLY / HISTORICAL_ARCHIVE"
+    },
+    {
+      "file": "docs/archive/pre-zkteco-only/compliance-mexico-2027/phase-2-independent-validation.md",
+      "count": 3,
+      "classification": "DOC_ONLY / HISTORICAL_ARCHIVE"
+    },
+    {
+      "file": "docs/archive/pre-zkteco-only/compliance-mexico-2027/phase-2-workday-records.md",
+      "count": 1,
+      "classification": "DOC_ONLY / HISTORICAL_ARCHIVE"
+    },
+    {
+      "file": "docs/archive/pre-zkteco-only/phase-26-engine-integration-contract.md",
+      "count": 1,
+      "classification": "DOC_ONLY / HISTORICAL_ARCHIVE"
+    },
+    {
+      "file": "docs/archive/pre-zkteco-only/signum-api-current-architecture-map.md",
+      "count": 1,
+      "classification": "DOC_ONLY / HISTORICAL_ARCHIVE"
+    },
+    {
+      "file": "docs/archive/pre-zkteco-only/signum-api-phase-api-1-report.md",
+      "count": 1,
+      "classification": "DOC_ONLY / HISTORICAL_ARCHIVE"
+    },
+    {
+      "file": "docs/current-stack-cleanup-inventory.json",
+      "count": 37,
+      "classification": "DOC_ONLY / GENERATED_AUDIT"
+    },
+    {
+      "file": "docs/current-stack-cleanup-report.md",
+      "count": 39,
+      "classification": "DOC_ONLY / GENERATED_AUDIT"
+    },
+    {
+      "file": "docs/current-stack-zkteco.md",
+      "count": 2,
+      "classification": "DOC_ONLY"
+    },
+    {
+      "file": "src/domain/attendance/AttendanceNormalizer.ts",
+      "count": 1,
+      "classification": "HISTORICAL_EVIDENCE_TYPE / ENGINE_UNCHANGED"
+    },
+    {
+      "file": "src/domain/attendance/AttendanceTypes.ts",
+      "count": 2,
+      "classification": "HISTORICAL_EVIDENCE_TYPE / ENGINE_UNCHANGED"
+    },
+    {
+      "file": "supabase/migrations/001_init_schema.sql",
+      "count": 6,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "supabase/migrations/008_empleados_add_extended_fields.sql",
+      "count": 2,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "supabase/migrations/019_rate_limiting_y_seguridad.sql",
+      "count": 1,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "supabase/migrations/022_device_employee_assignments.sql",
+      "count": 2,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "supabase/migrations/023_add_sync_policy_to_clientes.sql",
+      "count": 7,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "supabase/migrations/028_auto_assign_biometric_id.sql",
+      "count": 4,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "supabase/migrations/029_unify_biometric_schema.sql",
+      "count": 7,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "supabase/migrations/039_device_security_provisioning.sql",
+      "count": 1,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "supabase/migrations/044_operational_audit_triggers.sql",
+      "count": 2,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "supabase/migrations/046_phase2_security_hardening.sql",
+      "count": 1,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "supabase/migrations/047_phase2_stabilization.sql",
+      "count": 1,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "supabase/migrations/048_zkteco_tenant_identity_fingerprint_hardening.sql",
+      "count": 9,
+      "classification": "HISTORICAL_MIGRATION"
+    },
+    {
+      "file": "tests/compliance/employee-module-matrix.test.js",
+      "count": 1,
+      "classification": "NEGATIVE_SECURITY_ASSERTION"
+    },
+    {
+      "file": "tests/compliance/zkteco-only-cleanup.test.js",
+      "count": 4,
+      "classification": "NEGATIVE_SECURITY_ASSERTION"
+    }
+  ],
+  "ignored_runtime_evidence_removed": {
+    "files": 493,
+    "bytes_total_including_tracked": 6317376
+  },
+  "test_results": [
+    {
+      "suite": "Employee release / DBREAL",
+      "pass": 235,
+      "fail": 0,
+      "skip": 0
+    },
+    {
+      "suite": "npm test root",
+      "pass": 37,
+      "fail": 0,
+      "skip": 0
+    },
+    {
+      "suite": "runtime v3 host/persist + dispatcher",
+      "pass": 37,
+      "fail": 0,
+      "skip": 0
+    },
+    {
+      "suite": "api-integracion",
+      "pass": 11,
+      "fail": 0,
+      "skip": 0
+    },
+    {
+      "suite": "signum-api",
+      "pass": 72,
+      "fail": 0,
+      "skip": 0
+    },
+    {
+      "suite": "historical SQL guards phases73-75",
+      "pass": 10,
+      "fail": 0,
+      "skip": 0
+    },
+    {
+      "suite": "new cleanup contracts",
+      "pass": 10,
+      "fail": 0,
+      "skip": 0
+    }
+  ],
+  "production_changes": 0,
+  "proposal_125_executed": false,
+  "commit_created": false
+}

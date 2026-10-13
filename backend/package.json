@@ -1,22 +1,21 @@
 {
-  "name": "signum-clock-receptor",
+  "name": "signum-clock-attendance-runtime",
   "version": "1.0.0",
-  "description": "Receptor ISUP 5.0 Hikvision para Signum-Clock",
-  "main": "server.js",
+  "description": "Shared dependencies for Attendance runtime v3 and persistence dispatcher",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "sync": "node sync-server.js",
-    "sync:dev": "node --watch sync-server.js",
-    "test": "node sync.test.js"
+    "start:runtime": "node attendance-runtime-v3/server.js",
+    "start:dispatcher": "node attendance-persist-dispatcher/server.js",
+    "test": "node --test ../tests/compliance/attendance-runtime-v3-host.test.js ../tests/compliance/attendance-runtime-v3-persist.test.js ../tests/compliance/productive-persist-dispatcher.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
     "express": "^5.3.0"
   },
   "engines": {
     "node": ">=22.6.0"
+  },
+  "private": true,
+  "devDependencies": {
+    "dotenv": "^17.4.2"
   }
 }

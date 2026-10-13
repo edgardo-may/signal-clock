@@ -17,7 +17,6 @@ const COMMAND_TEMPLATES = [
   { label: 'Sincronizar Hora (SYNC_TIME)', command: 'SYNC_TIME', desc: 'Envía la hora actual del servidor a la terminal' },
   { label: 'Obtener Información (GET_DEVICE_INFO)', command: 'GET_DEVICE_INFO', desc: 'Solicita versión de firmware, capacidad y almacenamiento' },
   { label: 'Borrar Logs en Terminal (CLEAR_LOGS)', command: 'CLEAR_ATTENDANCE_LOGS', desc: 'Limpia los registros antiguos almacenados localmente' },
-  { label: 'Probar Conectividad (PING)', command: 'PING', desc: 'Envía un eco para verificar si el socket ISUP responde' },
 ]
 
 export default function SendCommandModal({

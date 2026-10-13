@@ -437,7 +437,7 @@ export default function DeviceDetailModal({ device, onClose, onOpenSendCommand, 
                     Conectividad IP & Puerto
                   </span>
                   <p className="text-sm font-mono font-bold text-slate-900 dark:text-white">
-                    {device.ip_address ? `${device.ip_address}:${device.port || 7660}` : `Puerto ${device.port || 7660} (ISUP)`}
+                    {device.ip_address ? `${device.ip_address}:${device.port || 7660}` : `Puerto ${device.port || 7660} (ZKTeco ADMS)`}
                   </p>
                 </div>
 

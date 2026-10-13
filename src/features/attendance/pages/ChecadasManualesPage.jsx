@@ -614,7 +614,7 @@ export default function ChecadasManuales() {
 
             <div className="p-4 rounded-lg bg-white dark:bg-white border border-slate-200 dark:border-slate-800  shadow-sm flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Terminales Hardware Hikvision</p>
+                <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Terminales Hardware ZKTeco</p>
                 <h3 className="text-2xl font-bold text-slate-900 dark:text-white  mt-1">{totalTerminales}</h3>
               </div>
               <div className="p-3 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
@@ -647,7 +647,7 @@ export default function ChecadasManuales() {
                 >
                   <option value="todos">Todos los Orígenes</option>
                   <option value="manual">✍️ Solo Manuales RH</option>
-                  <option value="terminal">📡 Solo Terminales ISUP</option>
+                  <option value="terminal">📡 Solo Terminales ZKTeco ADMS</option>
                 </select>
               </div>
 

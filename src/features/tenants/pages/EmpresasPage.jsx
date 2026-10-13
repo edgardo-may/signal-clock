@@ -335,7 +335,7 @@ function ModalEmpresa({ empresa, onClose, onSaved }) {
 
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  Límite Terminales ISUP
+                  Límite Terminales ZKTeco ADMS
                 </label>
                 <input
                   type="number"
@@ -477,7 +477,7 @@ function ModalEmpresa({ empresa, onClose, onSaved }) {
                   rows={2}
                   value={form.notas}
                   onChange={setField('notas')}
-                  placeholder="Detalles sobre contratación, requerimientos de hardware ISUP o integraciones..."
+                  placeholder="Detalles sobre contratación, requerimientos de hardware ZKTeco ADMS o integraciones..."
                   className="w-full py-2 px-3 text-xs sm:text-sm rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#24303f] text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-blue-500 resize-none"
                 />
               </div>
@@ -592,7 +592,7 @@ function ModalDetalleEmpresa({ empresa, onClose, onEdit }) {
             </div>
 
             <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/40 text-center space-y-1">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Límite Terminales ISUP</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Límite Terminales ZKTeco ADMS</p>
               <p className="text-2xl font-bold font-mono text-slate-900 dark:text-white">{empresa.limite_dispositivos || 5}</p>
               <p className="text-[10px] text-slate-400">Biométricos permitidos</p>
             </div>
@@ -694,7 +694,7 @@ export default function EmpresasPage() {
       ] = await Promise.all([
         supabase.from('clientes').select('*').order('creado_at', { ascending: false }),
         supabase.from('empleados').select('cliente_id'),
-        supabase.from('dispositivos').select('cliente_id'),
+        supabase.from('devices').select('cliente_id'),
       ])
 
       if (clientErr) throw clientErr
@@ -861,7 +861,7 @@ export default function EmpresasPage() {
             {/* 3. Dispositivos Globales */}
             <div className="p-4 rounded-xl bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-slate-500">Terminales ISUP 5.0</p>
+                <p className="text-xs font-semibold text-slate-500">Terminales ZKTeco ADMS</p>
                 <div className="flex items-baseline gap-1.5 mt-1">
                   <span className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">{totalDispositivosActuales}</span>
                   <span className="text-sm font-mono text-slate-400">/ {totalCapacidadDev}</span>
@@ -1059,7 +1059,7 @@ export default function EmpresasPage() {
                                 <div className="flex items-center justify-between text-[11px] font-semibold mb-0.5">
                                   <span className="flex items-center gap-1 text-slate-700 dark:text-slate-300">
                                     <Cpu className="w-3.5 h-3.5 text-emerald-500" />
-                                    Terminales ISUP
+                                    Terminales ZKTeco ADMS
                                   </span>
                                   <span className="font-mono">
                                     <strong className={emp.dispositivos_actuales >= (emp.limite_dispositivos || 5) ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-200'}>

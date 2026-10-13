@@ -51,7 +51,7 @@ export function useTenantLimits(customClienteId = null, loadTenantInfo) {
           .select('*', { count: 'exact', head: true })
           .eq('cliente_id', clienteId),
         supabase
-          .from('dispositivos')
+          .from('devices')
           .select('*', { count: 'exact', head: true })
           .eq('cliente_id', clienteId),
       ])

@@ -17,7 +17,6 @@
 //
 // IMPORTANTE:
 // - NO utiliza `dispositivos` para localizar el checador.
-// - NO utiliza `hikvision_device_userid`.
 // - El checador pertenece a `devices`.
 // - El identificador biométrico del empleado se obtiene de:
 //      biometric_user_id
@@ -193,7 +192,6 @@ export const enrollmentService = {
    *
    * NO consultar:
    *   - dispositivos
-   *   - device_id_hikvision
    *   - numero_serie
    *   - marca
    *
@@ -303,10 +301,6 @@ export const enrollmentService = {
    * Obtiene el identificador que ZKTeco utilizará para el empleado.
    *
    * IMPORTANTE:
-   *
-   * Ya NO utilizamos:
-   *
-   *   hikvision_device_userid
    *
    * Primero buscamos un campo genérico:
    *
