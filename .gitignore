@@ -125,3 +125,9 @@ desktop.ini
 *.njsproj
 *.sln
 *.sw?
+
+# Generated validation/runtime evidence
+outputs/
+
+# Local Git worktrees
+.worktrees/

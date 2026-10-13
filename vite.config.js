@@ -8,10 +8,6 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     proxy: {
-      "/api/employee": {
-        target: "http://127.0.0.1:4004",
-        changeOrigin: false,
-      },
       // Redirige /api/sync/* al servidor de sincronización backend
       // El Bearer Token de Consolide NUNCA pasa por Vite ni el navegador
       "/api/sync": {

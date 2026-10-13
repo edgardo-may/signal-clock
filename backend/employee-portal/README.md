@@ -1,27 +1,27 @@
-# Employee portal candidate
+# Employee portal serverless API
 
-Candidate code + rollback-only DBREAL SQL. WEB_CLOCK passed the local closure matrix; this candidate has not been applied to production and still requires the normal release authorization.
+`api/employee.js` is the Vercel Function entry point. It delegates every request to `backend/employee-portal/http.mjs`; login, hashed server-side sessions, authorization, rate limiting, WEB_CLOCK checks, idempotency, and attendance evidence remain in the existing HTTP handler and `fn_employee_portal` SQL contract. The function is stateless between invocations. Session rows and revocation state live in `employee_private.sessions`; the browser holds only the opaque token in an HttpOnly cookie.
 
-The Portal Empresa keeps Supabase Auth. This endpoint uses a separate opaque HttpOnly cookie, hashed sessions in a private schema, and a backend-only RPC. Do not expose service credentials or the rate pepper through VITE variables. The JSON response contains display data, never the cookie token or PIN.
+The API supports `GET /api/employee?action=directory`, `GET /api/employee?action=session`, and `POST` actions `login`, `logout`, and `punch`. The API returns only the company directory fields selected by the existing RPC. It never returns employee PINs, hashes, session tokens, or service credentials. Mutations require same-origin requests with JSON bodies. Identity and authoritative attendance time are derived server-side.
 
-For local development, copy `environment.example` to `.env.employee.local`, fill the local service key and a random pepper of at least 32 characters, and run:
+For local end-to-end development, copy `environment.example` to the repository-root `.env.local`, fill the local Supabase service key and a random Employee rate pepper of at least 32 characters, and set `EMPLOYEE_ORIGIN` to the exact Vercel Dev origin. Keep secrets in server-only variables; never use a `VITE_` prefix for Supabase keys or the rate pepper. Then run:
 
 ```powershell
-node --env-file=.env.employee.local backend/employee-portal/local-server.mjs
-npm run dev
+npx vercel dev
 ```
 
-Use the configured origin exactly. Insecure cookies are allowed only by the explicit local flag on loopback outside production. Production requires HTTPS, a single canonical origin, and no local flag.
+Vercel Dev serves the frontend and `/api/employee` from one origin. `npm run dev` remains available for frontend-only work. End-to-end Employee testing uses Vercel Dev on the same origin. Local HTTP cookies are allowed only on loopback when `EMPLOYEE_ALLOW_INSECURE_LOOPBACK_COOKIE=true`; production requires HTTPS and Secure cookies.
 
-Validate from the repository root:
+For a coordinated release window, set `EMPLOYEE_PORTAL_MAINTENANCE=true` on the API and `VITE_EMPLOYEE_PORTAL_MAINTENANCE=true` for the frontend build. The API returns HTTP 503 before validating backend environment or contacting Supabase, while all Employee routes display the maintenance state. This gate leaves tenant administration, Central, physical devices, Attendance, and Workday routes unaffected. Deploy both maintenance-enabled components before applying Employee SQL, then deploy them with the flag off to restore access.
+
+Validate the shared handler and regressions from the repository root:
 
 ```powershell
+node --test tests/compliance/employee-http.test.js tests/compliance/employee-portal-maintenance.test.js
 node scripts/validate-employee-local.mjs
 npm test
 npm run build
 git diff --check
 ```
 
-The runner uses only fixed Docker loopback DBREAL targets, serializes the suites, requires zero skips, and saves counts/TAP under `outputs`. The current closure run completed with 230 PASS, 0 FAIL and 0 SKIPS. Tests rollback their fixtures; they do not install the candidate persistently.
-
-Do not apply historical migrations. Structural SQL, separate credential conversion and read-only precheck live under `database/live-schema/proposals`. Credential conversion must be scoped explicitly to one Empresa and rejects legacy PINs that need a reset. Never enable a fallback to plaintext login or browser-supplied identity.
+The Employee release matrix uses guarded local DBREAL tests and rolls back candidate fixtures and schema changes. Do not apply the candidate SQL to production or enable plaintext PIN fallback.

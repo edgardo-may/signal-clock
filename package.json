@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test tests/compliance/attendance-engine.test.js",
+    "test": "node --test tests/compliance/attendance-engine.test.js tests/compliance/employee-http.test.js tests/compliance/employee-portal-maintenance.test.js",
     "test:dbreal": "node --test tests/compliance/db-real.test.js",
     "test:dbreal:workday-evolution": "node --test tests/compliance/dbreal-workday-evolution.test.js",
     "test:dbreal:preflight": "node scripts/dbreal-preflight.mjs",

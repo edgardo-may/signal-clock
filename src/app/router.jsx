@@ -53,6 +53,7 @@ import SyncPage from "../features/sync/pages/SyncPage";
 import EmployeeDashboardPage from "../features/employee/pages/EmployeeDashboardPage";
 import EmployeeLoginPage from "../features/employee/pages/EmployeeLoginPage";
 import EmployeeRoute from "../features/employee/guards/EmployeeRoute";
+import EmployeePortalGate from "../features/employee/guards/EmployeePortalGate";
 
 import { Clock } from "lucide-react";
 
@@ -385,22 +386,24 @@ export function AppRouter() {
           }
         />
         {/* ── Rutas Exclusivas del Empleado (Independientes de Clientes y Central) ── */}
-        <Route path="/employee-portal/login" element={<EmployeeLoginPage />} />
-        <Route path="/employee-portal" element={<EmployeeRoute><EmployeeDashboardPage /></EmployeeRoute>} />
+        <Route path="/employee-portal/login" element={<EmployeePortalGate><EmployeeLoginPage /></EmployeePortalGate>} />
+        <Route path="/employee-portal" element={<EmployeePortalGate><EmployeeRoute><EmployeeDashboardPage /></EmployeeRoute></EmployeePortalGate>} />
         <Route
           path="/portal-colaborador/login"
-          element={<EmployeeLoginPage />}
+          element={<EmployeePortalGate><EmployeeLoginPage /></EmployeePortalGate>}
         />
         <Route
           path="/colaborador/login"
-          element={<EmployeeLoginPage />}
+          element={<EmployeePortalGate><EmployeeLoginPage /></EmployeePortalGate>}
         />
         <Route
           path="/portal-colaborador"
           element={
-            <EmployeeRoute>
-              <EmployeeDashboardPage />
-            </EmployeeRoute>
+            <EmployeePortalGate>
+              <EmployeeRoute>
+                <EmployeeDashboardPage />
+              </EmployeeRoute>
+            </EmployeePortalGate>
           }
         />
         <Route

@@ -41,6 +41,11 @@ export function createEmployeeHandler({env=process.env,client,random=randomBytes
     res.setHeader('Content-Type','application/json; charset=utf-8');
     const send=(status,value)=>{res.statusCode=status;res.end(JSON.stringify(value));};
     try{
+      // This deployment-time gate is independent of the Employee schema, so it
+      // can be enabled before the release migrations are applied.
+      if(env.EMPLOYEE_PORTAL_MAINTENANCE==='true'){
+        return send(503,{success:false,error:'EMPLOYEE_PORTAL_MAINTENANCE',message:'El Portal del Empleado está temporalmente en mantenimiento.'});
+      }
       const origin=new URL(env.EMPLOYEE_ORIGIN);
       const loopback=['localhost','127.0.0.1','[::1]'].includes(origin.hostname);
       const insecure=env.EMPLOYEE_ALLOW_INSECURE_LOOPBACK_COOKIE==='true' && loopback && env.NODE_ENV!=='production';
@@ -59,7 +64,7 @@ export function createEmployeeHandler({env=process.env,client,random=randomBytes
       if(action==='login'){
         const body=await readBody(req);
         onlyKeys(body,['clienteId','clave','pin','clockSlug']);
-        if(typeof body.clienteId!=='string'||!/^[a-f0-9-]{36}$/i.test(body.clienteId)||typeof body.clave!=='string'||body.clave.trim().length<1||body.clave.length>100||typeof body.pin!=='string'||body.pin.length>20) throw bad('LOGIN_DENIED',401);
+        if(typeof body.clienteId!=='string'||!/^[a-f0-9-]{36}$/i.test(body.clienteId)||typeof body.clave!=='string'||body.clave.trim().length<1||body.clave.length>100||typeof body.pin!=='string'||!/^[0-9]{5}$/.test(body.pin)) throw bad('LOGIN_DENIED',401);
         createdToken=random(32).toString('hex');
         // Vercel supplies this protected header; local server trusts socket only.
         const remote=env.VERCEL?String(req.headers['x-vercel-forwarded-for']||'unknown'):String(req.socket?.remoteAddress||'unknown');
