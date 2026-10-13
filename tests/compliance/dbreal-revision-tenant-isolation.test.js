@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { assertApprovedAuditDatabaseUrl } from '../helpers/testDb.js'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import pg from 'pg'
@@ -10,7 +11,7 @@ const { evidenceManifest, fingerprint } = require('../../backend/services/attend
 const url = process.env.PHASE2_AUDIT_DATABASE_URL
 test('B16-A–H real DB authority and zero mutation', { skip: !url && 'Explicit local DBREAL URL required' }, async t => {
   const target = new URL(url)
-  assert.ok(['127.0.0.1','localhost'].includes(target.hostname)); assert.equal(target.port,'54322')
+  assert.ok(['127.0.0.1','localhost'].includes(target.hostname)); assertApprovedAuditDatabaseUrl(url)
   const db = new pg.Client({ connectionString: url }); await db.connect()
   const tracked = ['workday_calculation_revisions','workday_revision_promotions','workday_records','workday_record_history']
   const all = [...tracked,'clientes','empleados','devices','horarios','schedule_revisions','empleados_horarios','registro_asistencia','attendance_logs','attendance_source_events','attendance_persist_outbox','incidencias','rate_limits_logs']

@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { assertApprovedAuditDatabaseUrl } from '../helpers/testDb.js'
 import assert from 'node:assert/strict'
 import pg from 'pg'
 import { createWorkdayEvolutionFixture, createCanonicalRegistro, enableFixturePersistGate, evolutionPayload, workdayState } from '../helpers/workdayEvolutionDbreal.js'
@@ -9,7 +10,7 @@ const mode = process.env.HISTORY_HOTFIX_MODE
 test('DBREAL history uniqueness: reproduce before change / H1-H8 after change', { skip: !url && 'Explicit local DBREAL URL required' }, async t => {
   const target = new URL(url)
   assert.ok(['localhost', '127.0.0.1'].includes(target.hostname))
-  assert.equal(target.port, '54322')
+  assertApprovedAuditDatabaseUrl(url)
   assert.ok(['reproduce', 'verify'].includes(mode))
   const db = new pg.Client({ connectionString: url })
   await db.connect()

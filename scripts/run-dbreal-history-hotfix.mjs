@@ -2,12 +2,12 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import pg from 'pg'
+import { auditConfig, assertApprovedAuditDatabaseUrl } from '../tests/helpers/testDb.js'
 
-const url = process.env.PHASE2_AUDIT_DATABASE_URL
-if (!url) throw new Error('EXPLICIT_LOCAL_DBREAL_URL_REQUIRED')
-const target = new URL(url)
-assert.ok(['127.0.0.1', 'localhost'].includes(target.hostname))
-assert.equal(target.port, '54322')
+const config = auditConfig()
+if (!config.ready) throw new Error('DBREAL_TARGET_NOT_APPROVED')
+const url = config.dbUrl
+assertApprovedAuditDatabaseUrl(url, config)
 const db = new pg.Client({ connectionString: url })
 const runTests = mode => {
   const result = spawnSync(process.execPath, ['--test', 'tests/compliance/dbreal-history-uniqueness.test.js'], {

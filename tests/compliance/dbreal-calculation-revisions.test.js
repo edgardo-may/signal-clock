@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { assertApprovedAuditDatabaseUrl } from '../helpers/testDb.js'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import pg from 'pg'
@@ -13,7 +14,7 @@ const url = process.env.PHASE2_AUDIT_DATABASE_URL
 
 test('Phase B DBREAL immutable calculation revisions — stop on first defect', { skip: !url && 'Explicit local DBREAL URL required' }, async t => {
   assert.ok(['127.0.0.1','localhost'].includes(new URL(url).hostname))
-  assert.equal(new URL(url).port, '54322')
+  assertApprovedAuditDatabaseUrl(url)
   const db = new pg.Client({ connectionString: url })
   await db.connect()
   const tables = ['clientes','empleados','devices','horarios','schedule_revisions','empleados_horarios','registro_asistencia','attendance_logs','attendance_source_events','workday_records','workday_record_history','attendance_persist_outbox','incidencias','rate_limits_logs','workday_calculation_revisions','workday_revision_promotions']

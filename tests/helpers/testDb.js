@@ -4,16 +4,39 @@ import pg from 'pg'
 
 const { Client } = pg
 
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1'])
+
 function hostname(value) {
-  try { return value ? new URL(value).hostname.toLowerCase() : '' } catch { return '' }
+  try { return (value ? new URL(value).hostname.toLowerCase() : '').replace(/^\[|\]$/g, '') } catch { return '' }
 }
 
-export function isSafeAuditTarget({ url, dbUrl, label }) {
+function databaseTarget(value) {
+  try {
+    const url = new URL(value)
+    if (!['postgres:', 'postgresql:'].includes(url.protocol)) return null
+    return {
+      host: hostname(value),
+      port: Number(url.port || 5432),
+      database: decodeURIComponent(url.pathname.replace(/^\//, '')),
+      user: decodeURIComponent(url.username),
+    }
+  } catch { return null }
+}
+
+export function isSafeAuditTarget({ url, dbUrl, adminDbUrl, label }) {
   const apiHost = hostname(url)
-  const databaseHost = hostname(dbUrl)
-  const configuredProductionHost = (process.env.PHASE2_PRODUCTION_HOST || '').toLowerCase()
-  const looksProduction = host => /(^|[.-])(prod|production)([.-]|$)/i.test(host) || (configuredProductionHost && host === configuredProductionHost)
-  return /^(local|test|staging)$/i.test(label || '') && !looksProduction(apiHost) && !looksProduction(databaseHost)
+  const database = databaseTarget(dbUrl)
+  const admin = databaseTarget(adminDbUrl)
+  const configuredProductionHost = hostname(process.env.PHASE2_PRODUCTION_HOST)
+  const hosts = [apiHost, database?.host, admin?.host]
+  const looksProduction = host => Boolean(host && (/(^|[.-])(prod|production)([.-]|$)/i.test(host) || (configuredProductionHost && host === configuredProductionHost)))
+  return /^(local|test|staging)$/i.test(label || '') &&
+    process.env.ALLOW_DESTRUCTIVE_TEST_DB === 'true' &&
+    hosts.every(host => host && LOOPBACK_HOSTS.has(host) && !looksProduction(host)) &&
+    database !== null && admin !== null &&
+    database.port > 0 && database.port <= 65535 &&
+    database.host === admin.host && database.port === admin.port && database.database === admin.database &&
+    database.user === 'postgres' && admin.user === 'supabase_admin'
 }
 
 export function auditConfig() {
@@ -21,18 +44,20 @@ export function auditConfig() {
   const anonKey = process.env.SUPABASE_TEST_ANON_KEY
   const serviceKey = process.env.SUPABASE_TEST_SERVICE_ROLE_KEY
   const dbUrl = process.env.PHASE2_AUDIT_DATABASE_URL
+  const adminDbUrl = process.env.PHASE2_AUDIT_SUPABASE_ADMIN_DATABASE_URL
   const label = process.env.PHASE2_AUDIT_DB_LABEL
   const allowed = process.env.ALLOW_DESTRUCTIVE_TEST_DB === 'true'
-  const safe = isSafeAuditTarget({ url, dbUrl, label })
+  const safe = isSafeAuditTarget({ url, dbUrl, adminDbUrl, label })
   const missing = [
     !url && 'SUPABASE_TEST_URL',
     !anonKey && 'SUPABASE_TEST_ANON_KEY',
     !serviceKey && 'SUPABASE_TEST_SERVICE_ROLE_KEY',
     !dbUrl && 'PHASE2_AUDIT_DATABASE_URL',
+    !adminDbUrl && 'PHASE2_AUDIT_SUPABASE_ADMIN_DATABASE_URL',
     !label && 'PHASE2_AUDIT_DB_LABEL',
     !allowed && 'ALLOW_DESTRUCTIVE_TEST_DB=true'
   ].filter(Boolean)
-  return { url, anonKey, serviceKey, dbUrl, label, allowed, safe, missing, ready: Boolean(url && anonKey && serviceKey && dbUrl && allowed && safe) }
+  return { url, anonKey, serviceKey, dbUrl, adminDbUrl, label, allowed, safe, missing, ready: Boolean(url && anonKey && serviceKey && dbUrl && adminDbUrl && allowed && safe) }
 }
 
 /** Direct SQL is used only by DBREAL test setup/verification against the guarded audit DB. */
@@ -41,6 +66,36 @@ export async function postgresAdminClient(config) {
   const client = new Client({ connectionString: config.dbUrl })
   await client.connect()
   return client
+}
+
+export async function postgresSupabaseAdminClient(config) {
+  if (!config.ready) throw new Error('Refusing Supabase admin client without a guarded DBREAL configuration.')
+  const client = new Client({ connectionString: config.adminDbUrl })
+  await client.connect()
+  return client
+}
+
+export function isApprovedAuditDatabaseUrl(value, config = auditConfig(), role = 'postgres') {
+  if (!config.ready) return false
+  const expected = role === 'supabase_admin' ? databaseTarget(config.adminDbUrl) : databaseTarget(config.dbUrl)
+  const actual = databaseTarget(value)
+  return Boolean(actual && expected && actual.host === expected.host && actual.port === expected.port && actual.database === expected.database && actual.user === expected.user)
+}
+
+export function assertApprovedAuditDatabaseUrl(value, config = auditConfig(), role = 'postgres') {
+  if (!isApprovedAuditDatabaseUrl(value, config, role)) throw new Error('DBREAL_TARGET_MISMATCH_OR_NOT_APPROVED')
+  return databaseTarget(value)
+}
+
+export function assertApprovedAuditDatabaseClient(client, config = auditConfig(), role = 'postgres') {
+  const expected = databaseTarget(role === 'supabase_admin' ? config.adminDbUrl : config.dbUrl)
+  const actual = client?.connectionParameters
+  if (!config.ready || !expected || !actual || !LOOPBACK_HOSTS.has(String(actual.host).replace(/^\[|\]$/g, '').toLowerCase()) ||
+      String(actual.host).replace(/^\[|\]$/g, '').toLowerCase() !== expected.host || Number(actual.port) !== expected.port ||
+      actual.database !== expected.database || actual.user !== expected.user) {
+    throw new Error('DBREAL_CLIENT_TARGET_MISMATCH_OR_NOT_APPROVED')
+  }
+  return true
 }
 
 export async function createFixture(config) {

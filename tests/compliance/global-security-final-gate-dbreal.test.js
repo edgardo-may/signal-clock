@@ -3,10 +3,13 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
+import {auditConfig} from '../helpers/testDb.js';
 
 // Deliberately strict acceptance gate. Known unfixed risks must FAIL, never skip.
 test('GLOBAL SECURITY closure gate against known production contracts + frozen base + employee delta',async t=>{
-  const db=new pg.Client({connectionString:'postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres',connectionTimeoutMillis:5000});
+  const config=auditConfig();
+  assert.ok(config.ready,'Explicit approved local DBREAL configuration required');
+  const db=new pg.Client({connectionString:config.adminDbUrl,connectionTimeoutMillis:5000});
   await db.connect();
   const digest=async()=>{
     const out={};

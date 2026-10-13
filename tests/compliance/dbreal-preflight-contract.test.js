@@ -2,12 +2,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import pg from 'pg'
-import { auditConfig } from '../helpers/testDb.js'
+import { assertApprovedAuditDatabaseUrl, auditConfig } from '../helpers/testDb.js'
 
 const config = auditConfig()
 test('schema 114 preflight verifies installed 18/20-arg RPCs without writes or secret output', { skip: !config.ready && 'Explicit DBREAL configuration required' }, async () => {
   assert.ok(['127.0.0.1', 'localhost'].includes(new URL(config.dbUrl).hostname))
-  assert.equal(new URL(config.dbUrl).port, '54322')
+  assertApprovedAuditDatabaseUrl(config.dbUrl, config)
   assert.ok(['127.0.0.1', 'localhost'].includes(new URL(config.url).hostname))
   const db = new pg.Client({ connectionString: config.dbUrl })
   await db.connect()

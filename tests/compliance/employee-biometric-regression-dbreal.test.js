@@ -3,11 +3,12 @@ import assert from 'node:assert/strict'
 import {randomUUID} from 'node:crypto'
 import {readFile} from 'node:fs/promises'
 import pg from 'pg'
+import { auditConfig } from '../helpers/testDb.js'
 
-// Hardcoded loopback: this test never reads production credentials.
-const connectionString='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+const config = auditConfig()
 test('Candidate DBREAL biometric regression: known production body fixture; no replay',async t=>{
-  const db=new pg.Client({connectionString})
+  assert.ok(config.ready, 'Explicit approved local DBREAL configuration required')
+  const db=new pg.Client({connectionString:config.dbUrl})
   await db.connect()
   const tables=['attendance_logs','attendance_source_events','registro_asistencia','devices','device_commands','empleados','device_employee_assignments','workday_records','workday_record_history','workday_calculation_revisions','workday_revision_promotions','attendance_persist_outbox','tenant_features']
   const snapshot=async()=>{

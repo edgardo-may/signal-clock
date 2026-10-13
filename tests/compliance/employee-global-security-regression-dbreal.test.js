@@ -3,11 +3,14 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import pg from 'pg'
+import { auditConfig } from '../helpers/testDb.js'
 
 // Fixed local target. No application .env, credentials or production fallback.
 // Supabase's postgres role cannot ALTER DEFAULT PRIVILEGES FOR supabase_admin.
 // The isolated local superuser is required to exercise both creators honestly.
-const url='postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres'
+const config=auditConfig()
+if(!config.ready) throw new Error('Explicit approved local DBREAL configuration required')
+const url=config.adminDbUrl
 const tables=['attendance_logs','attendance_source_events','audit_logs','biometric_templates','cliente_modulos','clientes','dias_festivos','empleados','incidencias','login_attempts','module_catalog','periodos_nomina','rate_limits_logs','registro_asistencia','user_module_permissions','usuarios_perfiles','workday_records','empleados_horarios','horarios']
 const root=new URL('../../',import.meta.url)
 const core=await readFile(new URL('database/live-schema/proposals/global_security_minimum_candidate.sql',root),'utf8')

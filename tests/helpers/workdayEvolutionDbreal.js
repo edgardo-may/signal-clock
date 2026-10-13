@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { auditConfig, postgresAdminClient } from "./testDb.js";
+import { assertApprovedAuditDatabaseClient, assertApprovedAuditDatabaseUrl, auditConfig, postgresAdminClient } from "./testDb.js";
 
 const PHASES = Object.freeze({
   precheck: new URL(
@@ -45,7 +45,7 @@ function isExplicitlyRejectedTestHost(config) {
 }
 
 function isLoopbackHost(value) {
-  return ["127.0.0.1", "localhost", "::1"].includes(hostname(value));
+  return ["127.0.0.1", "localhost", "::1"].includes(hostname(value).replace(/^\[|\]$/g, ""));
 }
 
 export function workdayEvolutionDbrealConfig() {
@@ -451,10 +451,8 @@ export async function assertFunctionPrivileges(client) {
 
 export async function cleanupWorkdayEvolutionFixture(client, fixture) {
   if (!fixture) return;
-  const target = client.connectionParameters;
-  if (!['127.0.0.1','localhost','::1'].includes(target.host) || Number(target.port) !== 54322) {
-    throw new Error('WORKDAY_FIXTURE_CLEANUP_REQUIRES_LOCAL_DBREAL');
-  }
+  const role = client.connectionParameters?.user === 'supabase_admin' ? 'supabase_admin' : 'postgres';
+  assertApprovedAuditDatabaseClient(client, auditConfig(), role);
   // Includes rows created indirectly by attendance triggers, while the owning
   // tenant/employee still exist. IDs come only from this UUID-generated fixture.
   await client.query(
@@ -565,10 +563,8 @@ export async function prepareWorkdayEvolutionDbreal() {
  * RPC transactions. Does not reapply historical migrations or require API keys.
  */
 export async function prepareInstalledHistoryHotfixDbreal(dbUrl) {
-  const target = new URL(dbUrl);
-  if (!['127.0.0.1', 'localhost'].includes(target.hostname) || target.port !== '54322')
-    throw new Error('DBREAL_LOCAL_HISTORY_HOTFIX_TARGET_REQUIRED');
-  const config = { dbUrl, ready: true };
+  const config = auditConfig();
+  assertApprovedAuditDatabaseUrl(dbUrl, config);
   const client = await postgresAdminClient(config);
   try {
     await assertPersistGateClosed(client);

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {randomUUID,createHash} from 'node:crypto';
 import pg from 'pg';
+import {auditConfig} from '../helpers/testDb.js';
 import {createRequire} from 'node:module';
 import {canonicalSqlTransport} from '../helpers/canonicalSqlTransport.js';
 const require=createRequire(import.meta.url);
@@ -11,7 +12,9 @@ const {AttendanceRuntimeService}=require('../../backend/attendance-runtime-v3/At
 
 const hash=v=>createHash('sha256').update(v).digest('hex');
 test('Employee candidate: local DBREAL only, transactional restoration',async t=>{
- const db=new pg.Client({connectionString:'postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres',connectionTimeoutMillis:5000});
+ const config=auditConfig();
+ assert.ok(config.ready,'Explicit approved local DBREAL configuration required');
+ const db=new pg.Client({connectionString:config.adminDbUrl,connectionTimeoutMillis:5000});
  await db.connect();
  const rows=async()=>{
   const out={};

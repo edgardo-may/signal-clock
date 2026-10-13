@@ -1,8 +1,12 @@
-// Local-only installer. Never reads production credentials or environment DB URLs.
+// Local-only installer. Requires an explicitly approved DBREAL target.
 const {Client}=require('pg');
 const fs=require('node:fs');
 (async()=>{
-  const db=new Client({connectionString:'postgresql://postgres:postgres@127.0.0.1:54322/postgres'});
+  const {auditConfig,assertApprovedAuditDatabaseUrl}=await import('../tests/helpers/testDb.js');
+  const config=auditConfig();
+  if(!config.ready)throw Error('DBREAL_TARGET_NOT_APPROVED');
+  assertApprovedAuditDatabaseUrl(config.dbUrl,config);
+  const db=new Client({connectionString:config.dbUrl});
   await db.connect();await db.query('BEGIN');
   try{
     const tables=['empleados_horarios','schedule_revisions','horarios','registro_asistencia','attendance_source_events','attendance_persist_outbox','workday_records','workday_record_history','workday_calculation_revisions','workday_revision_promotions','tenant_features'];

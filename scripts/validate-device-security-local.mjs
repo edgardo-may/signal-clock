@@ -1,10 +1,14 @@
 /** Exact-loopback DBREAL only. Never reads the application's production .env. */
-import { execFileSync, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { readFile, writeFile } from 'node:fs/promises'
-import { createHash, createHmac } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import pg from 'pg'
+import { auditConfig, assertApprovedAuditDatabaseUrl } from '../tests/helpers/testDb.js'
 
-const connectionString = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+const config = auditConfig()
+if (!config.ready) throw new Error('DBREAL_TARGET_NOT_APPROVED')
+const connectionString = config.dbUrl
+assertApprovedAuditDatabaseUrl(connectionString, config)
 const startedAt = new Date().toISOString()
 const db = new pg.Client({ connectionString, connectionTimeoutMillis: 5000 })
 const file = 'database/live-schema/124_device_security_acl_hardening.sql'
@@ -35,21 +39,13 @@ try {
   console.log('DBREAL local repair applied; all public business row counts/digests unchanged.')
 } finally { await db.end() }
 
-const localAuth=JSON.parse(execFileSync('docker',['inspect','supabase_auth_signum-dbreal-local'],{encoding:'utf8'}))[0]
-const secret=localAuth.Config.Env.find(x=>x.startsWith('GOTRUE_JWT_SECRET='))?.slice('GOTRUE_JWT_SECRET='.length)
-if(!secret) throw new Error('LOCAL_AUTH_TEST_SECRET_MISSING')
-const keyFor = role => {
-  const encode=value=>Buffer.from(JSON.stringify(value)).toString('base64url')
-  const now=Math.floor(Date.now()/1000)
-  const body=encode({alg:'HS256',typ:'JWT'})+'.'+encode({role,iss:'supabase',iat:now,exp:now+3600})
-  return body+'.'+createHmac('sha256',secret).update(body).digest('base64url')
-}
 const env = {...process.env,
-  SUPABASE_TEST_URL:'http://127.0.0.1:54321',
+  SUPABASE_TEST_URL:config.url,
   SUPABASE_TEST_DB_URL:connectionString,
   PHASE2_AUDIT_DATABASE_URL:connectionString,
+  PHASE2_AUDIT_SUPABASE_ADMIN_DATABASE_URL:config.adminDbUrl,
   PHASE2_AUDIT_DB_LABEL:'local',ALLOW_DESTRUCTIVE_TEST_DB:'true',
-  SUPABASE_TEST_ANON_KEY:keyFor('anon'),SUPABASE_TEST_SERVICE_ROLE_KEY:keyFor('service_role'),
+  SUPABASE_TEST_ANON_KEY:config.anonKey,SUPABASE_TEST_SERVICE_ROLE_KEY:config.serviceKey,
   HISTORY_HOTFIX_INSTALLED_CONTRACT:'true',HISTORY_HOTFIX_MODE:'verify',
 }
 const groups = {
@@ -124,7 +120,7 @@ try {
 } catch(error){await finalDb.query('ROLLBACK');throw error}
 finally {await finalDb.end()}
 const frozenAfter=Object.fromEntries(await Promise.all(frozenNames.map(async name=>[name,sha256(await readFile('database/live-schema/'+name))])))
-const report={checked_at:new Date().toISOString(),database:'DBREAL 127.0.0.1:54322',repair:file,
+const report={checked_at:new Date().toISOString(),database:`DBREAL ${new URL(connectionString).host}`,repair:file,
   repair_sha256:sha256(await readFile(file)),repair_sha256_applied:repairShaBefore,frozen_before:frozen,frozen_after:frozenAfter,
   business_rows_preserved_by_repair:JSON.stringify(before)===JSON.stringify(after),
   business_rows_preserved_after_tests:JSON.stringify(before)===JSON.stringify(finalData),

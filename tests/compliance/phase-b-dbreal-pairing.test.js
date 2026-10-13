@@ -1,14 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import pg from 'pg'
-import { auditConfig } from '../helpers/testDb.js'
+import { assertApprovedAuditDatabaseUrl, auditConfig } from '../helpers/testDb.js'
 import { createWorkdayEvolutionFixture } from '../helpers/workdayEvolutionDbreal.js'
 import { cases, inputFor, verifyCase } from '../fixtures/phase-b-sequences.js'
 
 const config = auditConfig()
 test('Phase B DBREAL: isolated local canonical sequences', { skip: !config.ready && 'DBREAL configuration unavailable' }, async t => {
   assert.ok(['localhost','127.0.0.1'].includes(new URL(config.dbUrl).hostname))
-  assert.equal(new URL(config.dbUrl).port,'54322')
+  assertApprovedAuditDatabaseUrl(config.dbUrl, config)
   assert.ok(['localhost','127.0.0.1'].includes(new URL(config.url).hostname))
   assert.equal(config.label,'local')
   const db = new pg.Client({connectionString:config.dbUrl})

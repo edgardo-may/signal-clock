@@ -21,7 +21,7 @@ export function validateRpcContract(revisionSchema, functions) {
 
 async function main() {
   const config = auditConfig()
-  for (const name of ['SUPABASE_TEST_URL', 'SUPABASE_TEST_ANON_KEY', 'SUPABASE_TEST_SERVICE_ROLE_KEY', 'PHASE2_AUDIT_DATABASE_URL', 'PHASE2_AUDIT_DB_LABEL', 'ALLOW_DESTRUCTIVE_TEST_DB']) {
+  for (const name of ['SUPABASE_TEST_URL', 'SUPABASE_TEST_ANON_KEY', 'SUPABASE_TEST_SERVICE_ROLE_KEY', 'PHASE2_AUDIT_DATABASE_URL', 'PHASE2_AUDIT_SUPABASE_ADMIN_DATABASE_URL', 'PHASE2_AUDIT_DB_LABEL', 'ALLOW_DESTRUCTIVE_TEST_DB']) {
     const present = name === 'ALLOW_DESTRUCTIVE_TEST_DB' ? process.env[name] === 'true' : Boolean(process.env[name])
     console.log(`${name}: ${present ? 'configured' : 'missing'}`)
   }

@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { assertApprovedAuditDatabaseUrl } from '../helpers/testDb.js'
 import assert from 'node:assert/strict'
 import pg from 'pg'
 import { createRequire } from 'node:module'
@@ -18,7 +19,7 @@ const begin=async db=>{await db.query('BEGIN');await db.query("SELECT set_config
 const settled=promise=>promise.then(value=>({value}),error=>({error}))
 
 test('Phase B real transactions, evidence linearization and guaranteed fixture cleanup',{skip:!url&&'Explicit local DBREAL URL required'},async t=>{
-  const target=new URL(url);assert.ok(['localhost','127.0.0.1'].includes(target.hostname));assert.equal(target.port,'54322')
+  const target=new URL(url);assert.ok(['localhost','127.0.0.1'].includes(target.hostname));assertApprovedAuditDatabaseUrl(url)
   const clients=[],fixtures=[]
   const connect=async()=>{const db=new pg.Client({connectionString:url});await db.connect();clients.push(db);await db.query("SET statement_timeout='10s'");return db}
   const admin=await connect(),a=await connect(),b=await connect()

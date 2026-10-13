@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { assertApprovedAuditDatabaseUrl } from '../helpers/testDb.js'
 import assert from 'node:assert/strict'
 import pg from 'pg'
 import { createRequire } from 'node:module'
@@ -15,7 +16,7 @@ const { engineV4 }=require('../fixtures/calculation-engine-v4.cjs')
 const url=process.env.PHASE2_AUDIT_DATABASE_URL
 
 test('Phase B resume B17–B26 against real local PostgreSQL', {skip:!url&&'Explicit local DBREAL URL required'},async t=>{
-  assert.ok(['localhost','127.0.0.1'].includes(new URL(url).hostname));assert.equal(new URL(url).port,'54322')
+  assert.ok(['localhost','127.0.0.1'].includes(new URL(url).hostname));assertApprovedAuditDatabaseUrl(url)
   const db=new pg.Client({connectionString:url});await db.connect()
   const tables=['clientes','empleados','devices','horarios','schedule_revisions','empleados_horarios','registro_asistencia','attendance_logs','attendance_source_events','workday_records','workday_record_history','attendance_persist_outbox','incidencias','rate_limits_logs','workday_calculation_revisions','workday_revision_promotions']
   const counts=async()=>{const out={};for(const table of tables)out[table]=(await db.query(`SELECT count(*)::int n FROM public.${table}`)).rows[0].n;return out}

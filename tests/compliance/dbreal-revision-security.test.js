@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { assertApprovedAuditDatabaseUrl } from '../helpers/testDb.js'
 import assert from 'node:assert/strict'
 import pg from 'pg'
 import { createRequire } from 'node:module'
@@ -11,7 +12,7 @@ const { evidenceManifest,fingerprint }=require('../../backend/services/attendanc
 const { WorkdayPersistenceService }=require('../../backend/services/attendance/WorkdayPersistenceService.js')
 const url=process.env.PHASE2_AUDIT_DATABASE_URL
 test('Phase B DBREAL role execution, identity and legacy provenance',{skip:!url&&'Explicit local DBREAL URL required'},async t=>{
-  const target=new URL(url);assert.ok(['localhost','127.0.0.1'].includes(target.hostname));assert.equal(target.port,'54322')
+  const target=new URL(url);assert.ok(['localhost','127.0.0.1'].includes(target.hostname));assertApprovedAuditDatabaseUrl(url)
   const db=new pg.Client({connectionString:url});await db.connect()
   const tables=['clientes','empleados','devices','horarios','schedule_revisions','empleados_horarios','registro_asistencia','attendance_logs','attendance_source_events','workday_records','workday_record_history','attendance_persist_outbox','incidencias','rate_limits_logs','workday_calculation_revisions','workday_revision_promotions','tenant_features']
   const counts=async()=>{const result={};for(const table of tables)result[table]=(await db.query(`SELECT count(*)::int n FROM public.${table}`)).rows[0].n;return result}

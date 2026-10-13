@@ -3,9 +3,12 @@ import assert from 'node:assert/strict'
 import {readFile} from 'node:fs/promises'
 import {randomUUID} from 'node:crypto'
 import pg from 'pg'
+import { auditConfig } from '../helpers/testDb.js'
 
 test('Horarios installed contract: no migration replay; rollback-only fixtures',async t=>{
-  const db=new pg.Client({connectionString:'postgresql://postgres:postgres@127.0.0.1:54322/postgres',connectionTimeoutMillis:5000})
+  const config=auditConfig()
+  assert.ok(config.ready, 'Explicit approved local DBREAL configuration required')
+  const db=new pg.Client({connectionString:config.dbUrl,connectionTimeoutMillis:5000})
   await db.connect()
   const data=async(names)=>{
     const out={}
