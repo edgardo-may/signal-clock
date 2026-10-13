@@ -131,3 +131,6 @@ outputs/
 
 # Local Git worktrees
 .worktrees/
+
+# Old ZKTeco migration report
+backend/migration_report.json
