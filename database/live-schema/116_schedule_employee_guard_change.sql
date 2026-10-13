@@ -47,7 +47,7 @@ BEGIN
   IF auth.uid() IS NULL OR p_cliente_id IS NULL OR p_effective_date IS NULL
      OR p_effective_date <= (clock_timestamp() AT TIME ZONE 'America/Cancun')::date OR p_correlation_id IS NULL
      OR nullif(btrim(p_reason),'') IS NULL OR nullif(btrim(p_nombre),'') IS NULL
-     OR v_action NOT IN ('CREATE','REVISE','DISABLE') THEN
+     OR v_action IS NULL OR v_action NOT IN ('CREATE','REVISE','DISABLE') THEN
     RAISE EXCEPTION 'SCHEDULE_CATALOG_INVALID_ARGUMENTS';
   END IF;
   v_role := lower(coalesce(public.auth_current_role(),''));
@@ -55,19 +55,19 @@ BEGIN
      OR (v_role <> 'superadmin' AND public.auth_current_cliente_id() IS DISTINCT FROM p_cliente_id) THEN
     RAISE EXCEPTION 'SCHEDULE_CATALOG_FORBIDDEN';
   END IF;
-  IF p_snapshot->>'calculation_contract_version' <> '1'
-     OR jsonb_typeof(p_snapshot->'dias_config') <> 'object'
-     OR jsonb_typeof(p_snapshot->'tolerancia_minutos') <> 'number'
+  IF p_snapshot->>'calculation_contract_version' IS DISTINCT FROM '1'
+     OR jsonb_typeof(p_snapshot->'dias_config') IS DISTINCT FROM 'object'
+     OR jsonb_typeof(p_snapshot->'tolerancia_minutos') IS DISTINCT FROM 'number'
      OR (p_snapshot->>'tolerancia_minutos')::numeric < 0
      OR (p_snapshot->>'tolerancia_minutos')::numeric <> trunc((p_snapshot->>'tolerancia_minutos')::numeric)
-     OR jsonb_typeof(p_snapshot->'horario_activo') <> 'boolean'
+     OR jsonb_typeof(p_snapshot->'horario_activo') IS DISTINCT FROM 'boolean'
      OR (v_action='DISABLE' AND p_snapshot->>'horario_activo'<>'false')
      OR (v_action<>'DISABLE' AND p_snapshot->>'horario_activo'<>'true') THEN
     RAISE EXCEPTION 'SCHEDULE_CATALOG_INVALID_SNAPSHOT';
   END IF;
   FOREACH v_day IN ARRAY ARRAY['lun','mar','mie','jue','vie','sab','dom'] LOOP
     v_config := p_snapshot->'dias_config'->v_day;
-    IF jsonb_typeof(v_config) <> 'object' OR jsonb_typeof(v_config->'activo') <> 'boolean' THEN
+    IF jsonb_typeof(v_config) IS DISTINCT FROM 'object' OR jsonb_typeof(v_config->'activo') IS DISTINCT FROM 'boolean' THEN
       RAISE EXCEPTION 'SCHEDULE_CATALOG_INVALID_DAY';
     END IF;
     IF v_config->>'activo'='true' AND (
@@ -117,7 +117,7 @@ BEGIN
       ORDER BY empleado_id,fecha_inicio,id FOR UPDATE LOOP
       IF v_assignment.fecha_inicio < p_effective_date THEN
         UPDATE public.empleados_horarios SET fecha_fin=p_effective_date-1,actualizado_at=clock_timestamp()
-          WHERE id=v_assignment.id;
+          WHERE id=v_assignment.id RETURNING * INTO v_new;
         IF v_action='REVISE' THEN
           INSERT INTO public.empleados_horarios(cliente_id,empleado_id,horario_id,fecha_inicio,fecha_fin,activo,notas,schedule_revision_id)
           VALUES(p_cliente_id,v_assignment.empleado_id,v_schedule.id,p_effective_date,v_assignment.fecha_fin,true,

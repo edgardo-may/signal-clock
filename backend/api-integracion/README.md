@@ -36,5 +36,10 @@ sustituto de esta integración. Las variables requeridas se describen en
 `.env.example`; los valores secretos no deben subirse a GitHub.
 
 Validación local: `npm test --prefix backend/api-integracion`.
+El frontend usa rutas relativas `/api/sync/*`. En producción, el `vercel.json`
+de la raíz debe reenviarlas al proyecto Express antes del fallback a `index.html`.
+El proxy de `vite.config.js` funciona sólo con el servidor de desarrollo.
+Si cambia el dominio del backend, actualizar ambos destinos. Desplegar este
+cambio en el proyecto frontend; no cambiar sus variables Supabase por las del backend.
 Después del despliegue, comprobar `/api/sync/preview` con una sesión válida antes
 de ejecutar cualquier sincronización. Preview no escribe datos de empleados.

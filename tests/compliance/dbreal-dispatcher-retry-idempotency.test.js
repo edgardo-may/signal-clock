@@ -110,7 +110,8 @@ before(async () => {
   // Compare deployed function bodies with the actual migration sources; no substitute RPCs.
   for (const [file, names] of [
     ['92_productive_persist_outbox_contract_change.sql', ['enqueue_attendance_persist_outbox', 'claim_attendance_persist_outbox']],
-    ['97_workday_evolution_contract_change.sql', ['complete_attendance_persist_outbox', 'upsert_workday_record']],
+    ['97_workday_evolution_contract_change.sql', ['complete_attendance_persist_outbox']],
+    ['112_workday_calculation_revisions_functions.sql', ['upsert_workday_record']],
     ['99_link_attendance_source_event_order_fix.sql', ['link_attendance_source_event']],
   ]) {
     const sql = await readFile(new URL(`../../database/live-schema/${file}`, import.meta.url), 'utf8')

@@ -53,7 +53,9 @@ zkteco-push-ta-temp/
 # ARCHIVOS DE PRUEBAS MANUALES / SCRATCH
 # ============================================================
 scratch/
+.runtime-evidence/
 estructura_proyecto.txt
+docs/
 
 # ============================================================
 # HERRAMIENTAS IA / IDE LOCALES
@@ -73,6 +75,10 @@ coverage/
 test-results/
 playwright-report/
 .nyc_output/
+tests/
+tests/compliance/
+
+
 
 # ============================================================
 # SUPABASE LOCAL / TEMP
@@ -80,6 +86,7 @@ playwright-report/
 supabase/.temp/
 supabase/.branches/
 supabase/.env
+database/live-schema/ops
 
 # ============================================================
 # DB / BACKUPS

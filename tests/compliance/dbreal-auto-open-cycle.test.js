@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import pg from 'pg'
+import { loadZktecoParser } from '../helpers/loadZktecoParser.js'
 import { workdayEvolutionDbrealConfig, createWorkdayEvolutionFixture,
   cleanupWorkdayEvolutionFixture, enableFixturePersistGate } from '../helpers/workdayEvolutionDbreal.js'
 
@@ -130,7 +131,7 @@ test('AUTO DBREAL: real ATTLOG trigger, 18h cycle and Phase 99', {
       assert.equal(row.cliente_id, fixture.tenantA.id)
     })
     await scenario('N empty RAW from actual VM parser -> DB', async () => {
-      const { parseAttendanceLogs } = await import('../../zkteco-push-ta/src/parser.ts')
+      const { parseAttendanceLogs } = await loadZktecoParser()
       await expect(stamp(10, '09:00:00'), '0', 'entrada')
       const [parsed] = parseAttendanceLogs('1\t2030-06-10 18:00:00\t\t1')
       assert.equal(parsed.status, '')
@@ -138,7 +139,7 @@ test('AUTO DBREAL: real ATTLOG trigger, 18h cycle and Phase 99', {
       assert.equal(row.raw_payload.auto_resolved, true)
     })
     await scenario('O 255 RAW from actual VM parser -> DB', async () => {
-      const { parseAttendanceLogs } = await import('../../zkteco-push-ta/src/parser.ts')
+      const { parseAttendanceLogs } = await loadZktecoParser()
       const [parsed] = parseAttendanceLogs('1\t2030-06-10 23:00:00\t255\t1')
       assert.equal(parsed.status, '255')
       await expect(parsed.timestamp, parsed.status, 'entrada')

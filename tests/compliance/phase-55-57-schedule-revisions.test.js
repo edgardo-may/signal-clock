@@ -146,8 +146,14 @@ test('Phase57 is read-only, rebound to Phase55, and checks the immutable contrac
   }
 });
 
-test('Current HorariosPage direct mutations remain visible for a later revision-creation flow', () => {
-  assert.match(schedulePage, /\.from\(['"]horarios['"]\)[\s\S]{0,250}\.update/);
-  assert.match(schedulePage, /\.from\(['"]horarios['"]\)[\s\S]{0,250}\.insert/);
-  assert.match(schedulePage, /\.from\(['"]horarios['"]\)[\s\S]{0,250}\.delete/);
+test('HorariosPage uses audited revision RPCs instead of direct catalog mutations', () => {
+  assert.doesNotMatch(schedulePage, /\.from\(['"]horarios['"]\)[\s\S]{0,250}\.(update|insert|delete)\(/);
+  assert.match(schedulePage, /await applyScheduleCatalogRevision\(payload\)/);
+  assert.match(schedulePage, /action: isEdit \? 'REVISE' : 'CREATE'/);
+  assert.match(schedulePage, /await archiveSchedule\(horario\.id,/);
+  const catalogService = read('src/features/schedules/services/scheduleCatalogService.js');
+  assert.match(catalogService, /supabase\.rpc\('apply_schedule_catalog_revision'/);
+  assert.match(catalogService, /supabase\.rpc\('archive_schedule'/);
+  assert.match(catalogService, /p_reason: reason/);
+  assert.match(catalogService, /p_correlation_id: globalThis\.crypto\.randomUUID\(\)/);
 });

@@ -17,8 +17,8 @@ const migration038 = read('supabase/migrations/038_employee_lifecycle_security.s
 test('Scenario 1: Alta válida — campos obligatorios, tenant y asignación automática de ID biométrico', () => {
   assert.match(changeSql, /CREATE OR REPLACE FUNCTION public\.fn_auto_assign_biometric_id/)
   assert.match(changeSql, /COALESCE\(MAX\(NULLIF\(regexp_replace\(device_userid, '\\D', '', 'g'\), ''\)::INT\), 0\) \+ 1/)
-  assert.match(empleadosPage, /const payload = \{[\s\S]*?nombre: String\(form\.nombre \|\| ''\)\.trim\(\)/)
-  assert.match(empleadosPage, /apellido: String\(form\.apellido \|\| ''\)\.trim\(\)/)
+  assert.match(empleadosPage, /const payload = \{[\s\S]*?nombre: String\(form\.nombre \|\| ["']{2}\)\.trim\(\)/)
+  assert.match(empleadosPage, /apellido: String\(form\.apellido \|\| ["']{2}\)\.trim\(\)/)
 })
 
 test('Scenario 2: Alta cross-tenant rechazada por RLS estricto', () => {
@@ -51,13 +51,15 @@ test('Scenario 5: Edición válida de campos administrativos y personales', () =
 test('Scenario 6: Edición cross-tenant y mutación de tenant rechazada', () => {
   assert.match(changeSql, /CREATE POLICY role_update ON public\.empleados/)
   assert.match(changeSql, /cliente_id = public\.auth_current_cliente_id\(\)/)
-  assert.match(empleadosPage, /\.update\(\{[\s\S]*?\}\)\s*\.eq\('id', empleado\.id\)\s*\.eq\('cliente_id', finalClienteId\)/)
+  assert.match(empleadosPage, /\.update\(\{[\s\S]*?\}\)\s*\.eq\(["']id["'], empleado\.id\)/)
+  assert.match(empleadosPage, /const targetTenant = empleado\.cliente_id \|\| finalClienteId/)
+  assert.match(empleadosPage, /updateQuery = updateQuery\.eq\(["']cliente_id["'], targetTenant\)/)
 })
 
 test('Scenario 7: Baja sin historial habilita CAN_DELETE o DEACTIVATE', () => {
   assert.match(changeSql, /IF v_has_attendance > 0 OR v_has_incidents > 0 THEN/)
   assert.match(changeSql, /RETURN jsonb_build_object\(\s*'status', 'CAN_DELETE'\s*\);/)
-  assert.match(empleadosPage, /if \(status === 'CAN_DELETE'\)/)
+  assert.match(empleadosPage, /if \(status === ["']CAN_DELETE["']\)/)
 })
 
 test('Scenario 8: Baja con historial preserva asistencias, incidencias y plantillas', () => {
@@ -80,7 +82,7 @@ test('Scenario 10: Reactivación autoritativa (ACTIVATE) reanuda empleado', () =
   assert.match(changeSql, /UPDATE public\.empleados\s+SET activo = TRUE/)
   assert.match(changeSql, /assignments_pending_sync', v_assignments_affected/)
   assert.match(changeSql, /'biometrics', 'RE_ENROLLMENT_REQUIRED'/)
-  assert.match(empleadosPage, /p_action: 'ACTIVATE'/)
+  assert.match(empleadosPage, /p_action: ["']ACTIVATE["']/)
 })
 
 test('Scenario 11: Assignments de dispositivos suspendidos y reactivados selectivamente', () => {
@@ -123,7 +125,7 @@ test('Scenario 14: RLS activado y 4 políticas explícitas en public.empleados',
   assert.match(changeSql, /CREATE POLICY role_delete ON public\.empleados/)
 })
 
-test('Scenario 15: Matriz de roles — mínimo privilegio (colaborador restringido)', () => {
+test('Scenario 15: Matriz de roles — mínimo privilegio (empleado restringido)', () => {
   assert.match(changeSql, /public\.auth_current_role\(\) = 'colaborador'[\s\S]*?AND id = public\.auth_current_employee_id\(\)/)
   assert.match(changeSql, /public\.auth_current_role\(\) IN \('admin', 'rh'\)/)
 

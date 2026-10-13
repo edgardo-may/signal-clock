@@ -3,6 +3,48 @@
 La base real de producción es la fuente de verdad. No usar migraciones históricas
 para reconstruir contratos u objetos que no existan en producción.
 
+## Horarios — cierre productivo (2026-10-11)
+
+Resultado A: NO MIGRATION REQUIRED. 116 SUPERSEDED: guard y trigger ya presentes;
+RPC de catálogo actualizado por 118/121 y lifecycle 122 preservados. NO ejecutar
+116: regresaría CREATE del mismo día y permisos DISABLE de RH. Contratos de
+crear/editar/archivar/asignar, revisiones, historia y aislamiento por empresa: PASS.
+
+Verificación productiva GET-only: 0 escrituras/RPC, datos estables y ocho hashes
+de revisión correctos. Cinco horarios sin revisión son archivados y nunca
+asignados; no requieren backfill. Regresión existente 92 PASS y DBREAL del contrato
+instalado 12 PASS, sin replay/DDL, con restauración tras ROLLBACK. Definiciones
+SQL provienen del catálogo entregado de las 08:34 UTC; GET de las 22:19 UTC verifica
+datos/firmas, no vuelve a extraer cuerpos/triggers/ACL.
+
+Informe: `docs/horarios-production-closure-report.md`. Horarios puede cerrarse
+sin escritura productiva. Attendance Phase B está formalmente CLOSED según el
+usuario. No se modifican Attendance/Workday, runtime, dispatcher, gates, 124 ni
+el backlog global de seguridad descrito a continuación.
+
+## Global security hardening V2 — diseño actual (2026-10-11)
+
+Catálogo productivo recibido completo: tres TXT, 32 secciones verificadas y
+fingerprints coincidentes. Ledger MISSING; 117 PARTIAL; contenido de 116 presente
+y efectos semánticos de 118–123 presentes. El estado efectivo de 124 ya existe
+en producción; su ejecución exacta es UNKNOWN. NO aplicar/reutilizar 124 ni
+reaplicar 116. Reconciliación: `docs/production-catalog-reconciliation.md`.
+
+Manifest V2 sin número y diseño: `docs/global-security-hardening-v2-design.md`.
+Propuestas independientes en `database/live-schema/proposals/`: non-row de 19
+tablas, sync/faltas backend-only y defaults (gate separado por impacto global de
+PUBLIC EXECUTE). Ensayo DBREAL transaccional: 48 PASS, 0 FAIL/skips; 18 unitarios
+PASS. ROLLBACK restaura datos, ACLs, defaults y funciones; no instalación persistente.
+116/117/124 preservadas. No se ejecutaron migraciones históricas como setup.
+
+Bloqueador del paquete completo: login PIN sólo devuelve datos/localStorage sin
+credencial verificable; no existe vínculo employee_user_links en el catálogo.
+Se requiere sesión backend, cerrar PIN/SELECT *, retirar fallbacks y policies
+permisivas del portal, completar matriz DBREAL y revisar defaults de plataforma.
+Core aislado ensayado; V2 completo todavía NO listo para instalar. No se asigna
+número hasta reconciliar secuencia 116–124. Producción y Baseline V2: NO.
+ZERO PRODUCTION WRITES; sin persist/replay, gates, cambios GCP ni nuevas fuentes Web/App.
+
 ## Flujo físico e identidad
 
 ZKTeco es la integración biométrica activa:
@@ -283,3 +325,29 @@ ZKTeco (fuera de alcance), 43 contratos de asistencia supersedidos por Fase
 35.4 y 19 simulaciones de persistencia obsoletas frente al RPC backend-only.
 No se modifico, deshabilito ni borro ninguna prueba durante el audit. Ver
 `phase-35_5-production-shadow-v3-and-contract-regression-audit.md`.
+
+
+## SURCACEN Oct10 — live REST precheck 2026-10-11T01:51:29.432Z
+
+Production read-only verification: exact two physical events unchanged; both source
+events PROCESSED; target workday/history/revision/promotion counts all zero;
+global persist gates zero and global outbox empty. WORKDAY_PERSIST_ACTIVE OFF/false,
+REVISION_SCHEDULE_RESOLVER ACTIVE/true. No production mutations.
+Evidence: `.runtime-evidence/surcacen-oct10-live-precheck.json`.
+Scoped canary remains pending: full SQL preflight/function/trigger audit and fresh
+Cloud Run traffic/standby/dispatcher verification unavailable in this session
+(no gcloud executable or browser session; unified exec helper fails at startup).
+Do not open the gate based on REST checks alone. Continue using the exact
+`docs/attendance-surcacen-oct10-canary-manifest.md` and fresh checks.
+
+
+## Phase B scoped canary — global baseline STOP 2026-10-11T01:56:40.459Z
+
+Fresh production REST exact counts: outbox PENDING/PROCESSING/RETRY/DENIED/SUCCEEDED
+all zero; global calculation revisions/promotions zero; both persist gates OFF.
+Official 115 preflight expects SUCCEEDED=4, so baseline_matches_last_known=false.
+Stopped before writes per operator instruction. Full SQL/function/trigger/RLS audit
+and Cloud Run traffic/dispatcher executionCount remain unverified. No gate opened,
+persist/replay, runtime deployment, migration or cutover. Report:
+`docs/attendance-surcacen-oct10-phase-b-report.md`. Reconcile baseline drift with
+live SQL before restarting full preflight; do not force the expected count to zero.

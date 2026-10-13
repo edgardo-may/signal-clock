@@ -6,12 +6,13 @@
 //  sin perder su propia sesión. Usa auth.admin.createUser() con service_role.
 //
 //  SEGURIDAD:
-//  - Solo usuarios autenticados con rol 'admin' pueden invocar esta función
+//  - Admin: su propia empresa; superadmin: empresa destino explícita y existente
 //  - service_role NUNCA se expone al frontend
 //  - Valida el JWT del admin antes de crear el usuario
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { resolveUserCreationTenant } from './authorization.js'
 
 // Dynamic CORS to validate Origin
 const ALLOWED_ORIGINS = (Deno.env.get('FRONTEND_ALLOWED_ORIGINS') || 'http://localhost:5173').split(',').map(o => o.trim())
@@ -70,16 +71,26 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    // Verificar que el solicitante es admin
-    const { data: callerProfile } = await supabaseAuth
+    // Leer el rol persistido después de validar el JWT. La autorización no
+    // depende de metadata editable ni de las políticas de lectura del cliente.
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+    const { data: callerProfile, error: callerProfileError } = await supabaseAdmin
       .from('usuarios_perfiles')
-      .select('rol, cliente_id')
+      .select('rol, cliente_id, estatus_cuenta')
       .eq('id', caller.id)
       .single()
 
-    if (!callerProfile || callerProfile.rol !== 'admin') {
+    if (callerProfileError) {
+      return new Response(JSON.stringify({ error: 'No se pudo verificar el perfil administrativo.' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    if (!callerProfile || !['admin', 'superadmin'].includes(callerProfile.rol?.toLowerCase())) {
       return new Response(
-        JSON.stringify({ error: 'Solo los administradores pueden crear usuarios.' }),
+        JSON.stringify({ error: 'Se requiere un perfil admin o superadmin para crear usuarios.' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -87,8 +98,16 @@ Deno.serve(async (req: Request) => {
     // ── 2. Parsear datos del nuevo usuario ───────────────────────────────
     const body = await req.json()
     const { email, password, nombre, rol, estatus_cuenta } = body
+    let targetTenantId: string
+    try {
+      targetTenantId = resolveUserCreationTenant(callerProfile, body.cliente_id)
+    } catch (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
 
-    if (!email || !password || !nombre) {
+    if (typeof email !== 'string' || typeof password !== 'string' || typeof nombre !== 'string' || !email.trim() || !nombre.trim()) {
       return new Response(
         JSON.stringify({ error: 'Datos incompletos. Se requiere email, password y nombre.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -107,9 +126,13 @@ Deno.serve(async (req: Request) => {
     const rolFinal = rolesPermitidos.includes(rol) ? rol : 'auditor'
 
     // ── 3. Crear usuario con service_role (sin afectar sesión del admin) ─
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    })
+    const { data: targetTenant, error: tenantError } = await supabaseAdmin
+      .from('clientes').select('id').eq('id', targetTenantId).maybeSingle()
+    if (tenantError || !targetTenant) {
+      return new Response(JSON.stringify({ error: 'La empresa seleccionada no existe.' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
 
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: email.trim().toLowerCase(),
@@ -118,7 +141,7 @@ Deno.serve(async (req: Request) => {
       user_metadata: {
         nombre,
         rol: rolFinal,
-        cliente_id: callerProfile.cliente_id,
+        cliente_id: targetTenantId,
         estatus_cuenta: estatus_cuenta || 'activo',
       },
     })
@@ -151,23 +174,33 @@ Deno.serve(async (req: Request) => {
     // El trigger fn_auto_crear_perfil_usuario() debería haber creado el perfil
     // automáticamente. Verificamos y si no existe, lo creamos con service_role.
     if (newUser?.user?.id) {
-      const { data: existingProfile } = await supabaseAdmin
+      const { data: existingProfile, error: profileReadError } = await supabaseAdmin
         .from('usuarios_perfiles')
-        .select('id')
+        .select('id, cliente_id, rol')
         .eq('id', newUser.user.id)
         .maybeSingle()
 
+      if (profileReadError || (existingProfile &&
+        (existingProfile.cliente_id !== targetTenantId || existingProfile.rol !== rolFinal))) {
+        await supabaseAdmin.auth.admin.deleteUser(newUser.user.id)
+        throw new Error('No se pudo confirmar el perfil de acceso en la empresa seleccionada.')
+      }
+
       if (!existingProfile) {
         // Fallback: crear perfil manualmente si el trigger no se disparó
-        await supabaseAdmin
+        const { error: profileError } = await supabaseAdmin
           .from('usuarios_perfiles')
           .insert({
             id: newUser.user.id,
-            cliente_id: callerProfile.cliente_id,
+            cliente_id: targetTenantId,
             nombre,
             rol: rolFinal,
             estatus_cuenta: estatus_cuenta || 'activo',
           })
+        if (profileError) {
+          await supabaseAdmin.auth.admin.deleteUser(newUser.user.id)
+          throw profileError
+        }
       }
     }
 
@@ -176,7 +209,7 @@ Deno.serve(async (req: Request) => {
     await supabaseAdmin
       .from('audit_logs')
       .insert({
-        cliente_id: callerProfile.cliente_id,
+        cliente_id: targetTenantId,
         actor_user_id: caller.id,
         actor_role: callerProfile.rol,
         action: 'USER_CREATED',
@@ -187,6 +220,7 @@ Deno.serve(async (req: Request) => {
         metadata: {
           email: email.trim().toLowerCase(),
           rol: rolFinal,
+          cliente_id: targetTenantId,
           nombre: nombre
         }
       })

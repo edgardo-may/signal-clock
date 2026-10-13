@@ -451,6 +451,10 @@ export async function assertFunctionPrivileges(client) {
 
 export async function cleanupWorkdayEvolutionFixture(client, fixture) {
   if (!fixture) return;
+  const target = client.connectionParameters;
+  if (!['127.0.0.1','localhost','::1'].includes(target.host) || Number(target.port) !== 54322) {
+    throw new Error('WORKDAY_FIXTURE_CLEANUP_REQUIRES_LOCAL_DBREAL');
+  }
   // Includes rows created indirectly by attendance triggers, while the owning
   // tenant/employee still exist. IDs come only from this UUID-generated fixture.
   await client.query(
@@ -489,6 +493,20 @@ export async function cleanupWorkdayEvolutionFixture(client, fixture) {
   await client.query("BEGIN");
   try {
     await client.query(`SET LOCAL session_replication_role = replica`);
+    // Phase B runtime writes immutable revisions/promotions. The legacy cleanup
+    // predates those tables; remove only this fixture's facts before its parents.
+    await client.query(
+      `DELETE FROM public.workday_revision_promotions WHERE cliente_id IN ($1,$2)`,
+      [fixture.tenantA.id, fixture.tenantB.id],
+    );
+    await client.query(
+      `DELETE FROM public.workday_calculation_revisions WHERE cliente_id IN ($1,$2)`,
+      [fixture.tenantA.id, fixture.tenantB.id],
+    );
+    await client.query(`DELETE FROM public.audit_logs WHERE cliente_id IN ($1,$2)`,
+      [fixture.tenantA.id, fixture.tenantB.id]);
+    await client.query(`DELETE FROM public.tenant_catalog_folio_counters WHERE cliente_id IN ($1,$2)`,
+      [fixture.tenantA.id, fixture.tenantB.id]);
     await client.query(
       `DELETE FROM public.empleados_horarios WHERE cliente_id=$1`,
       [fixture.tenantA.id],
