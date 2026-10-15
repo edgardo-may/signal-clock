@@ -10,7 +10,7 @@
 | Attendance Runtime | VALIDADO (operador) | `bf376f2-main` con 100% de tráfico; `/health` y `/ready` PASS según el operador. No reconsultado en esta fase. |
 | Vercel | VALIDADO (operador) | Proyecto `signal-clock`, deployment READY para el commit indicado; no reconsultado en esta fase. |
 | Employee Portal | BLOQUEADO | API/UI en mantenimiento según el operador. El operador reportó que `public.fn_employee_portal` falta en el catálogo de Supabase Production. |
-| SQL 1/2/3 Employee/seguridad/WEB_CLOCK | PENDIENTE | Candidatos bajo `database/live-schema/proposals/`; revisión y aprobación pendientes. No ejecutar basándose sólo en esta documentación. |
+| SQL 1/2/3 Employee/seguridad/WEB_CLOCK | BLOQUEADO / PENDIENTE | Revisión documental confirma guardas DBREAL-only y efectos ACL/policies/outbox/RPC20; RPC ausente según operador, resto del catálogo no verificado. Ver [plan SQL Employee](docs/03-database/employee-contract-install-plan.md). **READY TO APPLY: NO.** |
 | SQL 125 ZKTeco-only | VALIDADO (operador) | Aplicación y postcheck en Production fueron reportados como PASS; DBREAL post-125 reportada 235 PASS / 0 FAIL / 0 SKIP. Codex no revalidó esos entornos en este trabajo. |
 | WEB_CLOCK | PENDIENTE / OFF | OFF según el operador; la activación queda fuera de esta fase. |
 | Rama `reconcile/main-employee-serverless` | PENDIENTE | Limpieza de la rama reportada pendiente. No se modifican ramas en esta fase. |
@@ -31,8 +31,8 @@ El código confirma `api/employee.js` como adaptador Vercel que delega a `backen
 
 ## Próximos cierres
 
-1. Resolver la RPC Employee ausente y aprobar un plan SQL compatible con SQL 1/2/3; mantener Employee en mantenimiento hasta entonces.
-2. Conciliar los metadatos productivos actuales de Supabase mediante una revisión aprobada y de solo lectura.
+1. Obtener snapshot de catálogo Production solo lectura y preparar una variante SQL Production revisada; los candidatos actuales no se aplican tal cual. Mantener Employee en mantenimiento y WEB_CLOCK OFF.
+2. Revisar/aprobar por separado los cambios globales ACL (SQL1), policies/RPC legacy (SQL2) y outbox/RPC20 (SQL3).
 3. Cerrar la limpieza de la rama temporal cuando el release owner lo autorice.
 4. Documentar módulos restantes con fuentes actuales y evidencia atribuible; no inferir estado productivo desde pruebas locales.
 

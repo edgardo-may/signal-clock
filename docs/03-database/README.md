@@ -1,9 +1,9 @@
-# 03 — Database
+# Database
 
-**Estado:** IMPLEMENTADO (versioned migrations and candidate SQL); current Production contract is not fully verified in this documentation pass.
+**Status:** source includes migrations and candidate SQL; installed Production contract is not fully verified.
 
-Historical Supabase migrations are under `supabase/migrations/`; current/live-schema operational SQL and candidates are under `database/live-schema/`. Read [migration workflow](../migrations/README.md) before using either path. Never replay historical migrations against an already-upgraded database.
+Historical Supabase migrations live under `supabase/migrations/`; live-schema operational SQL and proposals live under `database/live-schema/`. Read [migration workflow](../migrations/README.md) before use. Never replay historical migrations against an upgraded database.
 
-Candidate Employee/security/WEB_CLOCK SQL is in `database/live-schema/proposals/`. The operator reports SQL 1/2/3 pending review and `public.fn_employee_portal` absent in Production. SQL 125 ZKTeco-only application and postcheck are operator-reported; this work did not access Production. Do not treat source files as proof of installed catalog state.
+Employee SQL 1/2/3, their dependencies, security assessment, read-only catalog queries, proposed install/stop procedure, and Directory/Session acceptance criteria are in the [Employee contract install plan](employee-contract-install-plan.md). The operator reports `public.fn_employee_portal` absent in Production; no other object status is inferred. SQL 125 ZKTeco-only is operator-reported as applied with postcheck PASS; it was not revalidated here.
 
-Security documentation must distinguish schema grants, function EXECUTE, RLS, and PostgREST schema exposure; each has a separate source of truth.
+The Employee proposals have DBREAL-only guards and broader ACL, policy, outbox, and Attendance effects. They are not ready for direct Production application. **READY TO APPLY: NO.** SQL4 default privileges remains excluded/hold. Do not execute candidates based only on this documentation.
