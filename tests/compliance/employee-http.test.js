@@ -1,9 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createEmployeeHandler} from '../../backend/employee-portal/http.mjs';
+import {createEmployeeHandler,createEmployeeSupabaseClient} from '../../backend/employee-portal/http.mjs';
 import vercelEmployeeHandler from '../../api/employee.js';
 const env={EMPLOYEE_ORIGIN:'https://clock.example',EMPLOYEE_RATE_PEPPER:'test-only-pepper-with-at-least-32-characters'};
 const company='11111111-1111-4111-8111-111111111111';
+test('Employee Supabase client uses the public URL fallback and only the server secret key',()=>{
+ const calls=[];
+ const fake=(...args)=>{calls.push(args);return {rpc(){}};};
+ createEmployeeSupabaseClient({VITE_SUPABASE_URL:'https://db.example',SUPABASE_SECRET_KEY:'sb_secret_test'},fake);
+ assert.deepEqual(calls,[[ 'https://db.example','sb_secret_test',{auth:{persistSession:false,autoRefreshToken:false}} ]]);
+ assert.throws(()=>createEmployeeSupabaseClient({VITE_SUPABASE_URL:'https://db.example',SUPABASE_SERVICE_ROLE_KEY:'legacy'},fake),{code:'SERVER_CONFIG_REQUIRED'});
+ assert.throws(()=>createEmployeeSupabaseClient({SUPABASE_SECRET_KEY:'sb_secret_test'},fake),{code:'SERVER_CONFIG_REQUIRED'});
+});
 async function invoke(action,{body,method='POST',headers={},result={success:true},cookie,overrides={}}={}){
  const calls=[],response={headers:{},setHeader(k,v){this.headers[k]=v;},end(value){this.body=JSON.parse(value);}};
  const handler=createEmployeeHandler({env:{...env,...overrides},random:n=>Buffer.alloc(n,7),client:{rpc:async(name,args)=>{calls.push({name,args});return {data:result};}}});

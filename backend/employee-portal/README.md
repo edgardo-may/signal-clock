@@ -4,7 +4,7 @@
 
 The API supports `GET /api/employee?action=directory`, `GET /api/employee?action=session`, and `POST` actions `login`, `logout`, and `punch`. The API returns only the company directory fields selected by the existing RPC. It never returns employee PINs, hashes, session tokens, or service credentials. Mutations require same-origin requests with JSON bodies. Identity and authoritative attendance time are derived server-side.
 
-For local end-to-end development, copy `environment.example` to the repository-root `.env.local`, fill the local Supabase service key and a random Employee rate pepper of at least 32 characters, and set `EMPLOYEE_ORIGIN` to the exact Vercel Dev origin. Keep secrets in server-only variables; never use a `VITE_` prefix for Supabase keys or the rate pepper. Then run:
+For local end-to-end development, copy `environment.example` to the repository-root `.env.local`, fill the local Supabase secret key (`SUPABASE_SECRET_KEY`, server-only) and a random Employee rate pepper of at least 32 characters, and set `EMPLOYEE_ORIGIN` to the exact Vercel Dev origin. Keep secrets in server-only variables; never use a `VITE_` prefix for Supabase secrets or the rate pepper. The public `VITE_SUPABASE_URL` may be used by the function as the URL fallback; the privileged client requires `SUPABASE_SECRET_KEY`. Then run:
 
 ```powershell
 npx vercel dev

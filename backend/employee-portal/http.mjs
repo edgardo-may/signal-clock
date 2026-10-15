@@ -35,6 +35,12 @@ export function validateEvidence(value){
   if(snapshot!=null && (typeof snapshot!=='string'||snapshot.length>180000||!/^data:image\/(jpeg|png);base64,[a-zA-Z0-9+/=]+$/.test(snapshot))) throw bad('PHOTO_INVALID');
   return {ubicacion_gps:{latitud:gps.latitud,longitud:gps.longitud,precision_metros:gps.precision_metros},snapshot:snapshot||null,foto_tomada:Boolean(snapshot)};
 }
+export function createEmployeeSupabaseClient(env=process.env,create=createClient){
+  const supabaseUrl=env.SUPABASE_URL||env.VITE_SUPABASE_URL;
+  const supabaseSecret=env.SUPABASE_SECRET_KEY;
+  if(!supabaseUrl||!supabaseSecret) throw bad('SERVER_CONFIG_REQUIRED',503);
+  return create(supabaseUrl,supabaseSecret,{auth:{persistSession:false,autoRefreshToken:false}});
+}
 export function createEmployeeHandler({env=process.env,client,random=randomBytes}={}){
   return async function handler(req,res){
     res.setHeader('Cache-Control','no-store');
@@ -59,7 +65,7 @@ export function createEmployeeHandler({env=process.env,client,random=randomBytes
       if(!contract) throw bad('NOT_FOUND',404);
       if(req.method!==contract[0]) throw bad('METHOD_NOT_ALLOWED',405);
       if(req.method==='POST' && (req.headers.origin!==origin.origin || req.headers['sec-fetch-site']==='cross-site')) throw bad('ORIGIN_DENIED',403);
-      const rpcClient=client||createClient(env.SUPABASE_URL,env.SUPABASE_SERVICE_ROLE_KEY||env.SUPABASE_SECRET_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
+      const rpcClient=client||createEmployeeSupabaseClient(env);
       let input={},createdToken;
       if(action==='login'){
         const body=await readBody(req);

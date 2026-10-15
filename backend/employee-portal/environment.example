@@ -1,6 +1,6 @@
 # Server-only. NEVER prefix these secrets with VITE_.
-SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_SERVICE_ROLE_KEY=
+VITE_SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_SECRET_KEY=
 EMPLOYEE_ORIGIN=http://localhost:3000
 EMPLOYEE_RATE_PEPPER=
 # Set true on the API deployment during a coordinated Employee release window.
