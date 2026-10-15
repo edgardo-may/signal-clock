@@ -24,17 +24,21 @@ porque tres CLI existentes lo usan; cors raíz y scripts de sync raíz se retira
 No se modifican cálculo Attendance/Workday, revisiones, promociones ni RPC20.
 Esta clasificación del código no afirma que se haya cambiado el runtime desplegado.
 
-## Contrato de DB pendiente
+## Contrato de DB y estado reportado
 
 proposals/125_retire_hikvision_zkteco_only_precheck.sql es SELECT-only.
-proposals/125_retire_hikvision_zkteco_only.sql es propuesta NO EJECUTADA, tampoco
-en DBREAL. Respeta la RPC instalada de siete parámetros, bloquea drift y datos
-legacy pendientes, sustituye ramas de registro/aprobación y funciones de límites
-por devices y retira ACL operativa del catálogo retirado. No elimina tablas,
-columnas ni filas. La instalación esperada cambia cero filas de negocio.
-Su aprobación y ensayo DBREAL son necesarios antes de liberar este frontend
-coordinadamente; no aplicar 029, 117 o 124 de nuevo. Los cuatro SQL aprobados
-de Employee/seguridad/PIN se preservan byte a byte y defaults siguen separados.
+El operador reportó que `125_retire_hikvision_zkteco_only.sql` fue aplicado en
+producción con precheck y postcheck PASS, y que la matriz DBREAL post-125 cerró
+235/0/0. Codex no reconsultó producción ni DBREAL durante la documentación.
+Esto supersede las notas anteriores de este archivo que decían que 125 no se
+había aplicado. No reaplicar 125 ni usar este reporte como autorización SQL.
+
+Los candidatos de seguridad/Employee/WEB_CLOCK SQL 1/2/3 permanecen PENDIENTES
+de revisión y aprobación según el estado reportado en esta fase. El operador
+reportó que `public.fn_employee_portal` está ausente del catálogo de producción;
+Employee API/UI permanecen en mantenimiento hasta resolver el contrato. No
+aplicar 029, 117 o 124 de nuevo. Los valores de hashes y el contenido de
+candidatos se verifican desde sus archivos fuente, no desde producción.
 
 Los informes antiguos se preservan en docs/archive/pre-zkteco-only. Las referencias
 de protocolo que permanecen en tipos del motor sólo permiten interpretar evidencia

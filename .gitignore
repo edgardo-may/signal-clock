@@ -55,7 +55,36 @@ zkteco-push-ta-temp/
 scratch/
 .runtime-evidence/
 estructura_proyecto.txt
-docs/
+# Keep documentation sources trackable while ignoring generated artifacts explicitly.
+docs/**
+!docs/README.md
+!docs/01-project/
+!docs/01-project/README.md
+!docs/02-architecture/
+!docs/02-architecture/README.md
+!docs/03-database/
+!docs/03-database/README.md
+!docs/04-modules/
+!docs/04-modules/README.md
+!docs/04-modules/module-status.md
+!docs/05-integrations/
+!docs/05-integrations/README.md
+!docs/06-security/
+!docs/06-security/README.md
+!docs/07-deployment/
+!docs/07-deployment/README.md
+!docs/08-testing/
+!docs/08-testing/README.md
+!docs/09-operations/
+!docs/09-operations/README.md
+!docs/10-compliance/
+!docs/10-compliance/README.md
+!docs/11-releases/
+!docs/11-releases/README.md
+!docs/11-releases/module-closeout-template.md
+!docs/11-releases/adr-template.md
+!docs/12-user-guides/
+!docs/12-user-guides/README.md
 
 # ============================================================
 # HERRAMIENTAS IA / IDE LOCALES

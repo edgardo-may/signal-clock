@@ -1,3 +1,5 @@
+> **Estado y vigencia.** Este archivo reúne snapshots fechados y reportes de fases anteriores; algunas afirmaciones pueden haber sido supersedidas. Para el estado consolidado vigente consultar [PROJECT_STATUS.md](../PROJECT_STATUS.md) y [current-stack-zkteco.md](current-stack-zkteco.md). El estado productivo de esos documentos se etiqueta según su fuente y no implica una comprobación nueva de Codex.
+
 ## Stack vigente — limpieza local ZKTeco-only (2026-10-12)
 
 Referencia de partida: 95718495fbbb93f9b736d5e835320e6214f4a0a5.
